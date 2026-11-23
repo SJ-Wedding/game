@@ -1,4 +1,4 @@
-import { WEAPON_DAMAGE_PER_RANK } from '../config/weapons';
+import { WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -217,6 +217,9 @@ export class Screens {
           el('span', { class: 'desc', text: weapon && c.nextStack > 1
             ? `이 무기 피해 보너스 +${Math.round((c.nextStack - 2) * WEAPON_DAMAGE_PER_RANK * 100)}% → +${Math.round((c.nextStack - 1) * WEAPON_DAMAGE_PER_RANK * 100)}%`
             : upgradeText(c.def, c.grade) }),
+          ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',
+            text: `${WEAPON_RANK_EFFECTS[weapon].label} ${weaponRankEffect(weapon, c.nextStack - 1)} → ${weaponRankEffect(weapon, c.nextStack)}${WEAPON_RANK_EFFECTS[weapon].unit}`,
+          })] : []),
           el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
         );
       } else if (c.kind === 'relic') {

@@ -1,6 +1,6 @@
 export const WEAPONS = {
   chain: { name: '연쇄 번개', description: '가까운 적에게 번개를 쏴 주변 적 3마리까지 연쇄 타격합니다.', color: 0x8be9ff },
-  mine: { name: '균열 지뢰', description: '지나온 자리에 적이 접근하면 터지는 지뢰를 설치합니다.', color: 0xffad67 },
+  mine: { name: '균열 지뢰', description: '지나온 자리에 지뢰를 설치합니다. 적이 접근해 폭발할 때까지 남습니다.', color: 0xffad67 },
   orbit: { name: '회전 칼날', description: '두 개의 칼날이 몸 주위를 돌며 닿는 적을 벱니다.', color: 0xcce9f5 },
   axe: { name: '부메랑 도끼', description: '적을 관통하며, 돌아올 때 현재 위치를 따라옵니다.', color: 0xffd17c },
   turret: { name: '서리 포탑', description: '잠시 머무는 포탑이 주변 적에게 둔화탄을 쏩니다.', color: 0x96c8ff },
@@ -18,3 +18,24 @@ export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 
 export const WEAPON_MAX_RANK = 3;
 export const WEAPON_DAMAGE_PER_RANK = 0.2;
+
+/** 첫 값은 획득 직후, 이후 값은 Lv 2와 Lv 3 효과다. */
+export const WEAPON_RANK_EFFECTS = {
+  chain: { label: '최대 연쇄 대상', unit: '마리', values: [4, 5, 6] },
+  mine: { label: '설치 주기', unit: '초', values: [2.8, 2.5, 2.2] },
+  orbit: { label: '칼날 수', unit: '개', values: [2, 3, 4] },
+  axe: { label: '도끼 타격 반경', unit: 'px', values: [13, 17, 21] },
+  turret: { label: '설치 주기', unit: '초', values: [6.5, 6, 5.5] },
+  flame: { label: '불길 반경', unit: 'px', values: [29, 35, 41] },
+  barrier: { label: '장벽 타격 반폭', unit: 'px', values: [11, 15, 19] },
+  spear: { label: '관통 사거리', unit: 'px', values: [450, 510, 570] },
+  mark: { label: '낙뢰 반경', unit: 'px', values: [66, 79, 92] },
+  echo: { label: '방향당 잔영 탄환', unit: '발', values: [1, 2, 3] },
+  gravity: { label: '끌어당김·폭발 반경', unit: 'px', values: [125, 145, 165] },
+  infection: { label: '처치 시 전염 반경', unit: 'px', values: [96, 115, 134] },
+} as const satisfies Record<WeaponId, { label: string; unit: string; values: readonly [number, number, number] }>;
+
+export function weaponRankEffect(id: WeaponId, rank: number): number {
+  const index = Math.min(WEAPON_MAX_RANK, Math.max(1, rank)) - 1;
+  return WEAPON_RANK_EFFECTS[id].values[index];
+}

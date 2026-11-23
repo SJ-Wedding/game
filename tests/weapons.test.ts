@@ -48,6 +48,18 @@ describe('특수 무기', () => {
     expect(enemy.hp).toBeLessThan(enemy.maxHp);
   });
 
+  it('설치된 지뢰는 시간이 지나도 남아 있다가 적이 접근하면 제거된다', () => {
+    const { sim, target, advance } = setup('mine');
+    advance(1);
+    const mine = sim.weapons.devices.find((device) => device.kind === 'mine')!;
+    sim.weapons.update(10);
+    expect(sim.weapons.devices).toContain(mine);
+    const enemy = target(20);
+    advance(1);
+    expect(enemy.hp).toBeLessThan(enemy.maxHp);
+    expect(sim.weapons.devices).not.toContain(mine);
+  });
+
   it('회피 경로는 같은 적에게 반복 피해를 주지 않는다', () => {
     const { target, advance } = setup('barrier');
     const enemy = target(48);
@@ -102,5 +114,50 @@ describe('특수 무기', () => {
     advance(1);
     expect(sim.weapons.infected.has(second)).toBe(true);
     expect(second.hp).toBeLessThan(second.maxHp);
+  });
+});
+
+describe('무기 강화의 추가 효과', () => {
+  it('강화한 연쇄 번개는 한 단계마다 한 마리 더 타격한다', () => {
+    for (const rank of [2, 3]) {
+      const sim = makeSim({ presetUpgrades: { chain: rank } });
+      sim.player.fireCd = 999;
+      const enemies = Array.from({ length: 7 }, (_, i) => sim.spawnEnemy('chaser', sim.player.x + 70 + i * 55, sim.player.y));
+      for (const enemy of enemies) enemy.hp = enemy.maxHp = 1000;
+      sim.step(IDLE_INPUT);
+      expect(enemies.filter((enemy) => enemy.hp < enemy.maxHp)).toHaveLength(rank + 3);
+    }
+  });
+
+  it('Lv 3 지뢰는 2.2초 주기로 설치되고 이전 지뢰가 남는다', () => {
+    const sim = makeSim({ presetUpgrades: { mine: 3 } });
+    for (let i = 0; i < 140; i++) sim.step(IDLE_INPUT);
+    expect(sim.weapons.devices.filter((d) => d.kind === 'mine')).toHaveLength(2);
+  });
+
+  it('Lv 3 회전 칼날과 메아리 사격은 칼날 4개와 잔영 탄환 3발을 만든다', () => {
+    const sim = makeSim({ presetUpgrades: { orbit: 3, echo: 3 } });
+    sim.weapons.onShot();
+    sim.weapons.onShot();
+    for (let i = 0; i < 30; i++) sim.step(IDLE_INPUT);
+    expect(sim.weapons.blades).toHaveLength(4);
+    expect(sim.playerShots.filter((shot) => shot.source === 'echo')).toHaveLength(3);
+  });
+
+  it('Lv 3 화염 발자국은 기존 반경 밖의 적까지 타격한다', () => {
+    const sim = makeSim({ presetUpgrades: { flame: 3 } });
+    sim.player.fireCd = 999;
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 49, sim.player.y);
+    sim.step(IDLE_INPUT);
+    expect(enemy.hp).toBeLessThan(enemy.maxHp);
+  });
+
+  it('몬스터마다 다른 값의 경험치 보석을 떨어뜨린다', () => {
+    const sim = makeSim();
+    for (const kind of ['chaser', 'spitter', 'charger', 'elite'] as const) {
+      const enemy = sim.spawnEnemy(kind, 1000, 1000);
+      sim.damageEnemy(enemy, enemy.hp);
+    }
+    expect(sim.gems.map((gem) => gem.value)).toEqual([1, 3, 4, 40]);
   });
 });

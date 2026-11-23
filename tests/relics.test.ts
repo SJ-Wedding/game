@@ -78,6 +78,7 @@ describe('유물 효과', () => {
     const sim = makeSim({ carryRelics: ['compass'] });
     sim.step({ ...IDLE_INPUT, moveX: 1, dodge: true });
     runUntil(sim, 0.45);
+    sim.weapons.update(10);
     expect(sim.weapons.devices.some((d) => d.kind === 'mine' && d.armAt === 0)).toBe(true);
     expect(sim.stacks.mine).toBe(0);
     expect(sim.relics.dodgeCooldown).toBe(sim.stats.dodgeCooldown + 0.5);
@@ -184,7 +185,11 @@ describe('유물과 전투의 상호작용', () => {
     enemy.hp = enemy.maxHp = 1000;
     enemy.speed = 0;
     runUntil(sim, 0.5);
-    expect(sim.weapons.devices.some((d) => d.kind === 'mine' && d.secondary)).toBe(true);
+    const mine = sim.weapons.devices.find((d) => d.kind === 'mine' && d.secondary)!;
+    enemy.x += 100;
+    sim.weapons.update(10);
+    expect(sim.weapons.devices).toContain(mine);
+    enemy.x -= 100;
     runUntil(sim, 1.3);
     expect(sim.weapons.devices.some((d) => d.kind === 'mine')).toBe(false);
   });

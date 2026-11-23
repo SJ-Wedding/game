@@ -8,7 +8,7 @@ import { BOSS_CHARGE_LENGTH } from '../core/boss';
 import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
-import { WEAPONS } from '../config/weapons';
+import { WEAPONS, weaponRankEffect } from '../config/weapons';
 import { ARENA_TEXTURE, ACTOR_TEXTURES, WEAPON_FRAMES, weaponEffects, type WeaponSprite } from './textures';
 
 interface Particle {
@@ -395,6 +395,10 @@ export class GameScene extends Phaser.Scene {
           case 'barrier': {
             const endX = d.x + Math.cos(d.angle) * d.r;
             const endY = d.y + Math.sin(d.angle) * d.r;
+            if (d.kind === 'barrier') {
+              const width = weaponRankEffect('barrier', sim.stacks.barrier) * 2;
+              ground.lineStyle(width, color, 0.16).lineBetween(d.x, d.y, endX, endY);
+            }
             ground.lineStyle(d.kind === 'barrier' ? 6 : 2, color, d.kind === 'barrier' ? 0.5 : 0.33)
               .lineBetween(d.x, d.y, endX, endY);
             if (d.kind === 'barrier') this.weaponImage(count++, d.kind, endX, endY);

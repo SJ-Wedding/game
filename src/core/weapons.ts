@@ -1,4 +1,4 @@
-import { WEAPON_DAMAGE_PER_RANK, type WeaponId } from '../config/weapons';
+import { WEAPON_DAMAGE_PER_RANK, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -62,6 +62,10 @@ export class WeaponSystem {
     return closest;
   }
 
+  private rankEffect(kind: WeaponId): number {
+    return weaponRankEffect(kind, this.sim.stacks[kind]);
+  }
+
   private weaponDamage(kind: WeaponId, factor: number): number {
     const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
     return this.sim.stats.damage * factor * (1 + upgrades * WEAPON_DAMAGE_PER_RANK);
@@ -118,7 +122,7 @@ export class WeaponSystem {
       return;
     }
     this.marks.delete(target);
-    this.area('mark', target, 66, 1.45);
+    this.area('mark', target, this.rankEffect('mark'), 1.45);
   }
 
   onEnemyKilled(enemy: Enemy): void {
@@ -134,34 +138,38 @@ export class WeaponSystem {
     compact(this.effects, (effect) => (effect.life -= dt) > 0);
 
     if (sim.stacks.chain && now >= (this.ready.get('chain') ?? 0)) this.chain();
-    if (this.available('mine', 2.8)) this.device('mine', p, 7.5, 72);
-    if (this.available('turret', 6.5)) this.device('turret', p, 5, 270);
+    if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 72);
+    if (this.available('turret', this.rankEffect('turret'))) this.device('turret', p, 5, 270);
     if (sim.stacks.flame && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 36)) {
       this.trail = { x: p.x, y: p.y };
-      this.device('flame', p, 1.5, 29);
+      this.device('flame', p, 1.5, this.rankEffect('flame'));
     }
     if (this.dodgeTrail && p.dodgeTime <= 0) {
       const from = this.dodgeTrail;
       this.dodgeTrail = null;
       const angle = Math.atan2(p.y - from.y, p.x - from.x);
       if (sim.stacks.barrier) this.device('barrier', from, 2.4, dist(p.x, p.y, from.x, from.y), angle);
-      if (sim.relics.has('compass')) this.device('mine', p, 7.5, 72).armAt = 0;
+      if (sim.relics.has('compass')) this.device('mine', p, Infinity, 72).armAt = 0;
     }
 
     if ((sim.stacks.axe || sim.stacks.spear || sim.stacks.gravity) && (sim.target || sim.findTarget(450))) {
-      if (this.available('axe', 2.5)) this.device('axe', p, 2.2, 13, p.aim);
-      if (this.available('spear', 3.2)) this.device('spear', p, 0.38, 450, p.aim);
-      if (this.available('gravity', 5.4)) this.device('gravity', p, 1.9, 125, p.aim);
+      if (this.available('axe', 2.5)) this.device('axe', p, 2.2, this.rankEffect('axe'), p.aim);
+      if (this.available('spear', 3.2)) this.device('spear', p, 0.38, this.rankEffect('spear'), p.aim);
+      if (this.available('gravity', 5.4)) this.device('gravity', p, 1.9, this.rankEffect('gravity'), p.aim);
     }
     if (this.echo && this.echo.at <= now) {
       const { x, y, angle } = this.echo;
       const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
+      const count = this.rankEffect('echo');
       for (const direction of angles) {
-        const dx = Math.cos(direction);
-        const dy = Math.sin(direction);
-        this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
-        sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
-          damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.7, source: 'echo' });
+        for (let i = 0; i < count; i++) {
+          const shotAngle = direction + (i - (count - 1) / 2) * 0.2;
+          const dx = Math.cos(shotAngle);
+          const dy = Math.sin(shotAngle);
+          this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
+          sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
+            damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.7, source: 'echo' });
+        }
       }
       this.echo = null;
     }
@@ -180,7 +188,7 @@ export class WeaponSystem {
     this.ready.set('chain', this.sim.elapsed + 2.15 * this.sim.relics.cooldownMultiplier);
     const hit = new Set<Target>();
     const points: Point[] = [p];
-    while (target && hit.size < (crown ? 6 : 4)) {
+    while (target && hit.size < this.rankEffect('chain') + (crown ? 2 : 0)) {
       hit.add(target);
       points.push(target);
       this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
@@ -193,7 +201,7 @@ export class WeaponSystem {
   private orbit(): void {
     const { player, elapsed } = this.sim;
     const cog = this.sim.relics.has('cog');
-    const bladeCount = cog ? 3 : 2;
+    const bladeCount = this.rankEffect('orbit') + Number(cog);
     const radius = cog ? (elapsed < this.sim.relics.dodgeUntil ? 84 : 48) : 60;
     for (let i = 0; i < bladeCount; i++) {
       const angle = elapsed * 4 + i * Math.PI * 2 / bladeCount;
@@ -230,9 +238,10 @@ export class WeaponSystem {
     }
     const origins = this.contagion.splice(0);
     for (const origin of origins) {
-      this.trace('infection', [origin], 96);
+      const radius = this.rankEffect('infection');
+      this.trace('infection', [origin], radius);
       for (const enemy of this.sim.enemies) {
-        if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > 96 + enemy.r) continue;
+        if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > radius + enemy.r) continue;
         this.infected.set(enemy, now + 5);
         this.damage('infection', enemy, 1.1);
       }
@@ -249,7 +258,7 @@ export class WeaponSystem {
           this.area(d.kind, d, d.r, 2.85 * (d.secondary ? 0.4 : 1));
           d.age = d.duration;
           if (!d.secondary && this.sim.relics.has('fuse') && this.sim.stacks.mine) {
-            const child = this.device('mine', d, 4, 44);
+            const child = this.device('mine', d, Infinity, 44);
             child.secondary = true;
             child.armAt = 0.7 + dt; // A new device also advances in the current tick.
           }
@@ -278,7 +287,7 @@ export class WeaponSystem {
         if (finished) this.sweep(d, 12, 2.6);
         break;
       case 'barrier':
-        if (!finished) this.sweep(d, 11, 1.8);
+        if (!finished) this.sweep(d, this.rankEffect('barrier'), 1.8);
         break;
       case 'axe': {
         const returning = d.age >= 0.62;
