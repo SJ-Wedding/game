@@ -167,3 +167,27 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 .weapon-icon { width: 2.5em; height: 2.5em; }
 .weapon-chip { display: inline-flex; align-items: center; gap: 0.25em; }
 .weapon-chip img { width: 1.35em; height: 1.35em; }
+
+/* ───────── v0.3.0: 등급 카드·새로고침·상태창·상점·토큰 ───────── */
+.card[data-grade] { border-color: var(--grade); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--grade) 40%, transparent); }
+.card[data-grade] .cat { color: var(--grade); }
+.card.grade-legendary { background: linear-gradient(180deg, #3a2c10, #1a1730 60%); }
+.card.grade-epic { background: linear-gradient(180deg, #2a1940, #1a1730 60%); }
+.card.grade-rare { background: linear-gradient(180deg, #162a45, #1a1730 60%); }
+button.reroll { justify-self: center; }
+button:disabled { opacity: 0.45; cursor: default; }
+.gdot { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-left: 0.15em; vertical-align: middle; }
+.token { color: var(--gold); font-weight: 800; }
+.shop-btn { font-size: 1.1em; padding: 0.6em 1.4em; }
+.stat-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+.stat-table th, .stat-table td { padding: 0.25em 0.7em; border-bottom: 1px solid #ffffff12; text-align: right; }
+.stat-table th:first-child { text-align: left; color: var(--muted); font-weight: 600; }
+.stat-table thead th { color: var(--muted); font-weight: 600; }
+.stat-table td.final { color: var(--accent); font-weight: 800; }
+.shop-cols > div { flex: 1 1 18em; text-align: left; }
+.shop-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4em; }
+.shop-item { display: flex; justify-content: space-between; align-items: center; gap: 0.8em; padding: 0.45em 0.7em; background: #ffffff08; border-radius: 8px; }
+.shop-item .lv { color: var(--accent); font-weight: 700; }
+.shop-item button.buy { min-width: 4.5em; }
+.panel.shop, .panel.status { width: min(94cqw, 60em); }
+.tokens { display: flex; flex-wrap: wrap; gap: 0.3em; justify-content: center; align-items: baseline; }

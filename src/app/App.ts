@@ -4,11 +4,13 @@ import { GameSim } from '../core/sim';
 import type { InputState, RunResult, SimEvent } from '../core/types';
 import type { DevOptions } from '../dev/devOptions';
 import { simOptionsFor } from '../dev/devOptions';
-import { recordRun, writeSave, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
+import { purchaseMeta, recordRun, writeSave, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
+import type { TokenReward } from '../core/meta';
+import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result';
+export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'status' | 'shop';
 
 /** 렌더러(Phaser 씬)가 App 에 제공하는 기능 */
 export interface SceneLink {
@@ -38,6 +40,9 @@ export class App {
   dev: DevOptions;
   lastResult: RunResult | null = null;
   lastNewRecords: NewRecord[] = [];
+  lastTokens: TokenReward | null = null;
+  /** 상태창을 닫으면 돌아갈 화면 */
+  private statusReturn: 'playing' | 'paused' = 'playing';
   /** 지금까지 시작한 판 수 (디버그용) */
   runsStarted = 0;
   /** 전역 리스너 등록 횟수 (중복 검사용, 항상 1 이어야 함) */
@@ -79,9 +84,11 @@ export class App {
     this.hud.hide();
     this.screens.showTitle(
       this.save.records,
+      this.save.meta,
       this.save.settings.volume,
       {
         onPlay: () => this.startRun(),
+        onShop: () => this.showShop(),
         onVolume: (v) => this.setVolume(v),
         onDevChange: (s) => this.applyDevPanel(s),
       },
@@ -92,7 +99,7 @@ export class App {
   startRun(): void {
     this.sfx.unlock();
     const seed = this.dev.enabled && this.dev.seed !== null ? this.dev.seed : randomSeed();
-    this.sim = new GameSim(simOptionsFor(this.dev, seed));
+    this.sim = new GameSim({ ...simOptionsFor(this.dev, seed), meta: this.save.meta.purchases });
     this.runsStarted++;
     this.screen = 'playing';
     this.screens.hide();
@@ -106,6 +113,7 @@ export class App {
     this.sim.setPaused(true);
     this.screens.showPause(reason, this.save.settings.volume, {
       onResume: () => this.resume(),
+      onStatus: () => this.openStatus(),
       onRestart: () => this.startRun(),
       onTitle: () => this.showTitle(),
       onVolume: (v) => this.setVolume(v),
@@ -133,20 +141,74 @@ export class App {
   private showLevelUp(): void {
     const sim = this.sim!;
     this.screen = 'levelup';
-    this.screens.showLevelUp(sim.level - sim.pendingLevels + 1, sim.pendingLevels, sim.choices, (i) => this.choose(i));
+    this.screens.showLevelUp({
+      title: sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`,
+      pending: sim.pendingLevels,
+      choices: sim.choices,
+      rerollsLeft: sim.rerollsLeft,
+      onChoose: (i) => this.choose(i),
+      onReroll: () => this.reroll(),
+    });
+  }
+
+  reroll(): void {
+    if (this.screen !== 'levelup' || !this.sim) return;
+    if (this.sim.reroll()) this.showLevelUp();
+  }
+
+  /** 상태창 열기 (전투 시간 정지). 전투 중 또는 일시정지 메뉴에서 열 수 있다. */
+  openStatus(): void {
+    const sim = this.sim;
+    if (!sim || (this.screen !== 'playing' && this.screen !== 'paused')) return;
+    this.statusReturn = this.screen;
+    sim.setPaused(true);
+    this.screen = 'status';
+    this.screens.showStatus({
+      level: sim.level,
+      layers: statLayers(sim.picks, sim.meta),
+      picks: sim.picks,
+      rerollsLeft: sim.rerollsLeft,
+      revivesLeft: sim.revivesLeft,
+      onClose: () => this.closeStatus(),
+    });
+  }
+
+  closeStatus(): void {
+    if (this.screen !== 'status' || !this.sim) return;
+    if (this.statusReturn === 'paused') {
+      this.screen = 'playing';
+      this.pause('esc');
+    } else {
+      this.screen = 'paused';
+      this.resume();
+    }
+  }
+
+  showShop(): void {
+    this.screen = 'shop';
+    this.screens.showShop(this.save.meta, (id) => this.buy(id), () => this.showTitle());
+  }
+
+  buy(id: string): void {
+    const next = purchaseMeta(this.save, id);
+    if (!next) return;
+    this.save = next;
+    writeSave(this.storage, this.save);
+    this.showShop();
   }
 
   private finish(): void {
     const sim = this.sim!;
     const result = sim.result!;
-    const { data, newRecords } = recordRun(this.save, result);
+    const { data, newRecords, tokens } = recordRun(this.save, result);
     this.save = data;
     writeSave(this.storage, this.save);
     this.lastResult = result;
     this.lastNewRecords = newRecords;
+    this.lastTokens = tokens;
     this.screen = 'result';
     this.resultShownAt = performance.now();
-    this.screens.showResult(result, newRecords, () => this.startRun(), () => this.showTitle());
+    this.screens.showResult(result, newRecords, tokens, () => this.startRun(), () => this.showTitle());
   }
 
   /** 렌더 루프에서 매 프레임 호출. 전투 중일 때만 시간이 흐른다. */
@@ -199,15 +261,36 @@ export class App {
         // 주의: 여기서 Space·방향키에 preventDefault 를 하면 Phaser 가 그 입력을 무시한다.
         // 스크롤 방지는 GameScene 의 키 캡처가 맡는다.
         if (e.code === 'Escape') this.pause('esc');
+        if (e.code === 'Tab') {
+          e.preventDefault();
+          if (!e.repeat) this.openStatus();
+        }
         break;
       case 'paused':
         if (e.code === 'Escape' && !e.repeat) this.resume();
+        if (e.code === 'Tab') {
+          e.preventDefault();
+          if (!e.repeat) this.openStatus();
+        }
+        break;
+      case 'status':
+        if ((e.code === 'Tab' || e.code === 'Escape') && !e.repeat) {
+          e.preventDefault();
+          this.closeStatus();
+        }
+        break;
+      case 'shop':
+        if (e.code === 'Escape' && !e.repeat) this.showTitle();
         break;
       case 'levelup': {
         const n = ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].indexOf(e.code);
         if (n >= 0 && !e.repeat) {
           e.preventDefault();
           this.choose(n % 3);
+        }
+        if (e.code === 'KeyR' && !e.repeat) {
+          e.preventDefault();
+          this.reroll();
         }
         if (e.code === 'Space') e.preventDefault();
         break;

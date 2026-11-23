@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RUN_CONFIG } from '../src/config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES } from '../src/config/spawns';
+import { BALANCE_REFERENCE_META } from '../src/config/meta';
 import { Bot, playToEnd } from '../src/core/bot';
 import { GameSim } from '../src/core/sim';
 
@@ -26,20 +27,21 @@ describe('15분 설계', () => {
 
   const seeds = [101, 102, 103, 104, 105, 106];
   const runs = seeds.map((seed) => {
-    const sim = new GameSim({ seed });
+    // 밸런스 기준: 영구 강화 중간 단계(BALANCE_REFERENCE_META, 토큰 145개)
+    const sim = new GameSim({ seed, meta: BALANCE_REFERENCE_META });
     playToEnd(sim, new Bot(seed));
     return { seed, sim, result: sim.result! };
   });
 
-  it('첫 레벨업은 전투 시작 후 약 1분 이내', () => {
+  it('첫 레벨업은 초반 경험치 절반 적용으로 약 30초 이내', () => {
     for (const { sim } of runs) {
       expect(sim.firstLevelUpAt).not.toBeNull();
-      expect(sim.firstLevelUpAt!).toBeGreaterThan(20);
-      expect(sim.firstLevelUpAt!).toBeLessThanOrEqual(65);
+      expect(sim.firstLevelUpAt!).toBeGreaterThan(8);
+      expect(sim.firstLevelUpAt!).toBeLessThanOrEqual(35);
     }
   });
 
-  it('표준 봇의 승리는 전투 시간 14:00~15:00 사이에 끝난다', () => {
+  it('표준 봇(기준 영구 강화)의 승리는 전투 시간 14:00~15:00 사이에 끝난다', () => {
     const wins = runs.filter((r) => r.result.outcome === 'victory');
     expect(wins.length).toBeGreaterThanOrEqual(3);
     for (const w of wins) {

@@ -1,5 +1,6 @@
 import { ARENA_CONFIG } from '../config/arena';
 import { ENEMY_CONFIG } from '../config/enemies';
+import { GRADES, GRADE_INDEX } from '../config/grades';
 import type { UpgradeId } from '../config/upgrades';
 import { BOSS_CHARGE_LENGTH } from './boss';
 import { distToSegment } from './math';
@@ -48,6 +49,7 @@ export class Bot {
     let bestScore = -Infinity;
     sim.choices.forEach((c, i) => {
       let score = c.kind === 'fallback' ? 0 : (PICK_WEIGHT[c.def.id] ?? 3.1);
+      if (c.kind === 'upgrade' && !c.def.weapon) score *= GRADES[GRADE_INDEX[c.grade]].mult;
       if (c.kind === 'upgrade' && lowHp && c.def.category === 'survival') score += 2;
       score += this.rng.range(0, 2.5);
       if (score > bestScore) {
@@ -56,6 +58,17 @@ export class Bot {
       }
     });
     return best;
+  }
+
+  /** 후보가 마음에 들지 않으면 새로고침할지 (남은 횟수가 있을 때) */
+  wantsReroll(sim: GameSim): boolean {
+    if (sim.rerollsLeft <= 0) return false;
+    const best = Math.max(
+      ...sim.choices.map((c) =>
+        c.kind === 'fallback' ? 0 : (PICK_WEIGHT[c.def.id] ?? 3.1) * (c.def.weapon ? 1 : GRADES[GRADE_INDEX[c.grade]].mult),
+      ),
+    );
+    return best < 3;
   }
 
   input(sim: GameSim, dt = 1 / 60): InputState {
@@ -168,6 +181,16 @@ export class Bot {
       if (gd < 520) add(g.x - p.x, g.y - p.y, 1.1);
     }
 
+    // ── 드랍 아이템 (회복은 체력이 깎였을 때 우선) ──
+    if (danger < 3.5 && sim.pickups.length) {
+      const hurt = p.hp / sim.stats.maxHp < 0.75;
+      for (const it of sim.pickups) {
+        if (it.kind === 'heal' && !hurt) continue;
+        const d = Math.hypot(it.x - p.x, it.y - p.y);
+        if (d < 600) add(it.x - p.x, it.y - p.y, it.kind === 'heal' ? 2.2 : 1.4);
+      }
+    }
+
     // ── 벽·구석 회피 ──
     const cx = ARENA_CONFIG.width / 2;
     const cy = ARENA_CONFIG.height / 2;
@@ -221,7 +244,8 @@ export function playToEnd(sim: GameSim, bot: Bot, maxTicks = 60 * 60 * 20): void
   let guard = 0;
   while (sim.phase !== 'ended' && guard++ < maxTicks) {
     if (sim.phase === 'levelup') {
-      sim.choose(bot.choose(sim));
+      if (bot.wantsReroll(sim)) sim.reroll();
+      else sim.choose(bot.choose(sim));
       continue;
     }
     sim.step(bot.input(sim));

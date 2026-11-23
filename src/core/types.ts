@@ -1,4 +1,6 @@
 import type { EnemyKind } from '../config/enemies';
+import type { DropKind } from '../config/drops';
+import type { GradeId } from '../config/grades';
 import type { UpgradeDef, UpgradeId } from '../config/upgrades';
 
 /** 한 틱 동안의 플레이어 입력. 이동은 -1..1, 조준은 월드 좌표. */
@@ -131,6 +133,15 @@ export interface Gem {
   pulled: boolean;
 }
 
+/** 바닥에 떨어진 아이템 */
+export interface Pickup {
+  x: number;
+  y: number;
+  kind: DropKind;
+  /** 남은 시간(초) */
+  life: number;
+}
+
 export type SimEventType =
   | 'shoot'
   | 'hit'
@@ -145,6 +156,10 @@ export type SimEventType =
   | 'bossAttack'
   | 'enemyShoot'
   | 'explode'
+  | 'item'
+  | 'bomb'
+  | 'revive'
+  | 'reroll'
   | 'victory'
   | 'defeat';
 
@@ -156,7 +171,7 @@ export interface SimEvent {
 
 /** 레벨업 후보: 실제 강화이거나, 모두 최대일 때의 대체 선택지 */
 export type UpgradeChoice =
-  | { kind: 'upgrade'; def: UpgradeDef; nextStack: number }
+  | { kind: 'upgrade'; def: UpgradeDef; grade: GradeId; nextStack: number }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
 export type RunOutcome = 'victory' | 'defeat';
@@ -172,8 +187,12 @@ export interface RunResult {
   kills: number;
   killsByKind: Record<string, number>;
   level: number;
-  upgrades: { id: UpgradeId; name: string; stacks: number }[];
+  /** 고른 강화 (같은 강화는 묶고, 고른 등급 목록을 함께 표시) */
+  upgrades: { id: UpgradeId; name: string; stacks: number; grades: GradeId[] }[];
   pickOrder: string[];
+  rerollsUsed: number;
+  revived: number;
+  itemsCollected: number;
   seed: number;
   bossHpRatio: number | null;
   /** 개발 모드 옵션(보스 직전 시작/무적)이 사용된 판인가 — 최고 기록에서 제외 */

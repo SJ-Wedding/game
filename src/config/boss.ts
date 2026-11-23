@@ -7,7 +7,7 @@ export type BossPattern = 'ring' | 'charge' | 'meteor' | 'summon';
 export const BOSS_CONFIG = {
   name: '잿불 군주',
   /** 보스 체력. 보스전 길이(= 승리 시각)를 결정하는 가장 중요한 값 */
-  hp: 9000,
+  hp: 6300,
   radius: 54,
   speed: 72,
   contactDamage: 20,

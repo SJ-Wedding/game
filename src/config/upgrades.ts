@@ -3,11 +3,12 @@ import type { StatKey } from './player';
 
 /**
  * 강화 9종. 공격 / 생존 / 기동 3개 분류에 3개씩.
- * effects 의 계산 방식 (stacks = 현재 중첩 수):
- *   add : 기본값 + value × stacks
- *   pct : 기본값 × (1 + value × stacks)       (예: 0.18 → 중첩당 +18%)
- *   mul : 기본값 × value ^ stacks            (예: 0.82 → 중첩당 18% 감소)
- * maxStacks 에 도달한 강화는 후보에서 제외된다.
+ * effects 의 계산 방식 (고른 카드마다 등급 값 v 를 구해 합산/곱셈):
+ *   add : 기본값 + Σv
+ *   pct : 기본값 × (1 + Σv)       (예: 0.18 → 일반 +18%, 전설 +54%)
+ *   mul : 기본값 × Πv             (예: 0.82 → 일반 18% 감소, 희귀 27% 감소)
+ * description 은 일반 등급 기준 문구. 카드에는 등급 값으로 다시 계산한 문구가 표시된다.
+ * maxStacks(선택 횟수)에 도달한 강화는 후보에서 제외된다. 등급과 관계없이 1회 선택 = 1중첩.
  */
 export type UpgradeCategory = 'attack' | 'survival' | 'mobility';
 export type UpgradeId =
@@ -19,7 +20,10 @@ export type UpgradeId =
 export interface UpgradeEffect {
   stat: StatKey;
   op: 'add' | 'pct' | 'mul';
+  /** 일반 등급 1회 선택 시 값. 다른 등급은 grades.ts 의 배율을 곱한다 (mul 은 감소폭에 곱함) */
   value: number;
+  /** 등급별 값을 직접 지정 [일반, 희귀, 영웅, 전설] — 정수가 필요한 효과(투사체 수 등)에 사용 */
+  gradeValues?: [number, number, number, number];
 }
 
 export interface UpgradeDef {
@@ -29,7 +33,7 @@ export interface UpgradeDef {
   description: string;
   maxStacks: number;
   effects: UpgradeEffect[];
-  /** 선택 즉시 회복량 */
+  /** 선택 즉시 회복량 (등급 배율 적용) */
   healOnPick?: number;
   weapon?: WeaponId;
 }
@@ -45,12 +49,12 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'rapid', name: '연사 숙련', category: 'attack', description: '공격 속도 +18%', maxStacks: 5,
     effects: [{ stat: 'fireRate', op: 'pct', value: 0.18 }] },
   { id: 'split', name: '분열 사격', category: 'attack', description: '투사체 +1 (부채꼴)', maxStacks: 3,
-    effects: [{ stat: 'projectileCount', op: 'add', value: 1 }] },
+    effects: [{ stat: 'projectileCount', op: 'add', value: 1, gradeValues: [1, 1, 2, 2] }] },
   { id: 'power', name: '날 선 탄환', category: 'attack', description: '피해 +22%', maxStacks: 5,
     effects: [{ stat: 'damage', op: 'pct', value: 0.22 }] },
   // ── 생존 ──
   { id: 'vitality', name: '강인한 육체', category: 'survival', description: '최대 체력 +25, 즉시 25 회복', maxStacks: 4,
-    effects: [{ stat: 'maxHp', op: 'add', value: 25 }], healOnPick: 25 },
+    effects: [{ stat: 'maxHp', op: 'add', value: 25, gradeValues: [25, 38, 50, 75] }], healOnPick: 25 },
   { id: 'regen', name: '재생', category: 'survival', description: '초당 체력 0.8 회복', maxStacks: 3,
     effects: [{ stat: 'regen', op: 'add', value: 0.8 }] },
   { id: 'guard', name: '수호 결계', category: 'survival', description: '받는 피해 -12%', maxStacks: 3,

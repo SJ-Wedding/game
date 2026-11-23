@@ -8,7 +8,7 @@ export const DEV_CONFIG = {
   /** 보스 직전 시작 시각 = bossAt - bossLeadTime */
   bossLeadTime: 5,
   bossPreset: {
-    level: 18,
+    level: 19,
     upgrades: {
       rapid: 3,
       split: 2,
@@ -16,7 +16,7 @@ export const DEV_CONFIG = {
       vitality: 2,
       regen: 1,
       guard: 2,
-      swift: 1,
+      swift: 2,
       evasion: 2,
       magnet: 1,
     } as Partial<Record<UpgradeId, number>>,

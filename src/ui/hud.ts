@@ -103,7 +103,7 @@ export class Hud {
 
     const need = sim.xpNeeded;
     c.style(this.xpFill, 'xp', 'width', `${(100 * sim.xp) / need}%`);
-    c.text(this.xpText, 'xp', `Lv ${sim.level}  ·  경험치 ${sim.xp} / ${need}`);
+    c.text(this.xpText, 'xp', `Lv ${sim.level}  ·  경험치 ${Math.floor(sim.xp)} / ${need}`);
 
     const ready = p.dodgeCd <= 0;
     c.style(this.dodgeFill, 'dodge', 'width', `${ready ? 100 : (100 * (1 - p.dodgeCd / s.dodgeCooldown)).toFixed(0)}%`);
@@ -141,12 +141,14 @@ export class Hud {
     // 안내 문구
     const ph = sim.currentSpawnPhase();
     if (ph && ph.label !== this.lastPhaseLabel) {
-      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 공격은 가까운 적에게 자동 · Space 회피', 5);
+      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 공격은 자동 · Space 회피 · Tab 상태창', 5);
       else if (ph.announce) this.flash(ph.announce, 4);
       this.lastPhaseLabel = ph.label;
     }
     for (const ev of events) {
       if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
+      else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
+      else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
       else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장! 15:00 전에 처치하세요`, 4);
       else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
     }

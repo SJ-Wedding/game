@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PLAYER_BASE_STATS } from '../src/config/player';
 import { ALL_UPGRADES, UPGRADES } from '../src/config/upgrades';
 import { Rng } from '../src/core/rng';
-import { computeStats, emptyStacks } from '../src/core/stats';
+import { computeStats, effectValue, healOnPick } from '../src/core/stats';
+import { emptyStacks } from '../src/core/stats';
 import { IDLE_INPUT } from '../src/core/types';
 import { applyUpgrade, rollChoices } from '../src/core/upgrades';
 import { makeSim } from './helpers';
@@ -90,10 +91,9 @@ describe('강화 효과', () => {
   });
 
   it('순간 회피: 회피 재사용 대기시간이 줄어든다', () => {
-    const s0 = computeStats(emptyStacks());
-    const st = emptyStacks();
-    st.evasion = 3;
-    expect(computeStats(st).dodgeCooldown).toBeCloseTo(s0.dodgeCooldown * 0.82 ** 3, 6);
+    const s0 = computeStats([]);
+    const picks = [1, 2, 3].map(() => ({ id: 'evasion' as const, grade: 'common' as const }));
+    expect(computeStats(picks).dodgeCooldown).toBeCloseTo(s0.dodgeCooldown * 0.82 ** 3, 6);
   });
 
   it('강인한 육체: 최대 체력이 늘고 즉시 회복한다', () => {
@@ -109,9 +109,12 @@ describe('강화 효과', () => {
       if (idx < 0) continue;
       found = true;
       const hp = sim.player.hp;
+      const choice = sim.choices[idx];
+      const grade = choice.kind === 'upgrade' ? choice.grade : 'common';
       sim.choose(idx);
-      expect(sim.stats.maxHp).toBe(PLAYER_BASE_STATS.maxHp + 25);
-      expect(sim.player.hp).toBeCloseTo(hp + 25, 5);
+      const bonus = effectValue({ stat: 'maxHp', op: 'add', value: 25, gradeValues: [25, 38, 50, 75] }, grade);
+      expect(sim.stats.maxHp).toBe(PLAYER_BASE_STATS.maxHp + bonus);
+      expect(sim.player.hp).toBeCloseTo(Math.min(sim.stats.maxHp, hp + healOnPick('vitality', grade)), 5);
     }
     expect(found).toBe(true);
   });
