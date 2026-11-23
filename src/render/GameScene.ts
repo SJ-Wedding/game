@@ -4,10 +4,10 @@ import { BOSS_CONFIG } from '../config/boss';
 import { ENEMY_CONFIG } from '../config/enemies';
 import type { App } from '../app/App';
 import { BOSS_CHARGE_LENGTH } from '../core/boss';
-import { Rng } from '../core/rng';
 import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
+import { ARENA_TEXTURE, ACTOR_TEXTURES } from './textures';
 
 interface Particle {
   x: number;
@@ -26,7 +26,12 @@ interface Particle {
  */
 export class GameScene extends Phaser.Scene {
   private readonly app: App;
+  private groundEffects!: Phaser.GameObjects.Graphics;
   private g!: Phaser.GameObjects.Graphics;
+  private playerImage!: Phaser.GameObjects.Image;
+  private bossImage!: Phaser.GameObjects.Image;
+  private readonly enemyImages: Phaser.GameObjects.Image[] = [];
+  private visibleEnemies = 0;
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SPACE', Phaser.Input.Keyboard.Key>;
   private particles: Particle[] = [];
   private renderedSim: GameSim | null = null;
@@ -40,9 +45,17 @@ export class GameScene extends Phaser.Scene {
     this.app = app;
   }
 
+  preload(): void {
+    this.load.image('arena-slate', ARENA_TEXTURE);
+    for (const [key, url] of Object.entries(ACTOR_TEXTURES)) this.load.image(key, url);
+  }
+
   create(): void {
     this.drawFloor();
-    this.g = this.add.graphics();
+    this.groundEffects = this.add.graphics().setDepth(1);
+    this.bossImage = this.add.image(0, 0, 'boss').setDepth(3).setVisible(false);
+    this.playerImage = this.add.image(0, 0, 'player').setDepth(5).setVisible(false);
+    this.g = this.add.graphics().setDepth(6);
     const kb = this.input.keyboard!;
     // 문자 키는 캡처하지 않는다(개발 패널 입력칸을 방해하지 않도록). Space·방향키만 캡처해 페이지 스크롤을 막는다.
     this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE', false) as GameScene['keys'];
@@ -176,45 +189,49 @@ export class GameScene extends Phaser.Scene {
     const W = ARENA_CONFIG.width;
     const H = ARENA_CONFIG.height;
     const pad = ARENA_CONFIG.wallPadding;
-    // 매 프레임 다시 그리지 않도록 한 번 그린 뒤 텍스처로 굽는다
-    const f = this.make.graphics({}, false);
-    f.fillStyle(PALETTE.floor, 1).fillRect(0, 0, W, H);
-    f.lineStyle(1, PALETTE.grid, 1);
-    for (let x = 0; x <= W; x += 64) f.lineBetween(x, 0, x, H);
-    for (let y = 0; y <= H; y += 64) f.lineBetween(0, y, W, y);
-    // 균열 문양 (고정 시드로 항상 같은 모양)
-    const rng = new Rng(7);
-    for (let i = 0; i < 70; i++) {
-      const x = rng.range(pad + 40, W - pad - 40);
-      const y = rng.range(pad + 40, H - pad - 40);
-      const r = rng.range(14, 46);
-      f.lineStyle(2, PALETTE.rune, 0.55).strokeCircle(x, y, r);
-      if (rng.next() < 0.5) f.lineStyle(1, PALETTE.rune, 0.45).strokeCircle(x, y, r * 0.55);
+    this.add.tileSprite(0, 0, W, H, 'arena-slate').setOrigin(0).setTileScale(1.25);
+    const f = this.add.graphics();
+    const cx = W / 2;
+    const cy = H / 2;
+    f.lineStyle(2, PALETTE.rune, 0.42);
+    for (const r of [104, 116, 254, 266]) f.strokeCircle(cx, cy, r);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const x = cx + Math.cos(a) * 228;
+      const y = cy + Math.sin(a) * 228;
+      f.strokePoints([
+        { x: x + Math.cos(a) * 15, y: y + Math.sin(a) * 15 },
+        { x: x - Math.sin(a) * 7, y: y + Math.cos(a) * 7 },
+        { x: x - Math.cos(a) * 15, y: y - Math.sin(a) * 15 },
+        { x: x + Math.sin(a) * 7, y: y - Math.cos(a) * 7 },
+      ], true);
     }
-    for (let i = 0; i < 26; i++) {
-      let x = rng.range(pad, W - pad);
-      let y = rng.range(pad, H - pad);
-      f.lineStyle(2, PALETTE.rune, 0.6).beginPath().moveTo(x, y);
-      for (let k = 0; k < 6; k++) {
-        x += rng.range(-60, 60);
-        y += rng.range(-60, 60);
-        f.lineTo(x, y);
-      }
-      f.strokePath();
-    }
-    // 벽
+
     f.fillStyle(PALETTE.wall, 1);
-    f.fillRect(0, 0, W, pad).fillRect(0, H - pad, W, pad).fillRect(0, 0, pad, H).fillRect(W - pad, 0, pad, H);
-    f.lineStyle(3, PALETTE.wallEdge, 0.9).strokeRect(pad, pad, W - pad * 2, H - pad * 2);
-    if (!this.textures.exists('arena-floor')) f.generateTexture('arena-floor', W, H);
-    f.destroy();
-    this.add.image(0, 0, 'arena-floor').setOrigin(0, 0);
+    f.fillRect(0, 0, W, pad).fillRect(0, H - pad, W, pad)
+      .fillRect(0, 0, pad, H).fillRect(W - pad, 0, pad, H);
+    f.lineStyle(8, PALETTE.wallTrim, 1).strokeRect(pad - 5, pad - 5, W - pad * 2 + 10, H - pad * 2 + 10);
+    f.lineStyle(2, PALETTE.wallEdge, 0.85).strokeRect(pad, pad, W - pad * 2, H - pad * 2);
+    f.lineStyle(1, PALETTE.wallEdge, 0.45);
+    for (let x = 80; x < W - 40; x += 64) {
+      f.lineBetween(x, 6, x, pad - 8).lineBetween(x, H - pad + 8, x, H - 6);
+    }
+    for (let y = 80; y < H - 40; y += 64) {
+      f.lineBetween(6, y, pad - 8, y).lineBetween(W - pad + 8, y, W - 6, y);
+    }
     this.cameras.main.setBackgroundColor(PALETTE.bg);
   }
 
   private draw(sim: GameSim | null): void {
+    const ground = this.groundEffects;
     const g = this.g;
+    ground.clear();
     g.clear();
+    const enemyCount = sim?.enemies.length ?? 0;
+    for (let i = enemyCount; i < this.visibleEnemies; i++) this.enemyImages[i].setVisible(false);
+    this.visibleEnemies = enemyCount;
+    this.playerImage.setVisible(sim !== null);
+    this.bossImage.setVisible(Boolean(sim?.boss && !sim.boss.dead));
     if (!sim) return;
     const t = sim.elapsed;
 
@@ -222,9 +239,9 @@ export class GameScene extends Phaser.Scene {
     for (const h of sim.hazards) {
       const k = h.t / h.dur;
       const urgent = h.dur - h.t < 0.25;
-      g.fillStyle(PALETTE.telegraph, urgent ? 0.4 : 0.16).fillCircle(h.x, h.y, h.r);
-      g.fillStyle(PALETTE.telegraph, 0.35).fillCircle(h.x, h.y, h.r * k);
-      g.lineStyle(urgent ? 4 : 2, PALETTE.telegraphEdge, 0.95).strokeCircle(h.x, h.y, h.r);
+      ground.fillStyle(PALETTE.telegraph, urgent ? 0.4 : 0.16).fillCircle(h.x, h.y, h.r);
+      ground.fillStyle(PALETTE.telegraph, 0.35).fillCircle(h.x, h.y, h.r * k);
+      ground.lineStyle(urgent ? 4 : 2, PALETTE.telegraphEdge, 0.95).strokeCircle(h.x, h.y, h.r);
     }
 
     // 2) 돌진·원형 탄막 예고
@@ -242,7 +259,7 @@ export class GameScene extends Phaser.Scene {
       if (b.state === 'chargeWindup') this.lineTelegraph(b.x, b.y, b.dx, b.dy, BOSS_CHARGE_LENGTH + b.r, b.r, 1 - b.timer / BOSS_CONFIG.charge.windup);
       if (b.state === 'ringWindup') this.ringTelegraph(b.x, b.y, b.r, 1 - b.timer / BOSS_CONFIG.ring.windup);
       if (b.state === 'enter') {
-        g.lineStyle(4, PALETTE.bossTrim, 0.8).strokeCircle(b.x, b.y, b.r + 40 * (b.timer % 0.4) * 2.5);
+        ground.lineStyle(4, PALETTE.bossTrim, 0.8).strokeCircle(b.x, b.y, b.r + 40 * (b.timer % 0.4) * 2.5);
       }
     }
 
@@ -250,29 +267,27 @@ export class GameScene extends Phaser.Scene {
     for (const gem of sim.gems) {
       const big = gem.value >= 10;
       const s = big ? 9 : 5;
-      g.fillStyle(big ? PALETTE.gemBig : PALETTE.gem, 1);
-      g.fillTriangle(gem.x, gem.y - s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
-      g.fillTriangle(gem.x, gem.y + s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
+      ground.fillStyle(big ? PALETTE.gemBig : PALETTE.gem, 1);
+      ground.fillTriangle(gem.x, gem.y - s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
+      ground.fillTriangle(gem.x, gem.y + s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
     }
 
     // 4) 적
-    for (const e of sim.enemies) this.drawEnemy(e, sim, t);
+    for (let i = 0; i < enemyCount; i++) this.drawEnemy(sim.enemies[i], i, sim, t);
 
     // 5) 보스
     if (b && !b.dead) {
-      const blink = (b.state === 'enter' || b.state === 'phaseShift') && Math.floor(t * 12) % 2 === 0;
-      const body = b.flash > 0 ? PALETTE.hit : blink ? PALETTE.bossTrim : PALETTE.boss;
-      const spikes = 10;
-      const pts: Phaser.Types.Math.Vector2Like[] = [];
-      for (let i = 0; i < spikes * 2; i++) {
-        const a = (i / (spikes * 2)) * Math.PI * 2 + t * 0.4;
-        const r = i % 2 === 0 ? b.r * 1.12 : b.r * 0.88;
-        pts.push({ x: b.x + Math.cos(a) * r, y: b.y + Math.sin(a) * r });
-      }
-      g.fillStyle(body, 1).fillPoints(pts, true);
-      g.lineStyle(3, PALETTE.bossTrim, 1).strokePoints(pts, true);
-      g.fillStyle(PALETTE.bossCore, 1).fillCircle(b.x, b.y, b.r * (b.phase === 2 ? 0.42 : 0.32));
-      g.fillStyle(b.phase === 2 ? PALETTE.telegraph : PALETTE.boss, 1).fillCircle(b.x, b.y, b.r * 0.16);
+      const shifting = b.state === 'enter' || b.state === 'phaseShift';
+      const flash = b.flash > 0 || (shifting && Math.floor(t * 12) % 2 === 0);
+      const angle = b.state === 'charge' || b.state === 'chargeWindup'
+        ? Math.atan2(b.dy, b.dx)
+        : Math.atan2(sim.player.y - b.y, sim.player.x - b.x);
+      const r = b.r * (1 + Math.sin(t * 5) * 0.025);
+      ground.fillStyle(0x070a11, 0.55).fillCircle(b.x, b.y + 3, r);
+      ground.lineStyle(2, PALETTE.bossTrim, b.phase === 2 ? 0.9 : 0.48).strokeCircle(b.x, b.y, b.r + 3);
+      this.bossImage.setPosition(b.x, b.y).setRotation(angle - Math.PI / 2).setScale(r * 2.3 / this.bossImage.width);
+      if (flash) this.bossImage.setTintFill(PALETTE.hit);
+      else this.bossImage.clearTint();
     }
 
     // 6) 플레이어 투사체
@@ -293,13 +308,19 @@ export class GameScene extends Phaser.Scene {
     const p = sim.player;
     const dodging = p.dodgeTime > 0;
     if (dodging) {
-      g.fillStyle(PALETTE.player, 0.25).fillCircle(p.x - p.dodgeDx * 18, p.y - p.dodgeDy * 18, p.r);
-      g.fillStyle(PALETTE.player, 0.15).fillCircle(p.x - p.dodgeDx * 34, p.y - p.dodgeDy * 34, p.r);
+      ground.fillStyle(PALETTE.player, 0.25).fillCircle(p.x - p.dodgeDx * 18, p.y - p.dodgeDy * 18, p.r);
+      ground.fillStyle(PALETTE.player, 0.15).fillCircle(p.x - p.dodgeDx * 34, p.y - p.dodgeDy * 34, p.r);
     }
     const blink = p.invuln > 0 && !dodging && Math.floor(t * 20) % 2 === 0;
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
-    g.fillStyle(col, blink ? 0.45 : 1).fillCircle(p.x, p.y, p.r);
-    g.lineStyle(3, PALETTE.playerOutline, blink ? 0.5 : 1).strokeCircle(p.x, p.y, p.r);
+    ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
+    ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 4);
+    this.playerImage.setPosition(p.x, p.y)
+      .setScale(p.r * 2.65 / this.playerImage.width)
+      .setRotation(p.aim - Math.PI / 2)
+      .setAlpha(blink ? 0.45 : 1);
+    if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
+    else this.playerImage.clearTint();
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
@@ -308,7 +329,7 @@ export class GameScene extends Phaser.Scene {
       p.x + ax * (p.r + 2) + ay * 6, p.y + ay * (p.r + 2) - ax * 6,
     );
     // 흡수 범위 (은은하게)
-    g.lineStyle(1, PALETTE.gem, 0.12).strokeCircle(p.x, p.y, sim.stats.pickupRadius);
+    ground.lineStyle(1, PALETTE.gem, 0.12).strokeCircle(p.x, p.y, sim.stats.pickupRadius);
 
     // 9) 파티클
     for (const q of this.particles) {
@@ -316,60 +337,39 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawEnemy(e: Enemy, sim: GameSim, t: number): void {
-    const g = this.g;
-    const flash = e.flash > 0;
-    switch (e.kind) {
-      case 'chaser': {
-        const wob = Math.sin(t * 8 + e.id) * 1.5;
-        g.fillStyle(flash ? PALETTE.hit : PALETTE.chaser, 1).fillCircle(e.x, e.y, e.r + wob * 0.3);
-        g.fillStyle(PALETTE.chaserDark, 1).fillCircle(e.x - 4, e.y - 2, 2.5).fillCircle(e.x + 4, e.y - 2, 2.5);
-        break;
-      }
-      case 'charger': {
-        let a = Math.atan2(sim.player.y - e.y, sim.player.x - e.x);
-        if (e.state !== 'move') a = Math.atan2(e.dy, e.dx);
-        const r = e.r * 1.25;
-        const tri = [0, 2.4, -2.4].map((o) => ({ x: e.x + Math.cos(a + o) * r, y: e.y + Math.sin(a + o) * r }));
-        const shaking = e.state === 'windup' ? Math.sin(t * 60) * 2 : 0;
-        tri.forEach((pt) => (pt.x += shaking));
-        g.fillStyle(flash ? PALETTE.hit : PALETTE.charger, 1).fillPoints(tri, true);
-        g.lineStyle(2, PALETTE.chargerDark, 1).strokePoints(tri, true);
-        break;
-      }
-      case 'spitter': {
-        const swell = e.state === 'aim' ? 1.25 : 1;
-        const r = e.r * swell;
-        const pts = [
-          { x: e.x, y: e.y - r },
-          { x: e.x + r, y: e.y },
-          { x: e.x, y: e.y + r },
-          { x: e.x - r, y: e.y },
-        ];
-        g.fillStyle(flash ? PALETTE.hit : PALETTE.spitter, 1).fillPoints(pts, true);
-        g.fillStyle(e.state === 'aim' ? PALETTE.enemyShot : PALETTE.spitterDark, 1).fillCircle(e.x, e.y, r * 0.38);
-        break;
-      }
-      case 'elite': {
-        const pts: Phaser.Types.Math.Vector2Like[] = [];
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2 + t * 0.6;
-          pts.push({ x: e.x + Math.cos(a) * e.r, y: e.y + Math.sin(a) * e.r });
-        }
-        g.fillStyle(flash ? PALETTE.hit : PALETTE.elite, 1).fillPoints(pts, true);
-        g.lineStyle(3, PALETTE.eliteTrim, 1).strokePoints(pts, true);
-        g.fillStyle(PALETTE.eliteTrim, 1).fillCircle(e.x, e.y, 6);
-        // 체력 바
-        const w = e.r * 2.2;
-        g.fillStyle(0x000000, 0.6).fillRect(e.x - w / 2, e.y - e.r - 14, w, 5);
-        g.fillStyle(PALETTE.eliteTrim, 1).fillRect(e.x - w / 2, e.y - e.r - 14, (w * Math.max(0, e.hp)) / e.maxHp, 5);
-        break;
-      }
+  private drawEnemy(e: Enemy, index: number, sim: GameSim, t: number): void {
+    let image = this.enemyImages[index];
+    if (!image) {
+      image = this.add.image(0, 0, e.kind).setDepth(2);
+      this.enemyImages[index] = image;
+    } else if (image.texture.key !== e.kind) {
+      image.setTexture(e.kind);
+    }
+
+    const aim = (e.kind === 'charger' && e.state !== 'move')
+      || (e.kind === 'elite' && (e.state === 'windup' || e.state === 'dash'));
+    const angle = aim ? Math.atan2(e.dy, e.dx) : Math.atan2(sim.player.y - e.y, sim.player.x - e.x);
+    const wobble = Math.sin(t * 8 + e.id) * 0.045;
+    const swell = e.kind === 'spitter' && e.state === 'aim' ? 1.22 : 1;
+    const shake = e.state === 'windup' ? Math.sin(t * 60) * 1.7 : 0;
+    this.groundEffects.fillStyle(0x070a11, 0.55).fillCircle(e.x, e.y + 2, e.r);
+    image.setVisible(true).setPosition(e.x + shake, e.y).setRotation(angle - Math.PI / 2)
+      .setScale((e.r * 2.5 * (swell + wobble)) / image.width);
+    if (e.flash > 0) image.setTintFill(PALETTE.hit);
+    else image.clearTint();
+
+    if (e.kind === 'spitter' && e.state === 'aim') {
+      this.groundEffects.lineStyle(2, PALETTE.enemyShot, 0.85).strokeCircle(e.x, e.y, e.r * 1.24);
+    }
+    if (e.kind === 'elite') {
+      const w = e.r * 2.2;
+      this.g.fillStyle(0x000000, 0.7).fillRect(e.x - w / 2, e.y - e.r - 14, w, 5);
+      this.g.fillStyle(PALETTE.eliteTrim, 1).fillRect(e.x - w / 2, e.y - e.r - 14, (w * Math.max(0, e.hp)) / e.maxHp, 5);
     }
   }
 
   private lineTelegraph(x: number, y: number, dx: number, dy: number, len: number, halfW: number, k: number): void {
-    const g = this.g;
+    const g = this.groundEffects;
     const nx = -dy;
     const ny = dx;
     const pts = [
@@ -385,7 +385,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private ringTelegraph(x: number, y: number, r: number, k: number): void {
-    const g = this.g;
+    const g = this.groundEffects;
     const rr = r + 20 + 110 * k;
     g.fillStyle(PALETTE.telegraph, 0.1 + 0.2 * k).fillCircle(x, y, rr);
     g.lineStyle(3, PALETTE.telegraphEdge, 0.9).strokeCircle(x, y, rr);
