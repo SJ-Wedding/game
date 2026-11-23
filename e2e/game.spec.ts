@@ -14,7 +14,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await page.goto('/?dev=1&seed=7');
     await expect(page.getByTestId('play')).toBeVisible();
     await page.getByTestId('play').click();
-    await expect(page.getByTestId('hud-timer')).toHaveText(/^(15:00|14:5\d)$/);
+    await expect(page.getByTestId('hud-timer')).toHaveText(/^(10:00|9:5\d)$/);
     await expect(page.getByTestId('hud-hp')).toContainText('체력 70 / 70');
     await expect(page.getByTestId('hud-dodge')).toContainText('회피 준비');
     await expect(page.getByTestId('hud-xp')).toContainText('Lv 1');
@@ -32,7 +32,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await page.keyboard.press('Space');
     await expect.poll(async () => (await snap(page)).player!.dodgeCd).toBeGreaterThan(0);
     await expect(page.getByTestId('hud-dodge')).toContainText('회피');
-    await expect(page.getByTestId('hud-timer')).not.toHaveText('15:00');
+    await expect(page.getByTestId('hud-timer')).not.toHaveText('10:00');
   });
 
   test('강화 선택: 레벨업 중에는 시간이 멈추고, 선택한 강화가 적용된다', async ({ page }) => {
@@ -110,23 +110,23 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect.poll(async () => (await snap(page)).screen, { timeout: 60_000 }).toBe('result');
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await expect(page.getByTestId('cause')).toContainText('처치했습니다');
-    await expect(page.getByTestId('result-time')).toHaveText(/^1[34]:\d\d$/);
+    await expect(page.getByTestId('result-time')).toHaveText(/^[89]:\d\d$/);
     await expect(page.getByTestId('result-upgrades')).toContainText('연사 숙련');
   });
 
-  test('시간 초과: 15:00 까지 보스를 못 잡으면 패배하고 원인이 표시된다', async ({ page }) => {
-    await startRun(page, '&seed=6&start=894&god=1');
+  test('시간 초과: 10:00 까지 보스를 못 잡으면 패배하고 원인이 표시된다', async ({ page }) => {
+    await startRun(page, '&seed=6&start=594&god=1');
     await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');
     await expect(page.getByTestId('outcome')).toHaveText('패배');
     await expect(page.getByTestId('cause')).toContainText('처치하지 못했습니다');
-    await expect(page.getByTestId('result-time')).toHaveText('15:00');
+    await expect(page.getByTestId('result-time')).toHaveText('10:00');
     const s = await snap(page);
-    expect(s.result).toMatchObject({ outcome: 'defeat', cause: 'timeout', survivalTime: 900 });
+    expect(s.result).toMatchObject({ outcome: 'defeat', cause: 'timeout', survivalTime: 600 });
   });
 
   test('재시작: 한 번의 입력으로 다시 시작되고, 반복해도 스폰과 입력이 중복되지 않는다', async ({ page }) => {
     // 짧은 판(종료 6초 전 시작)을 여러 번 끝내고 Enter 로 재시작
-    await startRun(page, '&seed=77&start=894&god=1');
+    await startRun(page, '&seed=77&start=594&god=1');
     for (let i = 0; i < 4; i++) {
       await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');
       const before = (await snap(page)).runsStarted;
@@ -136,7 +136,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
       const after = await snap(page);
       expect(after.runsStarted).toBe(before + 1); // 한 번 눌러 한 판만 시작
       expect(after.listenerInstalls).toBe(1);
-      expect(after.elapsed!).toBeLessThan(896); // 새 판 (894초부터 다시)
+      expect(after.elapsed!).toBeLessThan(596); // 새 판 (594초부터 다시)
     }
     // 결과 화면의 버튼 클릭으로도 재시작
     await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');

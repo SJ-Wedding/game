@@ -39,3 +39,21 @@ export function weaponRankEffect(id: WeaponId, rank: number): number {
   const index = Math.min(WEAPON_MAX_RANK, Math.max(1, rank)) - 1;
   return WEAPON_RANK_EFFECTS[id].values[index];
 }
+
+export const WEAPON_FUSIONS = {
+  storm: { name: '뇌광 연쇄', pair: ['chain', 'mark'], radius: 100, damage: 2.1 },
+  bastion: { name: '빙결 지뢰진', pair: ['mine', 'turret'], radius: 112, damage: 2.0 },
+  tempest: { name: '쌍날 폭풍', pair: ['orbit', 'axe'], radius: 78, damage: 2.5 },
+  inferno: { name: '잿불 균열', pair: ['flame', 'barrier'], radius: 90, damage: 2.3 },
+  volley: { name: '잔영 관통포', pair: ['spear', 'echo'], radius: 74, damage: 2.8 },
+  eclipse: { name: '검은 역병', pair: ['gravity', 'infection'], radius: 128, damage: 1.8 },
+} as const satisfies Record<string, { name: string; pair: readonly [WeaponId, WeaponId]; radius: number; damage: number }>;
+
+export type FusionId = keyof typeof WEAPON_FUSIONS;
+export const FUSION_IDS = Object.keys(WEAPON_FUSIONS) as FusionId[];
+export const FUSION_HIT_WINDOW = 3;
+
+export function isFusionIngredient(fusions: Iterable<FusionId>, weapon: string): boolean {
+  for (const id of fusions) if (WEAPON_FUSIONS[id].pair.some((ingredient) => ingredient === weapon)) return true;
+  return false;
+}

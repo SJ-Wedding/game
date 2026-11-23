@@ -1,4 +1,4 @@
-import { WEAPON_DAMAGE_PER_RANK, weaponRankEffect, type WeaponId } from '../config/weapons';
+import { FUSION_HIT_WINDOW, WEAPON_FUSIONS, WEAPON_DAMAGE_PER_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -28,6 +28,8 @@ interface Effect {
 }
 
 export class WeaponSystem {
+  readonly fusions = new Set<FusionId>();
+  private readonly fusionHits = new WeakMap<Target, Partial<Record<FusionId, { weapon: WeaponId; at: number }>>>();
   readonly devices: Device[] = [];
   readonly effects: Effect[] = [];
   readonly blades: Point[] = [];
@@ -72,9 +74,33 @@ export class WeaponSystem {
   }
 
   private damage(kind: WeaponId, target: Target, factor: number): void {
+    this.onFusionHit(kind, target);
     const damage = this.weaponDamage(kind, factor);
     if ('id' in target) this.sim.damageEnemy(target, damage);
     else this.sim.damageBoss(damage);
+  }
+
+  onFusionHit(kind: WeaponId, target: Target): void {
+    const now = this.sim.elapsed;
+    for (const id of this.fusions) {
+      const recipe = WEAPON_FUSIONS[id];
+      if (!recipe.pair.some((weapon) => kind === weapon)) continue;
+      const recent = this.fusionHits.get(target) ?? {};
+      const hit = recent[id];
+      if (hit && now - hit.at <= FUSION_HIT_WINDOW && hit.weapon !== kind) {
+        delete recent[id];
+        this.trace(kind, [target], recipe.radius, 0.36);
+        for (const nearby of this.targets()) {
+          if (dist(target.x, target.y, nearby.x, nearby.y) > recipe.radius + nearby.r) continue;
+          const damage = this.sim.stats.damage * recipe.damage;
+          if ('id' in nearby) this.sim.damageEnemy(nearby, damage);
+          else this.sim.damageBoss(damage);
+        }
+      } else {
+        recent[id] = { weapon: kind, at: now };
+      }
+      this.fusionHits.set(target, recent);
+    }
   }
 
   private trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24): void {

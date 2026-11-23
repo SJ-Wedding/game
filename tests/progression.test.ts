@@ -24,9 +24,10 @@ describe('시작 능력치 감소', () => {
   });
 });
 
-describe('초반 레벨업 경험치 절반', () => {
-  it('Lv1~5 는 절반, Lv6~9 는 서서히 원래대로, Lv10 부터 원래 값', () => {
-    for (let lv = 1; lv <= 5; lv++) expect(xpToNext(lv)).toBe(Math.round(rawXp(lv) * 0.5));
+describe('초반 레벨업 경험치 완화', () => {
+  it('Lv1은 36%, Lv2~5는 절반, Lv6~9 는 서서히 원래대로, Lv10 부터 원래 값', () => {
+    expect(xpToNext(1)).toBe(8);
+    for (let lv = 2; lv <= 5; lv++) expect(xpToNext(lv)).toBe(Math.round(rawXp(lv) * 0.5));
     expect(xpToNext(6)).toBe(Math.round(rawXp(6) * 0.6));
     expect(xpToNext(9)).toBe(Math.round(rawXp(9) * 0.9));
     for (let lv = 10; lv <= 30; lv++) expect(xpToNext(lv)).toBe(Math.round(rawXp(lv)));
@@ -250,7 +251,17 @@ describe('처치 드랍 아이템', () => {
 });
 
 describe('시간 규칙 유지', () => {
-  it('보스 등장 시각은 그대로 13:30', () => {
-    expect(RUN_CONFIG.bossAt).toBe(810);
+  it('보스는 8:30에 등장한다', () => {
+    expect(RUN_CONFIG.bossAt).toBe(510);
+  });
+});
+
+it('경험치 상점 강화는 구매 단계별 누적 비율을 적용한다', () => {
+  const bonuses = [0.12, 0.19, 0.25, 0.30, 0.35];
+  bonuses.forEach((bonus, i) => {
+    const sim = makeSim({ meta: { xp: i + 1 } });
+    sim.gainXp(5);
+    expect(sim.xp).toBeCloseTo(5 * (1 + bonus));
+    expect(sim.drainEvents().find((event) => event.type === 'pickup')?.amount).toBeCloseTo(sim.xp);
   });
 });

@@ -1,4 +1,4 @@
-import { WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, weaponRankEffect } from '../config/weapons';
+import { FUSION_HIT_WINDOW, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -202,7 +202,7 @@ export class Screens {
     const cards = opts.choices.map((c, i) => {
       const grade = c.kind === 'upgrade' && !c.def.weapon ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
-        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
+        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
         'data-grade': grade?.id ?? '',
       });
@@ -221,6 +221,14 @@ export class Screens {
             text: `${WEAPON_RANK_EFFECTS[weapon].label} ${weaponRankEffect(weapon, c.nextStack - 1)} → ${weaponRankEffect(weapon, c.nextStack)}${WEAPON_RANK_EFFECTS[weapon].unit}`,
           })] : []),
           el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
+        );
+      } else if (c.kind === 'fusion') {
+        const recipe = WEAPON_FUSIONS[c.id];
+        btn.append(
+          el('span', { class: 'cat', text: `특수 무기 합체 · Lv ${WEAPON_MAX_RANK}` }),
+          el('strong', { class: 'name', text: recipe.name }),
+          el('span', { class: 'desc', text: recipe.pair.map((id) => WEAPONS[id].name).join(' + ') }),
+          el('span', { class: 'desc', text: `${FUSION_HIT_WINDOW}초 안에 두 무기가 같은 적을 맞히면 반경 ${recipe.radius}px 공명 폭발` }),
         );
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
@@ -255,6 +263,7 @@ export class Screens {
     level: number;
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
+    fusions: FusionId[];
     relics: RelicId[];
     rerollsLeft: number;
     revivesLeft: number;
@@ -270,7 +279,9 @@ export class Screens {
       ]),
     );
     const grouped = new Map<UpgradePick['id'], UpgradePick[]>();
-    for (const p of opts.picks) grouped.set(p.id, [...(grouped.get(p.id) ?? []), p]);
+    for (const p of opts.picks) {
+      if (!isFusionIngredient(opts.fusions, p.id)) grouped.set(p.id, [...(grouped.get(p.id) ?? []), p]);
+    }
     const picks = [...grouped.entries()].map(([id, list]) => {
       const def = UPGRADE_BY_ID[id];
       if (def.weapon) return el('li', { text: `${def.name} Lv ${list.length}` });
@@ -279,6 +290,7 @@ export class Screens {
         ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
       ]);
     });
+    picks.unshift(...opts.fusions.map((id) => el('li', { class: 'fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}` })));
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
     this.mount(
@@ -292,6 +304,15 @@ export class Screens {
         ]),
         el('h3', { text: '이번 판 강화 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
+        el('details', { class: 'fusion-recipes' }, [
+          el('summary', { text: '특수 무기 합체 조합식' }),
+          el('ul', {}, FUSION_IDS.map((id) => {
+            const recipe = WEAPON_FUSIONS[id];
+            const ingredients = recipe.pair.map((weapon) => `${WEAPONS[weapon].name} Lv ${grouped.get(weapon)?.length ?? (opts.fusions.includes(id) ? WEAPON_MAX_RANK : 0)}`);
+            return el('li', { text: `${recipe.name} · ${ingredients.join(' + ')}` });
+          })),
+          el('small', { class: 'muted', text: `재료가 모두 Lv ${WEAPON_MAX_RANK}이면 일반 레벨업에서 선택할 수 있습니다.` }),
+        ]),
         el('h3', { text: '보유 유물' }),
         opts.relics.length
           ? el('div', { class: 'relic-slots', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status'))
@@ -317,6 +338,7 @@ export class Screens {
     };
     const stats = META_STATS.map((m) => {
       const pct = Math.round(Math.abs(m.pctPerLevel) * 100);
+      if (m.pctByLevel) return item(m.id, m.name, m.pctByLevel.map((v, i) => `Lv ${i + 1} +${Math.round(v * 100)}%`).join(' · '), m.maxLevel);
       return item(m.id, m.name, `단계마다 ${pct}% ${m.pctPerLevel < 0 ? '감소' : '증가'}`, m.maxLevel);
     });
     const unlocks = META_UNLOCKS.map((u) => item(u.id, u.name, u.description, u.maxLevel));
@@ -352,15 +374,18 @@ export class Screens {
     const title = el('button', { 'data-testid': 'result-title', text: '타이틀로' });
     title.addEventListener('click', onTitle);
 
-    const ups = result.upgrades.length
-      ? result.upgrades.map((u) =>
+    const fusions = result.fusions ?? [];
+    const upgrades = result.upgrades.filter((u) => !isFusionIngredient(fusions, u.id));
+    const ups = upgrades.length
+      ? upgrades.map((u) =>
           el('li', {}, [
             `${u.name} ×${u.stacks} `,
             ...u.grades.map((g) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[g]].name, style: `background:${GRADES[GRADE_INDEX[g]].color}` })),
           ]),
         )
-      : [el('li', { class: 'muted', text: '선택한 강화 없음' })];
+      : fusions.length ? [] : [el('li', { class: 'muted', text: '선택한 강화 없음' })];
 
+    ups.unshift(...fusions.map((id) => el('li', { class: 'fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}` })));
     this.mount(
       'result',
       el('div', { class: `panel result ${win ? 'win' : 'lose'}` }, [

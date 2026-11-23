@@ -1,3 +1,4 @@
+import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
@@ -29,6 +30,10 @@ export class Hud {
   private bossText: HTMLElement;
   private banner: HTMLElement;
   private chips: HTMLElement;
+  private xpGainText: HTMLElement;
+  private xpBatch = 0;
+  private xpBatchAt = 0;
+  private xpHideAt = 0;
   private relicBox: HTMLElement;
   private relicSlots: HTMLElement;
   private lastRelics = -1;
@@ -57,6 +62,7 @@ export class Hud {
     ]);
     this.banner = el('div', { class: 'banner', 'data-testid': 'hud-banner' });
     this.chips = el('div', { class: 'chips' });
+    this.xpGainText = el('span', { class: 'xp-recent', 'data-testid': 'xp-recent' });
     this.relicSlots = el('div', { class: 'relic-slots' });
     this.relicBox = el('section', { class: 'hud-relics hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
       el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots,
@@ -67,6 +73,7 @@ export class Hud {
         el('div', { class: 'bar hp' }, [this.hpFill, this.hpText]),
         el('div', { class: 'bar xp' }, [this.xpFill, this.xpText]),
         this.dodgeBox,
+        this.xpGainText,
       ]),
       el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
       el('div', { class: 'hud-right' }, [this.kills, this.relicBox]),
@@ -90,6 +97,8 @@ export class Hud {
     this.bannerUntil = 0;
     this.lastPhaseLabel = null;
     this.lastPicks = -1;
+    this.xpBatch = this.xpBatchAt = this.xpHideAt = 0;
+    this.xpGainText.textContent = '';
     this.lastRelics = -1;
     this.banner.textContent = '';
     this.banner.classList.remove('show');
@@ -144,12 +153,29 @@ export class Hud {
     if (sim.pickOrder.length !== this.lastPicks) {
       this.lastPicks = sim.pickOrder.length;
       this.chips.replaceChildren(
-        ...ALL_UPGRADES.filter((u) => sim.stacks[u.id] > 0).map((u) =>
+        ...[...sim.weapons.fusions].map((id) => el('span', {
+          class: 'chip fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`,
+        })),
+        ...ALL_UPGRADES.filter((u) => sim.stacks[u.id] > 0 && !isFusionIngredient(sim.weapons.fusions, u.id)).map((u) =>
           u.weapon
             ? el('span', { class: 'chip attack weapon-chip' }, [el('img', { src: WEAPON_TEXTURES[u.weapon], alt: '' }), `${u.name} Lv ${sim.stacks[u.id]}`])
             : el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
         ),
       );
+    }
+
+    const now = performance.now();
+    for (const ev of events) {
+      if (ev.type !== 'pickup' || !ev.amount) continue;
+      if (!this.xpBatch) this.xpBatchAt = now + 240;
+      this.xpBatch += ev.amount;
+    }
+    if (this.xpBatch && now >= this.xpBatchAt) {
+      this.xpGainText.textContent = `+${Number(this.xpBatch.toFixed(1))} XP`;
+      this.xpBatch = 0;
+      this.xpHideAt = now + 1100;
+    } else if (now >= this.xpHideAt && this.xpGainText.textContent) {
+      this.xpGainText.textContent = '';
     }
 
     // 안내 문구
@@ -163,7 +189,7 @@ export class Hud {
       if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
       else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
       else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
-      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장! 15:00 전에 처치하세요`, 4);
+      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장! ${formatTime(RUN_CONFIG.timeLimit)} 전에 처치하세요`, 4);
       else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
     }
     if (this.bannerUntil && performance.now() > this.bannerUntil) {

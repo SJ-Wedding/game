@@ -1,3 +1,4 @@
+import { FUSION_IDS, WEAPON_FUSIONS, WEAPON_MAX_RANK } from '../config/weapons';
 import { validCarry, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
@@ -537,6 +538,7 @@ export class GameSim {
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'player') this.weapons.onBulletHit(e);
+          else if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
           this.damageEnemy(e, s.damage, s.source === 'player');
           s.life = 0;
           break;
@@ -546,7 +548,10 @@ export class GameSim {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
-          if (s.source === 'player' && !bossInvulnerable(boss)) this.weapons.onBulletHit(boss);
+          if (!bossInvulnerable(boss)) {
+            if (s.source === 'player') this.weapons.onBulletHit(boss);
+            else if (s.source === 'echo') this.weapons.onFusionHit('echo', boss);
+          }
           this.damageBoss(s.damage, s.source === 'player');
         }
       }
@@ -633,8 +638,9 @@ export class GameSim {
   }
 
   gainXp(amount: number): void {
-    this.xp += amount * this.stats.xpGain;
-    this.emit('pickup', this.player.x, this.player.y);
+    const gained = amount * this.stats.xpGain;
+    this.xp += gained;
+    this.emit('pickup', this.player.x, this.player.y, gained);
     while (this.xp >= xpToNext(this.level)) {
       this.xp -= xpToNext(this.level);
       this.level++;
@@ -652,7 +658,10 @@ export class GameSim {
     const luck = luckFor(this.pendingLevel, this.meta.luck);
     // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
     const level = this.startPickOpen ? 0 : this.pendingLevel;
-    return rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
+    const choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
+    const fusions = level < 3 ? [] : FUSION_IDS.filter((id) => !this.weapons.fusions.has(id)
+      && WEAPON_FUSIONS[id].pair.every((weapon) => this.stacks[weapon] === WEAPON_MAX_RANK));
+    return [...fusions.map((id): UpgradeChoice => ({ kind: 'fusion', id })), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
   }
 
   private openLevelUp(): void {
@@ -681,7 +690,10 @@ export class GameSim {
       this.relics.acquire(c.id);
     } else {
       const rewardRelic = !this.startPickOpen && this.pendingLevel % 5 === 0;
-      if (c.kind === 'upgrade') {
+      if (c.kind === 'fusion') {
+        this.weapons.fusions.add(c.id);
+        this.pickOrder.push(c.id);
+      } else if (c.kind === 'upgrade') {
         if (!applyUpgrade(this.stacks, c.def.id)) return false;
         this.picks.push({ id: c.def.id, grade: c.grade });
         this.stats = computeStats(this.picks, this.meta);
@@ -807,6 +819,7 @@ export class GameSim {
       revived: this.revived,
       itemsCollected: this.itemsCollected,
       relics: [...this.relics.owned],
+      fusions: [...this.weapons.fusions],
       seed: this.seed,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
       assisted: this.assisted,
@@ -814,9 +827,9 @@ export class GameSim {
     this.emit(outcome === 'victory' ? 'victory' : 'defeat', this.player.x, this.player.y);
   }
 
-  emit(type: SimEventType, x?: number, y?: number): void {
+  emit(type: SimEventType, x?: number, y?: number, amount?: number): void {
     // 소비되지 않을 때(헤드리스 시뮬레이션) 무한히 쌓이지 않도록 제한
-    if (this.events.length < 512) this.events.push({ type, x, y });
+    if (this.events.length < 512) this.events.push({ type, x, y, amount });
   }
 
   drainEvents(): SimEvent[] {

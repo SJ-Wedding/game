@@ -219,3 +219,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .relic-pick small { color: var(--muted); }
 .relic-pick[aria-pressed='true'] { border-color: #ffd689; background: #44334b; }
 .relic-pick:disabled { opacity: 0.52; cursor: default; }
+
+.xp-recent { min-height: 1em; color: #a6ea73; font-weight: 700; }
+.card.fusion-card, .fusion-chip { color: #e1bdff; border-color: #9e6bcc; background: #30213e; }
+.fusion-recipes { width: 100%; text-align: left; padding: 0.5em 0.85em; background: #231b30; border-radius: 6px; }
+.fusion-recipes summary { cursor: pointer; color: #e1bdff; font-weight: 700; }
+.fusion-recipes ul { margin: 0.5em 0; padding-left: 1.3em; }

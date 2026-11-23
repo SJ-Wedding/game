@@ -81,6 +81,17 @@ export function rollRunChoices(
   luck = 0,
   exclude: UpgradeId[] = [],
 ): UpgradeChoice[] {
+  if (level === 2) {
+    const available = WEAPON_UPGRADES.filter((def) => !stacks[def.id]);
+    const fresh = available.filter((def) => !exclude.includes(def.id));
+    const pool = fresh.length >= PROGRESSION_CONFIG.choiceCount ? fresh : available;
+    const opening: UpgradeChoice[] = [];
+    while (pool.length && opening.length < PROGRESSION_CONFIG.choiceCount) {
+      const def = pool.splice(weaponRng.int(pool.length), 1)[0];
+      opening.push({ kind: 'upgrade', def, grade: 'common', nextStack: 1 });
+    }
+    if (opening.length) return opening;
+  }
   const choices = rollChoices(rng, stacks, luck, exclude);
   const acquireWeapon = level % 3 === 2;
   const improveWeapon = level > 0 && level % 3 === 0;

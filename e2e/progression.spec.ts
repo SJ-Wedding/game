@@ -15,6 +15,9 @@ test.describe('성장 시스템', () => {
     await startRun(page, '&seed=31&god=1');
     await waitElapsed(page, 1);
     await page.evaluate(() => { const r = (window as any).__rift; r.debug.addXp((r.sim.xpNeeded - r.sim.xp) / r.sim.stats.xpGain); }); // 정확히 1레벨
+    await expect(page.locator('.card .cat').filter({ hasText: '특수 무기 획득' })).toHaveCount(3);
+    await page.keyboard.press('Digit1');
+    await page.evaluate(() => { const r = (window as any).__rift; r.debug.addXp((r.sim.xpNeeded - r.sim.xp) / r.sim.stats.xpGain); });
     await expect(page.locator('#overlay[data-screen="levelup"]')).toBeVisible();
     const cards = page.locator('.card');
     await expect(cards).toHaveCount(3);

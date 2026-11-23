@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FUSION_IDS } from '../src/config/weapons';
 import { PLAYER_BASE_STATS } from '../src/config/player';
 import { ALL_UPGRADES, UPGRADES, UPGRADE_BY_ID } from '../src/config/upgrades';
 import { Rng } from '../src/core/rng';
@@ -64,7 +65,8 @@ describe('강화 중첩 한도', () => {
       }
     }
     for (const u of ALL_UPGRADES) expect(sim.stacks[u.id]).toBe(u.maxStacks);
-    expect(sim.pickOrder.filter((id) => id !== 'recover')).toHaveLength(totalStacks);
+    expect(sim.pickOrder.filter((id) => id !== 'recover')).toHaveLength(totalStacks + FUSION_IDS.length);
+    expect([...sim.weapons.fusions].sort()).toEqual([...FUSION_IDS].sort());
     expect(sim.pickOrder).toContain('recover');
   });
 });
@@ -102,9 +104,9 @@ describe('강화 효과', () => {
     for (let seed = 1; seed < 50 && !found; seed++) {
       const sim = makeSim({ seed });
       sim.hurtPlayer(40, 'x');
-      sim.gainXp(1);
       sim.gainXp(100);
       sim.step(IDLE_INPUT);
+      sim.choose(0); // 첫 레벨업은 특수 무기만 제시된다.
       const idx = sim.choices.findIndex((c) => c.kind === 'upgrade' && c.def.id === 'vitality');
       if (idx < 0) continue;
       found = true;
@@ -134,6 +136,7 @@ describe('특수 무기 및 경험치 성장', () => {
       sim.step(IDLE_INPUT);
     };
     levelUp();
+    expect(sim.choices.every((c) => c.kind === 'upgrade' && c.def.weapon)).toBe(true);
     const first = sim.choices[2];
     if (first.kind !== 'upgrade' || !first.def.weapon) throw new Error('새 무기 후보가 없습니다');
     expect(first.nextStack).toBe(1);

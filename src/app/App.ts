@@ -184,6 +184,7 @@ export class App {
       level: sim.level,
       layers,
       picks: sim.picks,
+      fusions: [...sim.weapons.fusions],
       relics: [...sim.relics.owned],
       rerollsLeft: sim.rerollsLeft,
       revivesLeft: sim.revivesLeft,

@@ -161,3 +161,43 @@ describe('무기 강화의 추가 효과', () => {
     expect(sim.gems.map((gem) => gem.value)).toEqual([1, 3, 4, 40]);
   });
 });
+
+describe('특수 무기 합체', () => {
+  it('정해진 재료가 둘 다 최대 레벨일 때만 합체 카드가 나오며 한 번만 선택할 수 있다', () => {
+    const sim = makeSim({ seed: 7, presetLevel: 8, presetUpgrades: { chain: 3, mark: 2, axe: 3 } });
+    const nextLevel = () => {
+      sim.gainXp(sim.xpNeeded);
+      sim.step(IDLE_INPUT);
+    };
+    nextLevel();
+    expect(sim.choices.some((c) => c.kind === 'fusion')).toBe(false);
+    const mark = sim.choices.findIndex((c) => c.kind === 'upgrade' && c.def.id === 'mark');
+    expect(mark).toBeGreaterThanOrEqual(0);
+    sim.choose(mark);
+    nextLevel();
+    expect(sim.choices[0]).toEqual({ kind: 'fusion', id: 'storm' });
+    expect(sim.choose(0)).toBe(true);
+    expect(sim.weapons.fusions.has('storm')).toBe(true);
+    expect(sim.stacks.chain).toBe(3);
+    expect(sim.stacks.mark).toBe(3);
+    if (sim.phase === 'levelup') sim.choose(0); // 레벨 10 유물
+    nextLevel();
+    expect(sim.choices.some((c) => c.kind === 'fusion')).toBe(false);
+  });
+
+  it('다른 재료 공격이 같은 적을 3초 안에 맞히면 주변에 공명 피해가 발생한다', () => {
+    const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 } });
+    sim.weapons.fusions.add('storm');
+    const first = sim.spawnEnemy('chaser', 900, 900);
+    const next = sim.spawnEnemy('chaser', 980, 900);
+    first.hp = next.hp = 1000;
+    sim.weapons.onFusionHit('chain', first);
+    sim.weapons.onFusionHit('chain', first);
+    expect(next.hp).toBe(1000);
+    sim.tick += 181;
+    sim.weapons.onFusionHit('mark', first);
+    expect(next.hp).toBe(1000);
+    sim.weapons.onFusionHit('chain', first);
+    expect(next.hp).toBeCloseTo(1000 - sim.stats.damage * 2.1);
+  });
+});

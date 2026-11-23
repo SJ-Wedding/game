@@ -23,6 +23,7 @@ export interface MetaStatDef {
   name: string;
   stat: StatKey;
   pctPerLevel: number;
+  pctByLevel?: readonly number[];
   maxLevel: number;
   /** 단계별 가격 (길이 = maxLevel) */
   costs: number[];
@@ -37,7 +38,7 @@ export const META_STATS: MetaStatDef[] = [
   { id: 'moveSpeed', name: '이동 속도', stat: 'moveSpeed', pctPerLevel: 0.03, maxLevel: 5, costs: STAT_COSTS },
   { id: 'dodge', name: '회피 재사용 대기시간', stat: 'dodgeCooldown', pctPerLevel: -0.03, maxLevel: 5, costs: STAT_COSTS },
   { id: 'pickup', name: '경험치 흡수 범위', stat: 'pickupRadius', pctPerLevel: 0.1, maxLevel: 5, costs: STAT_COSTS },
-  { id: 'xp', name: '경험치 획득', stat: 'xpGain', pctPerLevel: 0.05, maxLevel: 5, costs: STAT_COSTS },
+  { id: 'xp', name: '경험치 획득', stat: 'xpGain', pctPerLevel: 0.12, pctByLevel: [0.12, 0.19, 0.25, 0.30, 0.35], maxLevel: 5, costs: STAT_COSTS },
 ];
 
 /** 해금 (능력치 외 기능) */
@@ -60,7 +61,7 @@ export const META_UNLOCKS: MetaUnlockDef[] = [
 
 /**
  * 밸런스 기준 영구 강화 (토큰 145개 사용, 3~5판 정도 플레이한 상태).
- * 시뮬레이션(npm run sim)과 밸런스 회귀 테스트는 이 상태로 "14~15분 승리"를 맞춘다.
+ * 시뮬레이션(npm run sim)과 밸런스 회귀 테스트는 이 상태로 "8분 30초~10분 승리"를 맞춘다.
  */
 export const BALANCE_REFERENCE_META: Record<string, number> = {
   hp: 2,

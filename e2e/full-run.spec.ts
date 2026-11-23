@@ -1,9 +1,10 @@
+import { RUN_CONFIG } from '../src/config/run';
 import { expect, test } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { collectErrors, snap } from './util';
 
 /**
- * @long — 실시간 15분 플레이 측정.
+ * @long — 실시간 10분 플레이 측정.
  *
  * 자동 플레이 봇(src/core/bot.ts)이 매 프레임 화면 상태를 보고, **브라우저 DOM 키보드·마우스 이벤트**
  * (keydown/keyup, mousedown/mousemove/mouseup, 카드 click)를 발생시켜 조작한다.
@@ -174,6 +175,6 @@ for (const seed of seeds) {
     expect(['boss', 'death', 'timeout']).toContain(res.cause);
     // 일시정지·탭 숨김이 없으면 전투 시간 ≈ 실제 경과 시간 (레벨업 선택은 같은 프레임에 처리)
     expect(Math.abs(wallSeconds - res.survivalTime)).toBeLessThan(30);
-    if (res.survivalTime > 811) expect(d.bossAt).toBeCloseTo(810, 0);
+    if (res.survivalTime > RUN_CONFIG.bossAt + 1) expect(d.bossAt).toBeCloseTo(RUN_CONFIG.bossAt, 0);
   });
 }

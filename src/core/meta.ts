@@ -22,7 +22,7 @@ export function metaBonus(purchases: MetaPurchases | undefined): MetaBonus {
   const statPct: MetaBonus['statPct'] = {};
   for (const m of META_STATS) {
     const lv = Math.min(m.maxLevel, metaLevel(purchases, m.id));
-    if (lv > 0) statPct[m.stat] = (statPct[m.stat] ?? 0) + m.pctPerLevel * lv;
+    if (lv > 0) statPct[m.stat] = (statPct[m.stat] ?? 0) + (m.pctByLevel?.[lv - 1] ?? m.pctPerLevel * lv);
   }
   const unlock = (id: MetaUnlockId) => {
     const def = META_UNLOCKS.find((u) => u.id === id)!;

@@ -1,3 +1,4 @@
+import { RUN_CONFIG } from '../src/config/run';
 /**
  * 밸런스 시뮬레이션: 자동 플레이 봇으로 여러 시드를 끝까지 플레이하고 결과를 요약한다.
  *   npm run sim                  # 기본 20 시드
@@ -115,6 +116,6 @@ const toks = rows.map((r) => r.tokens).sort((a, b) => a - b);
 console.log(`판당 토큰 중앙값 ${median(toks)} (범위 ${toks[0]}~${toks[toks.length - 1]})`);
 console.log(`승리 ${wins.length} / 사망 ${rows.filter((r) => r.cause === 'death').length} / 시간초과 ${rows.filter((r) => r.cause === 'timeout').length}`);
 if (wins.length) console.log(`승리 시각: 최소 ${formatTime(winTimes[0])}, 중앙값 ${formatTime(median(winTimes))}, 최대 ${formatTime(winTimes[winTimes.length - 1])}`);
-console.log(`승리 중 14:00~15:00 비율: ${wins.filter((r) => r.time >= 840).length}/${wins.length}`);
+console.log(`승리 중 ${formatTime(RUN_CONFIG.bossAt)}~${formatTime(RUN_CONFIG.timeLimit)} 비율: ${wins.filter((r) => r.time >= RUN_CONFIG.bossAt && r.time <= RUN_CONFIG.timeLimit).length}/${wins.length}`);
 console.log(`첫 레벨업 중앙값 ${median(firsts).toFixed(0)}초 (최대 ${firsts[firsts.length - 1]?.toFixed(0)}초)`);
 if (lvls.length) console.log(`보스 등장 시 레벨 중앙값 ${median(lvls)} (범위 ${lvls[0]}~${lvls[lvls.length - 1]})`);
