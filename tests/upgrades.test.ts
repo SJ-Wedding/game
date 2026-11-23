@@ -71,14 +71,17 @@ describe('강화 중첩 한도', () => {
 describe('강화 효과', () => {
   it('분열 사격: 투사체 수가 늘어난다', () => {
     const sim = makeSim({ presetUpgrades: { split: 3 } });
-    sim.step({ ...IDLE_INPUT, aimX: 9999, aimY: sim.player.y, fire: true });
+    sim.spawnEnemy('chaser', sim.player.x + 300, sim.player.y);
+    sim.step(IDLE_INPUT);
     expect(sim.playerShots).toHaveLength(4);
   });
 
   it('연사 숙련: 같은 시간 동안 더 많이 쏜다', () => {
     const count = (n: number) => {
       const sim = makeSim({ presetUpgrades: { rapid: n }, god: true });
-      for (let i = 0; i < 600; i++) sim.step({ ...IDLE_INPUT, aimX: 0, aimY: 0, fire: true });
+      const dummy = sim.spawnEnemy('chaser', sim.player.x + 300, sim.player.y);
+      dummy.hp = dummy.maxHp = 1e9; // 쓰러지지 않는 표적
+      for (let i = 0; i < 600; i++) sim.step(IDLE_INPUT);
       return sim.shotsFired;
     };
     const base = count(0);

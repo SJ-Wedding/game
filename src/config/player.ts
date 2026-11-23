@@ -46,3 +46,14 @@ export const PLAYER_BODY = {
   /** 충돌 반지름(px) */
   radius: 14,
 } as const;
+
+/**
+ * 자동 전투. enabled 가 true 면 마우스 조준·클릭 없이
+ * 사거리(range) 안의 가장 가까운 적(보스 포함)을 자동으로 조준하고 계속 공격한다.
+ * false 로 바꾸면 마우스 조준 + 좌클릭 유지 공격 방식으로 돌아간다.
+ */
+export const AUTO_COMBAT = {
+  enabled: true,
+  /** 자동 조준 거리(px, 적 몸 가장자리 기준). 투사체 사거리보다 약간 짧게 둔다. */
+  range: 540,
+};
