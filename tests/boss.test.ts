@@ -77,6 +77,7 @@ describe('승리와 패배', () => {
 
   it('처음부터 아무것도 하지 않아도(무적) 정확히 15:00 에 시간 초과로 끝난다', () => {
     const sim = makeSim({ seed: 3, god: true });
+    sim.player.fireCd = Infinity; // 자동 사격으로 클리어하지 않는 시간 초과 상황을 만든다.
     runUntil(sim, RUN_CONFIG.timeLimit + 10);
     expect(sim.tick).toBe(RUN_CONFIG.timeLimit * RUN_CONFIG.tickRate);
     expect(sim.result?.cause).toBe('timeout');

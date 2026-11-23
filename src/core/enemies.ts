@@ -19,6 +19,8 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
     maxHp: hp,
     speed: c.speed,
     slowUntil: 0,
+    rootedUntil: 0,
+    fireSlowUntil: 0,
     dmgMul: 1 + ENEMY_SCALING.damagePerMinute * minutes,
     xp: c.xp,
     state: 'move',
@@ -57,7 +59,8 @@ export function updateEnemies(sim: GameSim, dt: number): void {
     let contactSource: string = ENEMY_CONFIG[e.kind].attackNames.contact;
     let contactDamage = ENEMY_CONFIG[e.kind].contactDamage;
 
-    const speed = e.speed * (e.slowUntil > sim.elapsed ? 0.55 : 1);
+    const rooted = e.rootedUntil > sim.elapsed;
+    const speed = rooted ? 0 : e.speed * (e.slowUntil > sim.elapsed ? 0.55 : e.fireSlowUntil > sim.elapsed ? 0.8 : 1);
     switch (e.kind) {
       case 'chaser':
         moveToward(e, p.x, p.y, speed, dt);
@@ -75,7 +78,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
           }
         } else if (e.state === 'windup') {
           e.timer -= dt;
-          if (e.timer <= 0) {
+          if (!rooted && e.timer <= 0) {
             e.state = 'dash';
             e.timer = c.dashTime;
           }
@@ -148,7 +151,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
           }
         } else if (e.state === 'windup') {
           e.timer -= dt;
-          if (e.timer <= 0) {
+          if (!rooted && e.timer <= 0) {
             e.state = 'dash';
             e.timer = c.dashTime;
           }

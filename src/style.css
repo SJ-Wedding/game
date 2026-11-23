@@ -191,3 +191,31 @@ button:disabled { opacity: 0.45; cursor: default; }
 .shop-item button.buy { min-width: 4.5em; }
 .panel.shop, .panel.status { width: min(94cqw, 60em); }
 .tokens { display: flex; flex-wrap: wrap; gap: 0.3em; justify-content: center; align-items: baseline; }
+
+.hud-relics { margin-top: 0.5em; max-width: 19cqw; text-align: right; }
+.relic-label { display: block; margin-bottom: 0.3em; color: #ffd689; font-size: 0.78em; }
+.relic-slots { display: flex; flex-wrap: wrap; gap: 0.35em; justify-content: center; }
+.hud-relics .relic-slots { justify-content: flex-end; }
+.relic-slot { position: relative; display: inline-flex; z-index: 1; }
+.relic-slot:is(:hover, :focus-within) { z-index: 2; }
+.relic-icon { width: 2em; height: 2em; padding: 0; color: #ffe5ad; border-color: #ab7749; background: #362836; pointer-events: auto; }
+.relic-tooltip {
+  position: absolute; top: calc(100% + 0.4em); right: 0; display: none;
+  width: min(19em, 65cqw); padding: 0.7em 0.85em; gap: 0.25em;
+  font-size: clamp(11px, 1.1cqw, 16px); font-weight: 400; text-align: left; word-break: keep-all;
+  color: var(--text); background: #151923; border: 1px solid #ab7749; border-radius: 6px;
+  box-shadow: 0 6px 22px #0009; pointer-events: none;
+}
+.relic-tooltip strong, .relic-symbol { color: #ffd689; }
+.relic-slot:is(:hover, :focus-within) .relic-tooltip { display: grid; }
+:is(.pause, .status) .relic-tooltip { left: 50%; right: auto; transform: translateX(-50%); }
+.card.relic-card { border-color: #aa7954; background: #241c2a; }
+.relic-symbol { font-size: 1.6em; line-height: 1; }
+#overlay[data-screen='result'] { align-items: safe center; }
+.result:has(.carry-relics) { gap: 0.55em; padding-block: 1.15em; }
+.carry-relics { width: 100%; }
+.carry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(17em, 100%), 1fr)); gap: 0.5em; margin-top: 0.6em; max-height: 30vh; overflow-y: auto; padding: 1px; }
+.relic-pick { display: grid; gap: 0.25em; text-align: left; }
+.relic-pick small { color: var(--muted); }
+.relic-pick[aria-pressed='true'] { border-color: #ffd689; background: #44334b; }
+.relic-pick:disabled { opacity: 0.52; cursor: default; }

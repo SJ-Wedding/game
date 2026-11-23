@@ -15,6 +15,9 @@ interface Device extends Point {
   angle: number;
   next: number;
   hit: Set<Target>;
+  armAt?: number;
+  secondary?: boolean;
+  exposures?: Map<Target, number>;
 }
 interface Effect {
   kind: WeaponId;
@@ -76,18 +79,20 @@ export class WeaponSystem {
     }
   }
 
-  private device(kind: WeaponId, origin: Point, duration: number, r: number, angle = 0): void {
-    this.devices.push({ kind, x: origin.x, y: origin.y, duration, r, angle, age: 0, next: 0, hit: new Set() });
+  private device(kind: WeaponId, origin: Point, duration: number, r: number, angle = 0): Device {
+    const device: Device = { kind, x: origin.x, y: origin.y, duration, r, angle, age: 0, next: 0, hit: new Set() };
+    this.devices.push(device);
+    return device;
   }
 
   private available(kind: WeaponId, interval: number): boolean {
     if (!this.sim.stacks[kind] || this.sim.elapsed < (this.ready.get(kind) ?? 0)) return false;
-    this.ready.set(kind, this.sim.elapsed + interval);
+    this.ready.set(kind, this.sim.elapsed + interval * this.sim.relics.cooldownMultiplier);
     return true;
   }
 
   onDodge(): void {
-    if (this.sim.stacks.barrier) this.dodgeTrail = { x: this.sim.player.x, y: this.sim.player.y };
+    if (this.sim.stacks.barrier || this.sim.relics.has('compass')) this.dodgeTrail = { x: this.sim.player.x, y: this.sim.player.y };
   }
 
   onShot(): void {
@@ -134,7 +139,8 @@ export class WeaponSystem {
       const from = this.dodgeTrail;
       this.dodgeTrail = null;
       const angle = Math.atan2(p.y - from.y, p.x - from.x);
-      this.device('barrier', from, 2.4, dist(p.x, p.y, from.x, from.y), angle);
+      if (sim.stacks.barrier) this.device('barrier', from, 2.4, dist(p.x, p.y, from.x, from.y), angle);
+      if (sim.relics.has('compass')) this.device('mine', p, 7.5, 72).armAt = 0;
     }
 
     if ((sim.stacks.axe || sim.stacks.spear || sim.stacks.gravity) && (sim.target || sim.findTarget(450))) {
@@ -144,9 +150,14 @@ export class WeaponSystem {
     }
     if (this.echo && this.echo.at <= now) {
       const { x, y, angle } = this.echo;
-      this.trace('echo', [{ x, y }, { x: x + Math.cos(angle) * 45, y: y + Math.sin(angle) * 45 }]);
-      sim.playerShots.push({ x, y, vx: Math.cos(angle) * 620, vy: Math.sin(angle) * 620,
-        r: 5, damage: sim.stats.damage * 1.15, life: 0.7, source: 'echo' });
+      const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
+      for (const direction of angles) {
+        const dx = Math.cos(direction);
+        const dy = Math.sin(direction);
+        this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
+        sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
+          damage: sim.stats.damage * 1.15 * (angles.length > 1 ? 0.7 : 1), life: 0.7, source: 'echo' });
+      }
       this.echo = null;
     }
     if (sim.stacks.orbit) this.orbit();
@@ -160,25 +171,30 @@ export class WeaponSystem {
     const p = this.sim.player;
     let target = this.nearest(p, 390);
     if (!target) return;
-    this.ready.set('chain', this.sim.elapsed + 2.15);
+    const crown = this.sim.relics.has('crown');
+    this.ready.set('chain', this.sim.elapsed + 2.15 * this.sim.relics.cooldownMultiplier);
     const hit = new Set<Target>();
     const points: Point[] = [p];
-    while (target && hit.size < 4) {
+    while (target && hit.size < (crown ? 6 : 4)) {
       hit.add(target);
       points.push(target);
-      this.damage(target, 1.85 * 0.76 ** (hit.size - 1));
+      this.damage(target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
       target = this.nearest(target, 125, hit);
     }
     this.trace('chain', points);
+    if (crown) this.area('chain', points[points.length - 1], 54, 0.75);
   }
 
   private orbit(): void {
     const { player, elapsed } = this.sim;
-    for (let i = 0; i < 2; i++) {
-      const angle = elapsed * 4 + i * Math.PI;
+    const cog = this.sim.relics.has('cog');
+    const bladeCount = cog ? 3 : 2;
+    const radius = cog ? (elapsed < this.sim.relics.dodgeUntil ? 84 : 48) : 60;
+    for (let i = 0; i < bladeCount; i++) {
+      const angle = elapsed * 4 + i * Math.PI * 2 / bladeCount;
       const blade = this.blades[i] ??= { x: 0, y: 0 };
-      blade.x = player.x + Math.cos(angle) * 60;
-      blade.y = player.y + Math.sin(angle) * 60;
+      blade.x = player.x + Math.cos(angle) * radius;
+      blade.y = player.y + Math.sin(angle) * radius;
       for (const target of this.targets()) {
         if ((this.orbitHits.get(target) ?? 0) > elapsed
           || dist(blade.x, blade.y, target.x, target.y) >= target.r + 13) continue;
@@ -224,9 +240,14 @@ export class WeaponSystem {
     const finished = d.age >= d.duration;
     switch (d.kind) {
       case 'mine':
-        if (!finished && d.age >= 0.4 && this.nearest(d, 26)) {
-          this.area(d.kind, d, d.r, 2.85);
+        if (!finished && d.age >= (d.armAt ?? 0.4) && this.nearest(d, d.secondary ? 20 : 26)) {
+          this.area(d.kind, d, d.r, 2.85 * (d.secondary ? 0.4 : 1));
           d.age = d.duration;
+          if (!d.secondary && this.sim.relics.has('fuse') && this.sim.stacks.mine) {
+            const child = this.device('mine', d, 4, 44);
+            child.secondary = true;
+            child.armAt = 0.7 + dt; // A new device also advances in the current tick.
+          }
         }
         break;
       case 'turret': {
@@ -240,6 +261,7 @@ export class WeaponSystem {
         break;
       }
       case 'flame':
+        if (!finished && this.sim.relics.has('laces')) this.trackFlame(d, dt);
         if (!finished && d.age >= d.next) {
           d.next = d.age + 0.45;
           for (const target of this.targets()) {
@@ -270,18 +292,36 @@ export class WeaponSystem {
         }
         break;
       }
-      case 'gravity':
-        this.move(d, dt * 110);
+      case 'gravity': {
+        const anchor = this.sim.relics.has('anchor');
+        if (!anchor) this.move(d, dt * 110);
         for (const e of this.sim.enemies) {
           const distance = dist(e.x, e.y, d.x, d.y);
           if (e.dead || e.kind === 'elite' || e.state === 'dash' || distance >= d.r || distance < 1) continue;
+          if (anchor) d.hit.add(e);
           const ratio = Math.min(dt * 105 / distance, 1);
           const pad = ARENA_CONFIG.wallPadding + e.r;
           e.x = clamp(e.x + (d.x - e.x) * ratio, pad, ARENA_CONFIG.width - pad);
           e.y = clamp(e.y + (d.y - e.y) * ratio, pad, ARENA_CONFIG.height - pad);
         }
-        if (finished) this.area(d.kind, d, d.r, 2.5);
+        if (finished) this.area(d.kind, d, d.r, 2.5 * (1 + Math.min(d.hit.size, 10) * 0.08));
         break;
+      }
+    }
+  }
+
+  private trackFlame(d: Device, dt: number): void {
+    const exposures = d.exposures ??= new Map();
+    for (const target of this.targets()) {
+      if (dist(d.x, d.y, target.x, target.y) >= d.r + target.r) {
+        exposures.delete(target);
+        continue;
+      }
+      if ('id' in target) target.fireSlowUntil = this.sim.elapsed + dt * 2;
+      const previous = exposures.get(target) ?? 0;
+      const duration = previous + dt;
+      exposures.set(target, duration);
+      if (previous < 1 && duration >= 1) this.damage(target, 0.72);
     }
   }
 
@@ -297,7 +337,10 @@ export class WeaponSystem {
     for (const target of this.targets()) {
       if (d.hit.has(target) || distToSegment(target.x, target.y, d.x, d.y, end.x, end.y) >= target.r + width) continue;
       d.hit.add(target);
-      this.damage(target, factor);
+      const nail = d.kind === 'barrier' && this.sim.relics.has('nail');
+      const canRoot = 'id' in target && target.state !== 'dash';
+      if (nail && canRoot) target.rootedUntil = this.sim.elapsed + 0.8;
+      this.damage(target, factor * (nail && !canRoot ? 1.4 : 1));
     }
   }
 }

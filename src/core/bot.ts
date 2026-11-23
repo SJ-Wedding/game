@@ -44,11 +44,12 @@ export class Bot {
 
   /** 레벨업 후보 중 고를 인덱스 */
   choose(sim: GameSim): number {
+    if (sim.choices[0]?.kind === 'relic') return 0;
     const lowHp = sim.player.hp / sim.stats.maxHp < 0.5;
     let best = 0;
     let bestScore = -Infinity;
     sim.choices.forEach((c, i) => {
-      let score = c.kind === 'fallback' ? 0 : (PICK_WEIGHT[c.def.id] ?? 3.1);
+      let score = c.kind === 'upgrade' ? (PICK_WEIGHT[c.def.id] ?? 3.1) : 0;
       if (c.kind === 'upgrade' && !c.def.weapon) score *= GRADES[GRADE_INDEX[c.grade]].mult;
       if (c.kind === 'upgrade' && lowHp && c.def.category === 'survival') score += 2;
       score += this.rng.range(0, 2.5);
@@ -62,10 +63,11 @@ export class Bot {
 
   /** 후보가 마음에 들지 않으면 새로고침할지 (남은 횟수가 있을 때) */
   wantsReroll(sim: GameSim): boolean {
+    if (sim.choices[0]?.kind === 'relic') return false;
     if (sim.rerollsLeft <= 0) return false;
     const best = Math.max(
       ...sim.choices.map((c) =>
-        c.kind === 'fallback' ? 0 : (PICK_WEIGHT[c.def.id] ?? 3.1) * (c.def.weapon ? 1 : GRADES[GRADE_INDEX[c.grade]].mult),
+        c.kind === 'upgrade' ? (PICK_WEIGHT[c.def.id] ?? 3.1) * (c.def.weapon ? 1 : GRADES[GRADE_INDEX[c.grade]].mult) : 0,
       ),
     );
     return best < 3;

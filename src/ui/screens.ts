@@ -1,3 +1,5 @@
+import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
+import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
@@ -160,7 +162,7 @@ export class Screens {
     ]);
   }
 
-  showPause(reason: 'esc' | 'hidden', volume: number, h: PauseHandlers): void {
+  showPause(reason: 'esc' | 'hidden', volume: number, h: PauseHandlers, relics: RelicId[]): void {
     const resume = el('button', { class: 'primary', 'data-testid': 'resume', 'data-autofocus': '' }, ['계속하기 ', el('kbd', { text: 'Esc' })]);
     resume.addEventListener('click', h.onResume);
     const restart = el('button', { 'data-testid': 'pause-restart', text: '처음부터 다시' });
@@ -177,6 +179,10 @@ export class Screens {
         resume,
         status,
         this.volumeControl(volume, h.onVolume),
+        ...(relics.length ? [
+          el('h3', { text: '보유 유물' }),
+          el('div', { class: 'relic-slots' }, relicInventory(relics, 'pause')),
+        ] : []),
         el('div', { class: 'row buttons' }, [restart, title]),
         el('small', { class: 'muted', text: '처음부터 다시 / 타이틀로 이동하면 이번 판은 기록되지 않습니다.' }),
       ]),
@@ -191,10 +197,11 @@ export class Screens {
     onChoose: (i: number) => void;
     onReroll: () => void;
   }): void {
+    const reward = opts.choices[0]?.kind === 'relic';
     const cards = opts.choices.map((c, i) => {
       const grade = c.kind === 'upgrade' && !c.def.weapon ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
-        class: `card ${c.kind === 'upgrade' ? c.def.category : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
+        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
         'data-grade': grade?.id ?? '',
       });
@@ -208,6 +215,13 @@ export class Screens {
           el('strong', { class: 'name', text: c.def.name }),
           el('span', { class: 'desc', text: upgradeText(c.def, c.grade) }),
           el('span', { class: 'stack', text: weapon ? '획득 즉시 자동 발동' : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
+        );
+      } else if (c.kind === 'relic') {
+        const relic = RELICS[c.id];
+        btn.append(
+          el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: relic.symbol }),
+          el('strong', { class: 'name', text: relic.name }),
+          el('span', { class: 'desc', text: relicDescription(c.id) }),
         );
       } else {
         btn.append(el('span', { class: 'cat', text: '회복' }), el('strong', { class: 'name', text: c.name }), el('span', { class: 'desc', text: c.description }));
@@ -223,9 +237,9 @@ export class Screens {
       'levelup',
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
-        el('p', { class: 'muted', text: `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('p', { class: 'muted', text: reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: 'cards' }, cards),
-        reroll,
+        ...(reward ? [] : [reroll]),
       ]),
     );
   }
@@ -235,6 +249,7 @@ export class Screens {
     level: number;
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
+    relics: RelicId[];
     rerollsLeft: number;
     revivesLeft: number;
     onClose: () => void;
@@ -256,7 +271,7 @@ export class Screens {
         ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
       ]),
     );
-    const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Tab' })]);
+    const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
     this.mount(
       'status',
@@ -269,6 +284,10 @@ export class Screens {
         ]),
         el('h3', { text: '이번 판 강화 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
+        el('h3', { text: '보유 유물' }),
+        opts.relics.length
+          ? el('div', { class: 'relic-slots', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status'))
+          : el('p', { class: 'muted', text: '아직 없음' }),
         el('p', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` }),
         close,
       ]),
@@ -310,7 +329,7 @@ export class Screens {
     );
   }
 
-  showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void): void {
+  showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void, onCarry: (ids: RelicId[]) => void): void {
     const win = result.outcome === 'victory';
     let cause: string;
     if (result.cause === 'boss') cause = `${josa(BOSS_CONFIG.name, '을/를')} 처치했습니다!`;
@@ -320,7 +339,7 @@ export class Screens {
         result.bossHpRatio !== null ? ` (보스 체력 ${Math.ceil(result.bossHpRatio * 100)}% 남음)` : ''
       }.`;
 
-    const restart = el('button', { class: 'primary big', 'data-testid': 'restart', 'data-autofocus': '' }, ['다시 시작 ', el('kbd', { text: 'Enter' })]);
+    const restart = el('button', { class: 'primary big', 'data-testid': 'restart', 'data-autofocus': '' }, [win ? '다음 판 시작 ' : '다시 시작 ', el('kbd', { text: 'Enter' })]);
     restart.addEventListener('click', onRestart);
     const title = el('button', { 'data-testid': 'result-title', text: '타이틀로' });
     title.addEventListener('click', onTitle);
@@ -356,16 +375,44 @@ export class Screens {
               el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}) — 타이틀의 강화 상점에서 사용` }),
             ])
           : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
+        ...(win && result.relics?.length ? [this.carrySelection(result.relics, onCarry)] : []),
         restart,
         el('div', { class: 'row buttons' }, [title]),
         el('small', { class: 'muted' }, [
-          'Enter · Space · R 키로 바로 다시 시작',
+          win ? 'Enter · Space · R 키로 다음 판 시작' : 'Enter · Space · R 키로 다시 시작',
           el('br'),
           `시드 ${result.seed}${result.assisted ? ' · 개발 옵션 사용 (기록 미반영)' : ''}`,
         ]),
       ]),
     );
   }
+
+  private carrySelection(ids: RelicId[], onChange: (ids: RelicId[]) => void): HTMLElement {
+    const selected = new Set<RelicId>();
+    const count = el('span', { class: 'muted', 'aria-live': 'polite', text: `0 / ${CARRY_LIMIT}` });
+    const buttons = ids.map((id) => {
+      const relic = RELICS[id];
+      const button = el('button', { class: 'relic-pick', type: 'button', 'aria-pressed': 'false', 'data-relic': id }, [
+        el('strong', { text: `${relic.symbol} ${relic.name}` }),
+        el('small', { text: relicDescription(id) }),
+      ]);
+      button.addEventListener('click', () => {
+        if (selected.has(id)) selected.delete(id);
+        else if (selected.size < CARRY_LIMIT) selected.add(id);
+        else return;
+        button.setAttribute('aria-pressed', String(selected.has(id)));
+        count.textContent = `${selected.size} / ${CARRY_LIMIT}`;
+        for (const item of buttons) item.disabled = selected.size >= CARRY_LIMIT && item.getAttribute('aria-pressed') !== 'true';
+        onChange([...selected]);
+      });
+      return button;
+    });
+    return el('section', { class: 'carry-relics', 'aria-label': '다음 판에 가져갈 유물' }, [
+      el('h3', { text: '다음 판에 가져갈 유물' }), count,
+      el('div', { class: 'carry-grid' }, buttons),
+    ]);
+  }
+
 }
 
 type Fmt = (v: number) => string;

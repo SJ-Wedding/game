@@ -1,3 +1,4 @@
+import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
@@ -28,6 +29,9 @@ export class Hud {
   private bossText: HTMLElement;
   private banner: HTMLElement;
   private chips: HTMLElement;
+  private relicBox: HTMLElement;
+  private relicSlots: HTMLElement;
+  private lastRelics = -1;
   private bannerUntil = 0;
   private lastPhaseLabel: string | null = null;
   private lastPicks = -1;
@@ -53,6 +57,10 @@ export class Hud {
     ]);
     this.banner = el('div', { class: 'banner', 'data-testid': 'hud-banner' });
     this.chips = el('div', { class: 'chips' });
+    this.relicSlots = el('div', { class: 'relic-slots' });
+    this.relicBox = el('section', { class: 'hud-relics hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
+      el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots,
+    ]);
 
     root.append(
       el('div', { class: 'hud-left' }, [
@@ -61,7 +69,7 @@ export class Hud {
         this.dodgeBox,
       ]),
       el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
-      el('div', { class: 'hud-right' }, [this.kills]),
+      el('div', { class: 'hud-right' }, [this.kills, this.relicBox]),
       this.bossBox,
       this.banner,
       this.chips,
@@ -82,6 +90,7 @@ export class Hud {
     this.bannerUntil = 0;
     this.lastPhaseLabel = null;
     this.lastPicks = -1;
+    this.lastRelics = -1;
     this.banner.textContent = '';
     this.banner.classList.remove('show');
   }
@@ -95,18 +104,23 @@ export class Hud {
   update(sim: GameSim, events: SimEvent[]): void {
     const c = this.c;
     const p = sim.player;
-    const s = sim.stats;
+    const maxHp = sim.relics.maxHp;
+    if (this.lastRelics !== sim.relics.owned.size) {
+      this.lastRelics = sim.relics.owned.size;
+      this.relicSlots.replaceChildren(...relicInventory(sim.relics.owned, 'hud'));
+      this.relicBox.classList.toggle('hidden', this.lastRelics === 0);
+    }
 
-    c.style(this.hpFill, 'hp', 'width', `${(100 * p.hp) / s.maxHp}%`);
-    c.text(this.hpText, 'hp', `체력 ${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}`);
-    c.toggle(this.hpFill, 'hpLow', 'low', p.hp / s.maxHp < 0.3);
+    c.style(this.hpFill, 'hp', 'width', `${(100 * p.hp) / maxHp}%`);
+    c.text(this.hpText, 'hp', `체력 ${Math.ceil(p.hp)} / ${Math.round(maxHp)}`);
+    c.toggle(this.hpFill, 'hpLow', 'low', p.hp / maxHp < 0.3);
 
     const need = sim.xpNeeded;
     c.style(this.xpFill, 'xp', 'width', `${(100 * sim.xp) / need}%`);
     c.text(this.xpText, 'xp', `Lv ${sim.level}  ·  경험치 ${Math.floor(sim.xp)} / ${need}`);
 
     const ready = p.dodgeCd <= 0;
-    c.style(this.dodgeFill, 'dodge', 'width', `${ready ? 100 : (100 * (1 - p.dodgeCd / s.dodgeCooldown)).toFixed(0)}%`);
+    c.style(this.dodgeFill, 'dodge', 'width', `${ready ? 100 : (100 * (1 - p.dodgeCd / sim.relics.dodgeCooldown)).toFixed(0)}%`);
     c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
     c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
 

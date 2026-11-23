@@ -1,3 +1,5 @@
+import { validCarry, type RelicId, type RelicSource } from '../config/relics';
+import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
 import { ENEMY_CONFIG, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
@@ -32,6 +34,7 @@ export interface SimOptions {
   presetLevel?: number;
   /** 영구 강화 구매 내역 (토큰 상점). 없으면 영구 강화 0 */
   meta?: MetaPurchases;
+  carryRelics?: readonly RelicId[];
 }
 
 export type SimPhase = 'combat' | 'levelup' | 'ended';
@@ -58,6 +61,9 @@ export class GameSim {
   readonly rngDrop: Rng;
   readonly meta: MetaBonus;
   readonly weapons = new WeaponSystem(this);
+  readonly relics = new RelicEffects(this);
+  private readonly rngRelic: Rng;
+  private readonly pendingRelics: RelicSource[] = [];
   readonly options: SimOptions;
 
   /** 경과 틱. elapsed = tick / tickRate */
@@ -125,6 +131,7 @@ export class GameSim {
     this.meta = metaBonus(options.meta);
     this.rerollsLeft = PROGRESSION_CONFIG.baseRerolls + this.meta.rerolls;
     this.revivesLeft = this.meta.revives;
+    this.rngRelic = new Rng(deriveSeed(this.seed, 'relic'));
 
     if (options.presetUpgrades) {
       for (const pick of picksFromCounts(options.presetUpgrades)) {
@@ -155,6 +162,7 @@ export class GameSim {
 
     const start = Math.max(0, options.startTime ?? 0);
     this.tick = Math.round(start * RUN_CONFIG.tickRate);
+    for (const id of validCarry(options.carryRelics)) this.relics.acquire(id);
     while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at < start) this.eventIndex++;
     if (start >= RUN_CONFIG.bossAt) this.spawnBoss();
 
@@ -230,6 +238,7 @@ export class GameSim {
     const dt = 1 / RUN_CONFIG.tickRate;
     this.tick++;
 
+    this.relics.update();
     this.updatePlayer(dt, input);
     this.updateSpawner(dt);
     updateEnemies(this, dt);
@@ -241,7 +250,7 @@ export class GameSim {
     this.updatePickups(dt);
     this.cleanup();
     this.checkEnd();
-    if (this.phase === 'combat' && this.pendingLevels > 0) this.openLevelUp();
+    if (this.phase === 'combat' && (this.pendingLevels || this.pendingRelics.length)) this.openLevelUp();
     return true;
   }
 
@@ -253,7 +262,7 @@ export class GameSim {
     if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
     if (p.dodgeCd > 0) p.dodgeCd = Math.max(0, p.dodgeCd - dt);
     if (p.hurtFlash > 0) p.hurtFlash -= dt;
-    if (s.regen > 0 && p.hp > 0) p.hp = Math.min(s.maxHp, p.hp + s.regen * dt);
+    if (s.regen > 0 && p.hp > 0) this.relics.heal(s.regen * dt);
 
     let mx = input.moveX;
     let my = input.moveY;
@@ -284,7 +293,8 @@ export class GameSim {
         p.dodgeDy = Math.sin(p.aim);
       }
       p.dodgeTime = s.dodgeDuration;
-      p.dodgeCd = s.dodgeCooldown;
+      p.dodgeCd = this.relics.dodgeCooldown;
+      this.relics.dodgeUntil = this.elapsed + 2;
       p.invuln = Math.max(p.invuln, s.dodgeInvuln);
       this.dodges++;
       this.weapons.onDodge();
@@ -294,13 +304,14 @@ export class GameSim {
     const horizontal = p.dodgeTime > 0 ? p.dodgeDx : mx;
     if (Math.abs(horizontal) > 0.08) p.facingLeft = horizontal < 0;
 
+    const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(len > 0.01 || p.dodgeTime > 0);
     if (p.dodgeTime > 0) {
       p.dodgeTime -= dt;
       p.x += p.dodgeDx * s.dodgeSpeed * dt;
       p.y += p.dodgeDy * s.dodgeSpeed * dt;
     } else {
-      p.x += mx * s.moveSpeed * dt;
-      p.y += my * s.moveSpeed * dt;
+      p.x += mx * moveSpeed * dt;
+      p.y += my * moveSpeed * dt;
     }
     const pad = ARENA_CONFIG.wallPadding + p.r;
     p.x = clamp(p.x, pad, ARENA_CONFIG.width - pad);
@@ -309,7 +320,7 @@ export class GameSim {
     p.fireCd -= dt;
     if (fire && p.fireCd <= 0) {
       this.firePlayer();
-      p.fireCd += 1 / s.fireRate;
+      p.fireCd += 1 / this.relics.fireRate;
       if (p.fireCd < 0) p.fireCd = 0;
     } else if (!fire && p.fireCd < 0) {
       p.fireCd = 0;
@@ -343,6 +354,7 @@ export class GameSim {
     const n = Math.max(1, s.projectileCount);
     const spread = (s.spreadDeg * Math.PI) / 180;
     const life = s.projectileRange / s.projectileSpeed;
+    const damage = this.relics.shotDamage();
     for (let i = 0; i < n; i++) {
       const a = p.aim + (i - (n - 1) / 2) * spread;
       const c = Math.cos(a);
@@ -353,7 +365,7 @@ export class GameSim {
         vx: c * s.projectileSpeed,
         vy: si * s.projectileSpeed,
         r: s.projectileRadius,
-        damage: s.damage,
+        damage,
         life,
         source: 'player',
       });
@@ -369,9 +381,9 @@ export class GameSim {
     if (this.phase !== 'combat' || p.hp <= 0) return false;
     if (p.invuln > 0 || p.dodgeTime > 0) return false;
     if (this.options.god) return false;
-    const dmg = amount * this.stats.damageTaken;
+    const dmg = this.relics.onHurt(amount * this.stats.damageTaken);
     p.hp = Math.max(0, p.hp - dmg);
-    p.invuln = this.stats.hurtInvuln;
+    p.invuln = Math.max(p.invuln, this.stats.hurtInvuln);
     p.hurtFlash = 0.25;
     this.damageTakenTotal += dmg;
     this.lastDamageSource = source;
@@ -525,7 +537,7 @@ export class GameSim {
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'player') this.weapons.onBulletHit(e);
-          this.damageEnemy(e, s.damage);
+          this.damageEnemy(e, s.damage, s.source === 'player');
           s.life = 0;
           break;
         }
@@ -535,7 +547,7 @@ export class GameSim {
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
           if (s.source === 'player' && !bossInvulnerable(boss)) this.weapons.onBulletHit(boss);
-          this.damageBoss(s.damage);
+          this.damageBoss(s.damage, s.source === 'player');
         }
       }
     }
@@ -555,14 +567,15 @@ export class GameSim {
     compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
   }
 
-  damageEnemy(e: Enemy, amount: number): void {
+  damageEnemy(e: Enemy, amount: number, basic = false): void {
     if (e.dead) return;
-    e.hp -= amount;
+    e.hp -= amount * this.relics.damageMultiplier(e, basic);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
       e.dead = true;
       this.kills++;
+      if (e.kind === 'elite') this.pendingRelics.push('elite');
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
       this.rollDrop(e);
@@ -571,10 +584,10 @@ export class GameSim {
     }
   }
 
-  damageBoss(amount: number): void {
+  damageBoss(amount: number, basic = false): void {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
-    b.hp = Math.max(0, b.hp - amount);
+    b.hp = Math.max(0, b.hp - amount * this.relics.damageMultiplier(b, basic));
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
     if (b.hp <= 0) {
@@ -643,7 +656,17 @@ export class GameSim {
   }
 
   private openLevelUp(): void {
-    this.choices = this.rollLevelChoices();
+    this.choices = [];
+    while (this.pendingRelics.length && !this.choices.length) {
+      this.choices = rollRelics(this.pendingRelics.shift()!, this.rngRelic, this.relics.owned);
+    }
+    if (!this.choices.length && this.pendingLevels) {
+      this.choices = this.rollLevelChoices();
+    }
+    if (!this.choices.length) {
+      this.phase = 'combat';
+      return;
+    }
     this.phase = 'levelup';
     this.acc = 0;
     this.emit('levelup', this.player.x, this.player.y);
@@ -654,32 +677,32 @@ export class GameSim {
     if (this.phase !== 'levelup') return false;
     const c = this.choices[index];
     if (!c) return false;
-    if (c.kind === 'upgrade') {
-      if (!applyUpgrade(this.stacks, c.def.id)) return false;
-      this.picks.push({ id: c.def.id, grade: c.grade });
-      this.stats = computeStats(this.picks, this.meta);
-      const p = this.player;
-      p.hp = Math.min(this.stats.maxHp, p.hp + healOnPick(c.def.id, c.grade));
-      this.pickOrder.push(c.def.id);
+    if (c.kind === 'relic') {
+      this.relics.acquire(c.id);
     } else {
-      this.player.hp = Math.min(this.stats.maxHp, this.player.hp + c.heal);
-      this.pickOrder.push(c.id);
+      const rewardRelic = !this.startPickOpen && this.pendingLevel % 5 === 0;
+      if (c.kind === 'upgrade') {
+        if (!applyUpgrade(this.stacks, c.def.id)) return false;
+        this.picks.push({ id: c.def.id, grade: c.grade });
+        this.stats = computeStats(this.picks, this.meta);
+        this.relics.heal(healOnPick(c.def.id, c.grade));
+        this.pickOrder.push(c.def.id);
+      } else {
+        this.relics.heal(c.heal);
+        this.pickOrder.push(c.id);
+      }
+      this.pendingLevels--;
+      this.startPickOpen = false;
+      if (rewardRelic) this.pendingRelics.push('level');
     }
-    this.pendingLevels--;
-    this.startPickOpen = false;
-    if (this.pendingLevels > 0) {
-      this.choices = this.rollLevelChoices();
-    } else {
-      this.choices = [];
-      this.phase = 'combat';
-    }
+    this.openLevelUp();
     this.acc = 0;
     return true;
   }
 
   /** 레벨업 후보 새로고침. 남은 횟수가 없거나 레벨업 중이 아니면 false */
   reroll(): boolean {
-    if (this.phase !== 'levelup' || this.rerollsLeft <= 0) return false;
+    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.choices[0]?.kind === 'relic') return false;
     const prev = this.choices.filter((c) => c.kind === 'upgrade').map((c) => (c.kind === 'upgrade' ? c.def.id : ('' as UpgradeId)));
     this.rerollsLeft--;
     this.rerollsUsed++;
@@ -726,7 +749,7 @@ export class GameSim {
     const p = this.player;
     this.itemsCollected++;
     if (kind === 'heal') {
-      p.hp = Math.min(this.stats.maxHp, p.hp + DROP_CONFIG.healAmount);
+      this.relics.heal(DROP_CONFIG.healAmount);
     } else if (kind === 'magnet') {
       for (const g of this.gems) g.pulled = true;
     } else {
@@ -752,7 +775,7 @@ export class GameSim {
       // 영구 강화 '부활': 체력 50%로 일어나고 주변 적 탄을 지운다
       this.revivesLeft--;
       this.revived++;
-      p.hp = this.stats.maxHp * 0.5;
+      p.hp = this.relics.maxHp * 0.5;
       p.invuln = 2;
       this.enemyShots.length = 0;
       this.emit('revive', p.x, p.y);
@@ -783,6 +806,7 @@ export class GameSim {
       rerollsUsed: this.rerollsUsed,
       revived: this.revived,
       itemsCollected: this.itemsCollected,
+      relics: [...this.relics.owned],
       seed: this.seed,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
       assisted: this.assisted,

@@ -1,5 +1,6 @@
 import { buyMeta, tokenReward, type MetaPurchases, type TokenReward } from '../core/meta';
 import { META_STATS, META_UNLOCKS } from '../config/meta';
+import { validCarry, type RelicId } from '../config/relics';
 import type { RunResult } from '../core/types';
 
 /**
@@ -32,6 +33,7 @@ export interface SaveData {
   settings: { volume: number };
   records: SaveRecords;
   meta: SaveMeta;
+  relicCarry?: RelicId[];
 }
 
 export type LoadStatus = 'ok' | 'missing' | 'corrupt' | 'version' | 'unavailable';
@@ -98,6 +100,8 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
       purchases,
     },
   };
+  const carry = validCarry(migrated.relicCarry);
+  if (carry.length) data.relicCarry = carry;
   if (Number.isNaN(data.records.fastestWin)) data.records.fastestWin = null;
   return { data, status: 'ok' };
 }
