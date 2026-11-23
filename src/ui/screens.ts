@@ -101,8 +101,7 @@ export class Screens {
       el('h3', { text: '조작' }),
       el('ul', {}, [
         el('li', {}, [el('kbd', { text: 'W A S D' }), ' 이동']),
-        el('li', {}, [el('kbd', { text: '마우스' }), ' 조준']),
-        el('li', {}, [el('kbd', { text: '좌클릭' }), ' 공격 (누르고 있기)']),
+        el('li', {}, [el('kbd', { text: '자동' }), ' 가장 가까운 적을 조준해 공격']),
         el('li', {}, [el('kbd', { text: 'Space' }), ' 회피 (잠깐 무적)']),
         el('li', {}, [el('kbd', { text: 'Esc' }), ' 일시정지']),
       ]),

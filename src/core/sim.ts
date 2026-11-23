@@ -1,7 +1,7 @@
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
 import { ENEMY_CONFIG, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
-import { PLAYER_BODY, type PlayerStats } from '../config/player';
+import { AUTO_COMBAT, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
@@ -64,6 +64,8 @@ export class GameSim {
   pendingLevels = 0;
   choices: UpgradeChoice[] = [];
   pickOrder: string[] = [];
+  /** 자동 조준 중인 대상 (렌더링 표시용) */
+  target: { x: number; y: number; r: number } | null = null;
 
   enemies: Enemy[] = [];
   boss: Boss | null = null;
@@ -216,14 +218,24 @@ export class GameSim {
     if (p.hurtFlash > 0) p.hurtFlash -= dt;
     if (s.regen > 0 && p.hp > 0) p.hp = Math.min(s.maxHp, p.hp + s.regen * dt);
 
-    p.aim = Math.atan2(input.aimY - p.y, input.aimX - p.x);
-
     let mx = input.moveX;
     let my = input.moveY;
     const len = Math.hypot(mx, my);
     if (len > 1) {
       mx /= len;
       my /= len;
+    }
+
+    // 조준: 자동 전투면 가장 가까운 적, 아니면 마우스 위치
+    let fire = input.fire;
+    if (AUTO_COMBAT.enabled) {
+      this.target = this.findTarget(AUTO_COMBAT.range);
+      fire = this.target !== null;
+      if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
+      else if (len > 0.01) p.aim = Math.atan2(my, mx);
+    } else {
+      this.target = null;
+      p.aim = Math.atan2(input.aimY - p.y, input.aimX - p.x);
     }
 
     if (input.dodge && p.dodgeCd <= 0 && p.dodgeTime <= 0) {
@@ -254,13 +266,34 @@ export class GameSim {
     p.y = clamp(p.y, pad, ARENA_CONFIG.height - pad);
 
     p.fireCd -= dt;
-    if (input.fire && p.fireCd <= 0) {
+    if (fire && p.fireCd <= 0) {
       this.firePlayer();
       p.fireCd += 1 / s.fireRate;
       if (p.fireCd < 0) p.fireCd = 0;
-    } else if (!input.fire && p.fireCd < 0) {
+    } else if (!fire && p.fireCd < 0) {
       p.fireCd = 0;
     }
+  }
+
+  /** 사거리 안에서 몸 가장자리까지 가장 가까운 적(보스 포함). 무적 연출 중인 보스는 제외. */
+  findTarget(range: number): { x: number; y: number; r: number } | null {
+    const p = this.player;
+    let best: { x: number; y: number; r: number } | null = null;
+    let bestD = range;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = dist(e.x, e.y, p.x, p.y) - e.r;
+      if (d < bestD) {
+        bestD = d;
+        best = e;
+      }
+    }
+    const b = this.boss;
+    if (b && !b.dead && !bossInvulnerable(b)) {
+      const d = dist(b.x, b.y, p.x, p.y) - b.r;
+      if (d < bestD) best = b;
+    }
+    return best;
   }
 
   private firePlayer(): void {

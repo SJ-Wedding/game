@@ -138,7 +138,7 @@ export class Hud {
     // 안내 문구
     const ph = sim.currentSpawnPhase();
     if (ph && ph.label !== this.lastPhaseLabel) {
-      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 마우스 조준 · 좌클릭 공격 · Space 회피', 5);
+      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 공격은 가까운 적에게 자동 · Space 회피', 5);
       else if (ph.announce) this.flash(ph.announce, 4);
       this.lastPhaseLabel = ph.label;
     }

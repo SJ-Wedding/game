@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { aimAt, collectErrors, setTabHidden, snap, startRun, waitElapsed } from './util';
+import { collectErrors, setTabHidden, snap, startRun, waitElapsed } from './util';
 
 test.describe('균열 아레나 — 핵심 흐름', () => {
   let errors: string[] = [];
@@ -26,11 +26,8 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     const s1 = await snap(page);
     expect(s1.player!.x).toBeGreaterThan(s0.player!.x + 50);
 
-    await page.mouse.move(900, 300);
-    await page.mouse.down();
-    await page.waitForTimeout(1200);
-    await page.mouse.up();
-    expect((await snap(page)).shotsFired).toBeGreaterThan(1);
+    // 클릭 없이도 적이 사거리에 들어오면 자동으로 공격한다
+    await expect.poll(async () => (await snap(page)).shotsFired ?? 0, { timeout: 30_000 }).toBeGreaterThan(1);
 
     await page.keyboard.press('Space');
     await expect.poll(async () => (await snap(page)).player!.dodgeCd).toBeGreaterThan(0);
@@ -108,23 +105,9 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.locator('.boss-bar')).toBeHidden();
     await expect.poll(async () => (await snap(page)).boss?.state ?? 'none', { timeout: 20_000 }).not.toMatch(/none|enter/);
     await expect(page.locator('.boss-bar')).toBeVisible();
-    // 보스 체력을 2%로 낮춘 뒤 실제 마우스 사격으로 마무리한다
+    // 보스 체력을 2%로 낮춘 뒤 자동 공격으로 마무리한다 (입력 없음)
     await page.evaluate(() => (window as any).__rift.debug.setBossHp(0.02));
-    await page.mouse.down();
-    await expect
-      .poll(
-        async () => {
-          const s = await snap(page);
-          if (s.boss && !s.boss.dead) {
-            const b = await page.evaluate(() => (window as any).__rift.sim.boss);
-            await aimAt(page, b.x, b.y);
-          }
-          return s.screen;
-        },
-        { timeout: 30_000, intervals: [100] },
-      )
-      .toBe('result');
-    await page.mouse.up();
+    await expect.poll(async () => (await snap(page)).screen, { timeout: 60_000 }).toBe('result');
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await expect(page.getByTestId('cause')).toContainText('처치했습니다');
     await expect(page.getByTestId('result-time')).toHaveText(/^1[34]:\d\d$/);
@@ -167,12 +150,15 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
       const spawns = await page.evaluate(() =>
         (window as any).__rift.sim.spawnLog.filter((r: any) => r.tick <= 240).map((r: any) => `${r.tick}:${r.kind}:${r.angle.toFixed(6)}`),
       );
-      // 2초 동안 좌클릭 유지 → 발사 횟수 / 전투 시간
+      // 쓰러지지 않는 표적을 옆에 두고 2초간 자동 공격 → 발사 횟수 / 전투 시간
+      await page.evaluate(() => {
+        const sim = (window as any).__rift.sim;
+        const e = sim.spawnEnemy('chaser', sim.player.x + 200, sim.player.y);
+        e.hp = e.maxHp = 1e9;
+      });
+      await page.waitForTimeout(300);
       const s0 = await snap(page);
-      await page.mouse.move(900, 200);
-      await page.mouse.down();
       await page.waitForTimeout(2000);
-      await page.mouse.up();
       const s1 = await snap(page);
       const rate = (s1.shotsFired! - s0.shotsFired!) / (s1.elapsed! - s0.elapsed!);
       // Space 한 번 → 회피 한 번
@@ -208,8 +194,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     expect((await snap(page)).listenerInstalls).toBe(1);
   });
 
-  test('새로고침 후 기록·음량 유지 (사망까지 실제 진행)', async ({ page }) => {
-    test.setTimeout(240_000);
+  test('새로고침 후 기록·음량 유지', async ({ page }) => {
     await page.goto('/?dev=1&seed=21');
     await expect(page.getByTestId('runs')).toHaveText('0 / 0');
     // 음량 변경
@@ -217,12 +202,15 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
       el.value = '20';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    // 가만히 서서 적에게 맞아 쓰러질 때까지 (개발 옵션 없음 → 기록에 반영됨)
+    // 개발 옵션 없이 10초 이상 실제로 싸운 뒤(자동 공격으로 처치 발생) 쓰러진다 → 기록에 반영됨
     await page.getByTestId('play').click();
-    await expect.poll(async () => (await snap(page)).screen, { timeout: 200_000, intervals: [1000] }).toBe('result');
+    await expect.poll(async () => (await snap(page)).kills ?? 0, { timeout: 60_000 }).toBeGreaterThan(0);
+    await waitElapsed(page, 10);
+    await page.evaluate(() => (window as any).__rift.sim.hurtPlayer(9999, '시험용 일격'));
+    await expect.poll(async () => (await snap(page)).screen, { timeout: 10_000 }).toBe('result');
     const s = await snap(page);
     expect(s.result!.cause).toBe('death');
-    await expect(page.getByTestId('cause')).toContainText('쓰러졌습니다');
+    await expect(page.getByTestId('cause')).toHaveText('시험용 일격에 쓰러졌습니다.');
     const time = await page.getByTestId('result-time').innerText();
     const kills = await page.getByTestId('result-kills').innerText();
 

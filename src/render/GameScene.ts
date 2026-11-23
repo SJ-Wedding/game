@@ -307,6 +307,19 @@ export class GameScene extends Phaser.Scene {
       p.x + ax * (p.r + 2) - ay * 6, p.y + ay * (p.r + 2) + ax * 6,
       p.x + ax * (p.r + 2) + ay * 6, p.y + ay * (p.r + 2) - ax * 6,
     );
+    // 자동 조준 대상 표시 (청록 꺾쇠)
+    const tg = sim.target;
+    if (tg) {
+      const rr = tg.r + 9;
+      const rot = t * 3;
+      g.lineStyle(2, PALETTE.player, 0.9);
+      for (let i = 0; i < 4; i++) {
+        const a = rot + (i * Math.PI) / 2;
+        g.beginPath();
+        g.arc(tg.x, tg.y, rr, a - 0.35, a + 0.35);
+        g.strokePath();
+      }
+    }
     // 흡수 범위 (은은하게)
     g.lineStyle(1, PALETTE.gem, 0.12).strokeCircle(p.x, p.y, sim.stats.pickupRadius);
 

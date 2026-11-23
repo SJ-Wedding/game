@@ -8,8 +8,10 @@ import { collectErrors, snap } from './util';
  * 자동 플레이 봇(src/core/bot.ts)이 매 프레임 화면 상태를 보고, **브라우저 DOM 키보드·마우스 이벤트**
  * (keydown/keyup, mousedown/mousemove/mouseup, 카드 click)를 발생시켜 조작한다.
  * 이벤트는 사람이 입력할 때와 같은 경로(Phaser 입력 → GameScene.sampleInput → GameSim)를 지난다.
+ * 자동 전투(AUTO_COMBAT.enabled)가 켜져 있으면 마우스 이벤트는 게임이 무시하고 이동·회피·강화 선택만 의미가 있다.
  * (Playwright 의 원격 입력 API 는 헤드리스 렌더링 부하 때문에 초당 4회 정도만 반응할 수 있어 사람보다 훨씬 느리다.)
- * 개발 옵션(무적·보스 직전 시작)은 쓰지 않는다. 결과는 test-results/full-run-<seed>.json 에 저장된다.
+ * 개발 옵션(무적·보스 직전 시작)은 쓰지 않는다. 결과는 playtest-results/full-run-<seed>.json 에 저장된다
+ * (test-results/ 는 Playwright 가 실행마다 지우므로 쓰지 않는다).
  *
  *   FULL_RUN_SEEDS=1003,1011 npm run test:e2e:full
  */
@@ -164,8 +166,8 @@ for (const seed of seeds) {
       framesPerSecond: d.frames / wallSeconds,
       decisionsPerSecond: d.decisions / wallSeconds,
     };
-    mkdirSync('test-results', { recursive: true });
-    writeFileSync(`test-results/full-run-${seed}.json`, JSON.stringify(report, null, 2));
+    mkdirSync('playtest-results', { recursive: true });
+    writeFileSync(`playtest-results/full-run-${seed}.json`, JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report));
 
     expect(errors).toEqual([]);
