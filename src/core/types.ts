@@ -117,6 +117,8 @@ export interface Projectile {
   life: number;
   /** 적 투사체의 사망 원인 표시용 */
   source: string;
+  pierceLeft?: number;
+  hitIds?: Set<number>;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */

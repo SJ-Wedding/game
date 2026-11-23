@@ -14,7 +14,7 @@ export type UpgradeCategory = 'attack' | 'survival' | 'mobility';
 export type UpgradeId =
   | 'rapid' | 'split' | 'power'
   | 'vitality' | 'regen' | 'guard'
-  | 'swift' | 'evasion' | 'magnet' | 'wisdom'
+  | 'swift' | 'evasion' | 'magnet' | 'wisdom' | 'fortune'
   | WeaponId;
 
 export interface UpgradeEffect {
@@ -68,6 +68,8 @@ export const UPGRADES: UpgradeDef[] = [
     effects: [{ stat: 'pickupRadius', op: 'pct', value: 0.45 }] },
   { id: 'wisdom', name: '균열의 통찰', category: 'mobility', description: '경험치 획득량 +10%', maxStacks: 3,
     effects: [{ stat: 'xpGain', op: 'pct', value: 0.1 }] },
+  { id: 'fortune', name: '행운의 별', category: 'mobility', description: '행운 +1', maxStacks: 3,
+    effects: [{ stat: 'luck', op: 'add', value: 1 }] },
 ];
 
 export const WEAPON_UPGRADES: UpgradeDef[] = WEAPON_IDS.map((id) => ({

@@ -64,6 +64,7 @@ export class App {
     this.sfx = deps.sfx;
     this.hud = deps.hud;
     this.screens = deps.screens;
+    this.hud.onRecipes(() => this.openStatus(true));
 
     const doc = deps.doc ?? document;
     doc.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -172,19 +173,30 @@ export class App {
   }
 
   /** 상태창 열기 (전투 시간 정지). 전투 중 또는 일시정지 메뉴에서 열 수 있다. */
-  openStatus(): void {
+  openStatus(recipesOpen = false): void {
     const sim = this.sim;
     if (!sim || (this.screen !== 'playing' && this.screen !== 'paused')) return;
     this.statusReturn = this.screen;
     sim.setPaused(true);
     this.screen = 'status';
     const layers = statLayers(sim.picks, sim.meta);
-    layers.final = { ...layers.final, maxHp: sim.relics.maxHp, dodgeCooldown: sim.relics.dodgeCooldown, fireRate: sim.relics.fireRate };
+    layers.meta.luck = sim.meta.luck;
+    layers.final = {
+      ...layers.final,
+      maxHp: sim.relics.maxHp,
+      dodgeCooldown: sim.relics.dodgeCooldown,
+      fireRate: sim.relics.fireRate,
+      xpGain: sim.stats.xpGain * sim.relics.xpMultiplier,
+      damageTaken: sim.relics.damageTaken,
+      luck: sim.luck,
+      projectileRange: sim.stats.projectileRange + sim.reachBonus,
+    };
     this.screens.showStatus({
       level: sim.level,
       layers,
       picks: sim.picks,
       fusions: [...sim.weapons.fusions],
+      recipesOpen,
       relics: [...sim.relics.owned],
       rerollsLeft: sim.rerollsLeft,
       revivesLeft: sim.revivesLeft,
@@ -288,6 +300,7 @@ export class App {
         // 주의: 여기서 Space·방향키에 preventDefault 를 하면 Phaser 가 그 입력을 무시한다.
         // 스크롤 방지는 GameScene 의 키 캡처가 맡는다.
         if (e.code === 'Escape') this.pause('esc');
+        if (e.code === 'KeyC' && !e.repeat) this.openStatus(true);
         if (e.code === 'Tab') {
           e.preventDefault();
           if (!e.repeat) this.openStatus();

@@ -225,3 +225,26 @@ button:disabled { opacity: 0.45; cursor: default; }
 .fusion-recipes { width: 100%; text-align: left; padding: 0.5em 0.85em; background: #231b30; border-radius: 6px; }
 .fusion-recipes summary { cursor: pointer; color: #e1bdff; font-weight: 700; }
 .fusion-recipes ul { margin: 0.5em 0; padding-left: 1.3em; }
+
+/* 전투 정보는 화면 가장자리에 두고 중앙의 공격 예고를 비운다. */
+#game-root::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, transparent 54%, #080c1a88 100%);
+}
+.hud-left, .hud-center, .hud-right {
+  padding: 0.6em 0.8em; border: 1px solid #98accc38; border-radius: 8px;
+  background: linear-gradient(145deg, #101a2bf2, #101521bc);
+  box-shadow: 0 5px 18px #02061160;
+}
+.hud-center { min-width: 13cqw; border-top: 2px solid #caa16d; padding-block: 0.2em 0.5em; }
+.hud-right { text-align: right; }
+.hud-recipes { pointer-events: auto; margin-top: 0.4em; padding: 0.25em 0.6em; font-size: 0.72em; color: #ecd5ad; }
+.bar { border-color: #94a7c143; border-radius: 3px; }
+.bar.hp .fill { background: linear-gradient(90deg, #872f52, #e96070); }
+.bar.xp .fill { background: linear-gradient(90deg, #166260, #45bb9f); }
+#overlay[data-screen='status'] { align-items: safe center; }
+.fusion-recipes ul {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45em;
+  margin: 0.6em 0; padding: 0; list-style: none;
+}
+.fusion-recipes li { padding: 0.4em 0.55em; background: #151324; border-left: 2px solid #956dc2; font-size: 0.85em; }

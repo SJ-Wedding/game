@@ -1,4 +1,4 @@
-import { FUSION_HIT_WINDOW, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, weaponRankEffect } from '../config/weapons';
+import { FUSION_HIT_WINDOW, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -200,7 +200,7 @@ export class Screens {
   }): void {
     const reward = opts.choices[0]?.kind === 'relic';
     const cards = opts.choices.map((c, i) => {
-      const grade = c.kind === 'upgrade' && !c.def.weapon ? GRADES[GRADE_INDEX[c.grade]] : null;
+      const grade = c.kind === 'upgrade' ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
         class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
@@ -212,11 +212,12 @@ export class Screens {
         const weapon = c.def.weapon;
         if (weapon) btn.append(el('img', { class: 'weapon-icon', src: WEAPON_TEXTURES[weapon], alt: '' }));
         btn.append(
-          el('span', { class: 'cat', text: weapon ? (c.nextStack === 1 ? '특수 무기 획득' : '특수 무기 강화') : `${grade!.name} · ${CATEGORY_LABEL[c.def.category]}` }),
+          el('span', { class: 'cat', text: weapon ? `${grade!.name} · 특수 무기 ${c.nextStack === 1 ? '획득' : '강화'}` : `${grade!.name} · ${CATEGORY_LABEL[c.def.category]}` }),
           el('strong', { class: 'name', text: c.def.name }),
           el('span', { class: 'desc', text: weapon && c.nextStack > 1
             ? `이 무기 피해 보너스 +${Math.round((c.nextStack - 2) * WEAPON_DAMAGE_PER_RANK * 100)}% → +${Math.round((c.nextStack - 1) * WEAPON_DAMAGE_PER_RANK * 100)}%`
             : upgradeText(c.def, c.grade) }),
+          ...(weapon ? [el('span', { class: 'desc', text: `이 등급의 무기 피해 보너스 +${Math.round(WEAPON_GRADE_DAMAGE[c.grade] * 100)}%` })] : []),
           ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',
             text: `${WEAPON_RANK_EFFECTS[weapon].label} ${weaponRankEffect(weapon, c.nextStack - 1)} → ${weaponRankEffect(weapon, c.nextStack)}${WEAPON_RANK_EFFECTS[weapon].unit}`,
           })] : []),
@@ -264,6 +265,7 @@ export class Screens {
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
     fusions: FusionId[];
+    recipesOpen: boolean;
     relics: RelicId[];
     rerollsLeft: number;
     revivesLeft: number;
@@ -284,27 +286,16 @@ export class Screens {
     }
     const picks = [...grouped.entries()].map(([id, list]) => {
       const def = UPGRADE_BY_ID[id];
-      if (def.weapon) return el('li', { text: `${def.name} Lv ${list.length}` });
+
       return el('li', {}, [
-        el('span', { text: `${def.name} ` }),
+        el('span', { text: `${def.name}${def.weapon ? ` Lv ${list.length}` : ''} ` }),
         ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
       ]);
     });
     picks.unshift(...opts.fusions.map((id) => el('li', { class: 'fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}` })));
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
-    this.mount(
-      'status',
-      el('div', { class: 'panel status' }, [
-        el('h2', { text: `상태 · Lv ${opts.level}` }),
-        el('p', { class: 'muted', text: '상태창을 보는 동안 전투 시간이 멈춥니다.' }),
-        el('table', { class: 'stat-table' }, [
-          el('thead', {}, [el('tr', {}, [el('th', { text: '능력치' }), el('th', { text: '시작' }), el('th', { text: '영구 강화' }), el('th', { text: '현재' })])]),
-          el('tbody', {}, rows),
-        ]),
-        el('h3', { text: '이번 판 강화 (점 색 = 등급)' }),
-        el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
-        el('details', { class: 'fusion-recipes' }, [
+    const recipes = el('details', { class: 'fusion-recipes', ...(opts.recipesOpen ? { open: '' } : {}) }, [
           el('summary', { text: '특수 무기 합체 조합식' }),
           el('ul', {}, FUSION_IDS.map((id) => {
             const recipe = WEAPON_FUSIONS[id];
@@ -312,7 +303,20 @@ export class Screens {
             return el('li', { text: `${recipe.name} · ${ingredients.join(' + ')}` });
           })),
           el('small', { class: 'muted', text: `재료가 모두 Lv ${WEAPON_MAX_RANK}이면 일반 레벨업에서 선택할 수 있습니다.` }),
+        ]);
+    this.mount(
+      'status',
+      el('div', { class: 'panel status' }, [
+        el('h2', { text: `상태 · Lv ${opts.level}` }),
+        el('p', { class: 'muted', text: '상태창을 보는 동안 전투 시간이 멈춥니다.' }),
+        ...(opts.recipesOpen ? [recipes] : []),
+        el('table', { class: 'stat-table' }, [
+          el('thead', {}, [el('tr', {}, [el('th', { text: '능력치' }), el('th', { text: '시작' }), el('th', { text: '영구 강화' }), el('th', { text: '현재' })])]),
+          el('tbody', {}, rows),
         ]),
+        el('h3', { text: '이번 판 강화 (점 색 = 등급)' }),
+        el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
+        ...(opts.recipesOpen ? [] : [recipes]),
         el('h3', { text: '보유 유물' }),
         opts.relics.length
           ? el('div', { class: 'relic-slots', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status'))
@@ -465,4 +469,6 @@ const STATUS_ROWS: [keyof PlayerStats, string, Fmt][] = [
   ['dodgeCooldown', '회피 재사용', (v) => `${v.toFixed(2)}초`],
   ['pickupRadius', '흡수 범위', n0],
   ['xpGain', '경험치 획득', pct],
+  ['luck', '행운', n1],
+  ['projectileRange', '기본탄 사거리', n1],
 ];

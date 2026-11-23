@@ -10,10 +10,10 @@ import { applyUpgrade, rollChoices, rollRunChoices, upgradeText } from '../src/c
 import { makeSim } from './helpers';
 
 describe('강화 구성', () => {
-  it('일반 강화는 공격 3종, 생존 3종, 기동 4종으로 구성된다', () => {
-    expect(UPGRADES).toHaveLength(10);
-    for (const cat of ['attack', 'survival', 'mobility']) expect(UPGRADES.filter((u) => u.category === cat)).toHaveLength(cat === 'mobility' ? 4 : 3);
-    expect(new Set(UPGRADES.map((u) => u.id)).size).toBe(10);
+  it('일반 강화는 공격 3종, 생존 3종, 기동 5종으로 구성된다', () => {
+    expect(UPGRADES).toHaveLength(11);
+    for (const cat of ['attack', 'survival', 'mobility']) expect(UPGRADES.filter((u) => u.category === cat)).toHaveLength(cat === 'mobility' ? 5 : 3);
+    expect(new Set(UPGRADES.map((u) => u.id)).size).toBe(11);
   });
 });
 

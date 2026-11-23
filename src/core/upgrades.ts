@@ -88,7 +88,7 @@ export function rollRunChoices(
     const opening: UpgradeChoice[] = [];
     while (pool.length && opening.length < PROGRESSION_CONFIG.choiceCount) {
       const def = pool.splice(weaponRng.int(pool.length), 1)[0];
-      opening.push({ kind: 'upgrade', def, grade: 'common', nextStack: 1 });
+      opening.push({ kind: 'upgrade', def, grade: rollGrade(weaponRng, luck), nextStack: 1 });
     }
     if (opening.length) return opening;
   }
@@ -105,7 +105,7 @@ export function rollRunChoices(
   const fresh = eligible.filter((def) => !exclude.includes(def.id));
   const pool = fresh.length ? fresh : eligible;
   const def = pool[weaponRng.int(pool.length)];
-  const weapon: UpgradeChoice = { kind: 'upgrade', def, grade: 'common', nextStack: (stacks[def.id] ?? 0) + 1 };
+  const weapon: UpgradeChoice = { kind: 'upgrade', def, grade: rollGrade(weaponRng, luck), nextStack: (stacks[def.id] ?? 0) + 1 };
   if (choices[0].kind === 'fallback') return [weapon];
   return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }
@@ -121,6 +121,7 @@ const STAT_LABEL: Partial<Record<StatKey, string>> = {
   dodgeCooldown: '회피 재사용 대기시간',
   pickupRadius: '경험치 흡수 범위',
   xpGain: '경험치 획득량',
+  luck: '행운',
 };
 
 const fmt = (n: number) => (Math.abs(n - Math.round(n)) < 1e-6 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, ''));

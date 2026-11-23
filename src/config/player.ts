@@ -40,6 +40,7 @@ export const PLAYER_BASE_STATS = {
   pickupRadius: 75,
   /** 경험치 획득 배율 (1 = 100%) */
   xpGain: 1,
+  luck: 0,
 };
 
 export type StatKey = keyof typeof PLAYER_BASE_STATS;
@@ -61,3 +62,11 @@ export const AUTO_COMBAT = {
   /** 자동 조준 거리(px, 적 몸 가장자리 기준). 투사체 사거리보다 약간 짧게 둔다. */
   range: 540,
 };
+
+/** 원거리 공격은 중반부터 화면 너머까지 점차 닿는다. */
+export const COMBAT_REACH = {
+  start: 180,
+  peak: 420,
+  bonus: 510,
+  pierceAt: 300,
+} as const;

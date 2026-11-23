@@ -206,3 +206,21 @@ describe('유물과 전투의 상호작용', () => {
     expect(enemy.rootedUntil).toBeGreaterThan(sim.elapsed);
   });
 });
+
+it('위험 유물의 경험치 보너스가 합산되고 피의 계약은 받는 피해를 늘린다', () => {
+  const sim = makeSim({ carryRelics: ['swarm', 'bloodPrice', 'elitePact'] });
+  sim.gainXp(3);
+  expect(sim.xp).toBeCloseTo(5.7);
+  sim.hurtPlayer(10, 'test');
+  expect(sim.player.hp).toBeCloseTo(sim.relics.maxHp - 12.5);
+});
+
+it('군집의 북은 일반 스폰을 늘리고 수호자 인장은 예약된 수호자를 하나 더 생성한다', () => {
+  const base = makeSim({ startTime: 119.5, god: true });
+  const relics = makeSim({ startTime: 119.5, god: true, carryRelics: ['swarm', 'elitePact'] });
+  runUntil(base, 130);
+  runUntil(relics, 130);
+  expect(base.spawnLog.filter((entry) => entry.kind === 'elite')).toHaveLength(1);
+  expect(relics.spawnLog.filter((entry) => entry.kind === 'elite')).toHaveLength(2);
+  expect(relics.spawnLog.filter((entry) => entry.kind !== 'elite').length).toBeGreaterThan(base.spawnLog.filter((entry) => entry.kind !== 'elite').length);
+});

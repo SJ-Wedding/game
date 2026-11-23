@@ -129,9 +129,9 @@ describe('무기 강화의 추가 효과', () => {
     }
   });
 
-  it('Lv 3 지뢰는 2.2초 주기로 설치되고 이전 지뢰가 남는다', () => {
+  it('Lv 3 지뢰는 1.8초 주기로 설치되고 이전 지뢰가 남는다', () => {
     const sim = makeSim({ presetUpgrades: { mine: 3 } });
-    for (let i = 0; i < 140; i++) sim.step(IDLE_INPUT);
+    for (let i = 0; i < 112; i++) sim.step(IDLE_INPUT);
     expect(sim.weapons.devices.filter((d) => d.kind === 'mine')).toHaveLength(2);
   });
 
@@ -200,4 +200,38 @@ describe('특수 무기 합체', () => {
     sim.weapons.onFusionHit('chain', first);
     expect(next.hp).toBeCloseTo(1000 - sim.stats.damage * 2.1);
   });
+});
+
+it('무기 등급 보너스는 해당 무기의 전투 피해에만 누적된다', () => {
+  const measure = (grade: 'common' | 'legendary') => {
+    const sim = makeSim({ presetUpgrades: { chain: 2 } });
+    sim.picks[1] = { id: 'chain', grade };
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 120, sim.player.y);
+    enemy.hp = enemy.maxHp = 1000;
+    sim.step(IDLE_INPUT);
+    return { weaponDamage: enemy.maxHp - enemy.hp, basicDamage: sim.playerShots[0].damage };
+  };
+  const common = measure('common');
+  const legendary = measure('legendary');
+  expect(legendary.weaponDamage).toBeCloseTo(common.weaponDamage * 1.2);
+  expect(legendary.basicDamage).toBe(common.basicDamage);
+});
+
+it('7분 기본탄은 화면 밖 적을 겨누며 일반 적을 관통한다', () => {
+  const sim = makeSim({ startTime: 420, god: true });
+  const { x, y } = sim.player;
+  const far = sim.spawnEnemy('chaser', x + 900, y);
+  far.speed = 0;
+  sim.step(IDLE_INPUT);
+  expect(sim.target).toBe(far);
+  expect(sim.playerShots[0].pierceLeft).toBe(2);
+  expect(sim.playerShots[0].life * sim.stats.projectileSpeed).toBeGreaterThan(900);
+  const targets = [60, 100, 145].map((offset) => sim.spawnEnemy('chaser', x + offset, y));
+  for (const enemy of targets) {
+    enemy.hp = enemy.maxHp = 1000;
+    enemy.speed = 0;
+  }
+  sim.player.fireCd = 999;
+  for (let i = 0; i < 22; i++) sim.step(IDLE_INPUT);
+  expect(targets.map((enemy) => enemy.maxHp - enemy.hp)).toEqual([sim.stats.damage, sim.stats.damage, sim.stats.damage]);
 });

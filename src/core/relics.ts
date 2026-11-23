@@ -51,6 +51,18 @@ export class RelicEffects {
     return (this.sim.stats.maxHp + this.flintBonus) * (this.lastMatchSpent ? 0.8 : 1);
   }
 
+  get xpMultiplier(): number {
+    return 1 + (this.has('swarm') ? 0.25 : 0) + (this.has('bloodPrice') ? 0.35 : 0) + (this.has('elitePact') ? 0.30 : 0);
+  }
+
+  get spawnMultiplier(): number {
+    return this.has('swarm') ? 1.3 : 1;
+  }
+
+  get damageTaken(): number {
+    return this.sim.stats.damageTaken * (this.has('bloodPrice') ? 1.25 : 1);
+  }
+
   get fireRate(): number {
     return this.sim.stats.fireRate * (this.has('oath') ? 0.85 : 1);
   }

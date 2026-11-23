@@ -4,7 +4,7 @@ import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
 import { ENEMY_CONFIG, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
-import { AUTO_COMBAT, PLAYER_BODY, type PlayerStats } from '../config/player';
+import { AUTO_COMBAT, COMBAT_REACH, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
@@ -276,7 +276,7 @@ export class GameSim {
     // 조준: 자동 전투면 가장 가까운 적, 아니면 마우스 위치
     let fire = input.fire;
     if (AUTO_COMBAT.enabled) {
-      this.target = this.findTarget(AUTO_COMBAT.range);
+      this.target = this.findTarget(AUTO_COMBAT.range + this.reachBonus);
       fire = this.target !== null;
       if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
       else if (len > 0.01) p.aim = Math.atan2(my, mx);
@@ -329,6 +329,14 @@ export class GameSim {
   }
 
   /** 사거리 안에서 몸 가장자리까지 가장 가까운 적(보스 포함). 무적 연출 중인 보스는 제외. */
+  get reachBonus(): number {
+    return COMBAT_REACH.bonus * clamp((this.elapsed - COMBAT_REACH.start) / (COMBAT_REACH.peak - COMBAT_REACH.start), 0, 1);
+  }
+
+  get luck(): number {
+    return luckFor(this.level, this.meta.luck + this.stats.luck);
+  }
+
   findTarget(range: number): { x: number; y: number; r: number } | null {
     const p = this.player;
     let best: { x: number; y: number; r: number } | null = null;
@@ -354,7 +362,7 @@ export class GameSim {
     const s = this.stats;
     const n = Math.max(1, s.projectileCount);
     const spread = (s.spreadDeg * Math.PI) / 180;
-    const life = s.projectileRange / s.projectileSpeed;
+    const life = (s.projectileRange + this.reachBonus) / s.projectileSpeed;
     const damage = this.relics.shotDamage();
     for (let i = 0; i < n; i++) {
       const a = p.aim + (i - (n - 1) / 2) * spread;
@@ -369,6 +377,7 @@ export class GameSim {
         damage,
         life,
         source: 'player',
+        ...(this.elapsed >= COMBAT_REACH.pierceAt ? { pierceLeft: 2, hitIds: new Set<number>() } : {}),
       });
     }
     this.weapons.onShot();
@@ -382,7 +391,7 @@ export class GameSim {
     if (this.phase !== 'combat' || p.hp <= 0) return false;
     if (p.invuln > 0 || p.dodgeTime > 0) return false;
     if (this.options.god) return false;
-    const dmg = this.relics.onHurt(amount * this.stats.damageTaken);
+    const dmg = this.relics.onHurt(amount * this.relics.damageTaken);
     p.hp = Math.max(0, p.hp - dmg);
     p.invuln = Math.max(p.invuln, this.stats.hurtInvuln);
     p.hurtFlash = 0.25;
@@ -405,7 +414,7 @@ export class GameSim {
     // 시각 이벤트 (엘리트)
     while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at <= t) {
       const ev = SPAWN_EVENTS[this.eventIndex++];
-      for (let i = 0; i < ev.count; i++) {
+      for (let i = 0; i < ev.count + Number(this.relics.has('elitePact')); i++) {
         const pos = this.rollSpawnPosition();
         this.spawnLog.push({ tick: this.tick, kind: ev.kind, angle: pos.angle, distance: pos.distance });
         this.spawnEnemy(ev.kind, pos.x, pos.y);
@@ -422,13 +431,14 @@ export class GameSim {
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0) return;
     const progress = clamp((t - ph.from) / (ph.to - ph.from), 0, 1);
-    this.spawnTimer += lerp(ph.interval[0], ph.interval[1], progress);
+    const density = this.relics.spawnMultiplier;
+    this.spawnTimer += lerp(ph.interval[0], ph.interval[1], progress) / density;
     for (let i = 0; i < ph.batch; i++) {
       // 난수는 생성 여부와 관계없이 항상 같은 개수를 소비 → 같은 시드면 같은 스폰 순서
       const kind = this.rollKind(ph);
       const pos = this.rollSpawnPosition();
       const alive = this.enemies.length;
-      if (alive >= ph.maxAlive) continue;
+      if (alive >= Math.floor(ph.maxAlive * density)) continue;
       this.spawnLog.push({ tick: this.tick, kind, angle: pos.angle, distance: pos.distance });
       this.spawnEnemy(kind, pos.x, pos.y);
     }
@@ -534,12 +544,17 @@ export class GameSim {
       s.life -= dt;
       if (s.life <= 0 || !this.inArena(s.x, s.y)) continue;
       for (const e of this.enemies) {
-        if (e.dead) continue;
+        if (e.dead || s.hitIds?.has(e.id)) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'player') this.weapons.onBulletHit(e);
           else if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
           this.damageEnemy(e, s.damage, s.source === 'player');
+          if (s.pierceLeft) {
+            s.pierceLeft--;
+            s.hitIds?.add(e.id);
+            continue;
+          }
           s.life = 0;
           break;
         }
@@ -638,7 +653,7 @@ export class GameSim {
   }
 
   gainXp(amount: number): void {
-    const gained = amount * this.stats.xpGain;
+    const gained = amount * this.stats.xpGain * this.relics.xpMultiplier;
     this.xp += gained;
     this.emit('pickup', this.player.x, this.player.y, gained);
     while (this.xp >= xpToNext(this.level)) {
@@ -655,7 +670,7 @@ export class GameSim {
   }
 
   private rollLevelChoices(exclude: UpgradeId[] = []) {
-    const luck = luckFor(this.pendingLevel, this.meta.luck);
+    const luck = luckFor(this.pendingLevel, this.meta.luck + this.stats.luck);
     // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
     const level = this.startPickOpen ? 0 : this.pendingLevel;
     const choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);

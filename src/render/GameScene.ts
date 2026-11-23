@@ -201,10 +201,18 @@ export class GameScene extends Phaser.Scene {
     const W = ARENA_CONFIG.width;
     const H = ARENA_CONFIG.height;
     const pad = ARENA_CONFIG.wallPadding;
-    this.add.tileSprite(0, 0, W, H, 'arena-slate').setOrigin(0).setTileScale(4);
+    this.add.tileSprite(0, 0, W, H, 'arena-slate').setOrigin(0).setTileScale(3).setTint(0x9ca8be);
     const f = this.add.graphics();
     const cx = W / 2;
     const cy = H / 2;
+    f.fillStyle(0x111a2b, 0.34).fillCircle(cx, cy, 265);
+    f.lineStyle(1, 0xc69765, 0.28).strokeCircle(cx, cy, 278);
+    for (let i = 0; i < 32; i++) {
+      const angle = i * Math.PI / 16;
+      const x = cx + Math.cos(angle) * 277;
+      const y = cy + Math.sin(angle) * 277;
+      f.fillStyle(i % 4 === 0 ? 0xd6a271 : PALETTE.rune, 0.65).fillRect(x - 2, y - 2, 4, 4);
+    }
     f.lineStyle(2, PALETTE.rune, 0.42);
     for (const r of [104, 116, 254, 266]) f.strokeCircle(cx, cy, r);
     for (let i = 0; i < 8; i++) {
@@ -326,7 +334,10 @@ export class GameScene extends Phaser.Scene {
     // 6) 플레이어 투사체
     for (const s of sim.playerShots) {
       const l = Math.hypot(s.vx, s.vy) || 1;
-      g.lineStyle(s.r, PALETTE.player, 0.35).lineBetween(s.x, s.y, s.x - (s.vx / l) * 16, s.y - (s.vy / l) * 16);
+      const charged = s.pierceLeft !== undefined;
+      const trail = charged ? 35 : 16;
+      g.lineStyle(s.r * (charged ? 1.6 : 1), charged ? 0xffc980 : PALETTE.player, charged ? 0.58 : 0.35)
+        .lineBetween(s.x, s.y, s.x - (s.vx / l) * trail, s.y - (s.vy / l) * trail);
       g.fillStyle(s.source === 'echo' ? WEAPONS.echo.color : PALETTE.playerShot, 1).fillCircle(s.x, s.y, s.r * 0.8);
     }
 

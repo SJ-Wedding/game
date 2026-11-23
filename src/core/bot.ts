@@ -31,6 +31,7 @@ const PICK_WEIGHT: Partial<Record<UpgradeId, number>> = {
   swift: 2.2,
   magnet: 1.6,
   wisdom: 2,
+  fortune: 2.2,
 };
 
 export class Bot {
@@ -51,7 +52,7 @@ export class Bot {
     let bestScore = -Infinity;
     sim.choices.forEach((c, i) => {
       let score = c.kind === 'fusion' ? 8 : c.kind === 'upgrade' ? (PICK_WEIGHT[c.def.id] ?? 3.1) : 0;
-      if (c.kind === 'upgrade' && !c.def.weapon) score *= GRADES[GRADE_INDEX[c.grade]].mult;
+      if (c.kind === 'upgrade') score *= c.def.weapon ? 1 + 0.12 * GRADE_INDEX[c.grade] : GRADES[GRADE_INDEX[c.grade]].mult;
       if (c.kind === 'upgrade' && lowHp && c.def.category === 'survival') score += 2;
       score += this.rng.range(0, 2.5);
       if (score > bestScore) {
@@ -68,7 +69,7 @@ export class Bot {
     if (sim.rerollsLeft <= 0) return false;
     const best = Math.max(
       ...sim.choices.map((c) =>
-        c.kind === 'upgrade' ? (PICK_WEIGHT[c.def.id] ?? 3.1) * (c.def.weapon ? 1 : GRADES[GRADE_INDEX[c.grade]].mult) : 0,
+        c.kind === 'upgrade' ? (PICK_WEIGHT[c.def.id] ?? 3.1) * (c.def.weapon ? 1 + 0.12 * GRADE_INDEX[c.grade] : GRADES[GRADE_INDEX[c.grade]].mult) : 0,
       ),
     );
     return best < 3;

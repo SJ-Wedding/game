@@ -18,20 +18,27 @@ export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
 
 export const WEAPON_MAX_RANK = 3;
 export const WEAPON_DAMAGE_PER_RANK = 0.2;
+export const WEAPON_GRADE_DAMAGE = { common: 0, rare: 0.08, epic: 0.16, legendary: 0.24 } as const;
+
+export const SPECIAL_WEAPON_POWER: Record<WeaponId, number> = {
+  chain: 1, infection: 1, mine: 1.45, orbit: 1.65, axe: 1.55,
+  turret: 1.8, flame: 1.85, barrier: 1.65, spear: 1.55, mark: 1.65,
+  echo: 1.6, gravity: 1.55,
+};
 
 /** 첫 값은 획득 직후, 이후 값은 Lv 2와 Lv 3 효과다. */
 export const WEAPON_RANK_EFFECTS = {
   chain: { label: '최대 연쇄 대상', unit: '마리', values: [4, 5, 6] },
-  mine: { label: '설치 주기', unit: '초', values: [2.8, 2.5, 2.2] },
+  mine: { label: '설치 주기', unit: '초', values: [2.4, 2.1, 1.8] },
   orbit: { label: '칼날 수', unit: '개', values: [2, 3, 4] },
   axe: { label: '도끼 타격 반경', unit: 'px', values: [13, 17, 21] },
-  turret: { label: '설치 주기', unit: '초', values: [6.5, 6, 5.5] },
-  flame: { label: '불길 반경', unit: 'px', values: [29, 35, 41] },
-  barrier: { label: '장벽 타격 반폭', unit: 'px', values: [11, 15, 19] },
-  spear: { label: '관통 사거리', unit: 'px', values: [450, 510, 570] },
-  mark: { label: '낙뢰 반경', unit: 'px', values: [66, 79, 92] },
+  turret: { label: '설치 주기', unit: '초', values: [5.4, 4.9, 4.4] },
+  flame: { label: '불길 반경', unit: 'px', values: [38, 46, 54] },
+  barrier: { label: '장벽 타격 반폭', unit: 'px', values: [18, 24, 30] },
+  spear: { label: '관통 사거리', unit: 'px', values: [540, 620, 700] },
+  mark: { label: '낙뢰 반경', unit: 'px', values: [82, 98, 114] },
   echo: { label: '방향당 잔영 탄환', unit: '발', values: [1, 2, 3] },
-  gravity: { label: '끌어당김·폭발 반경', unit: 'px', values: [125, 145, 165] },
+  gravity: { label: '끌어당김·폭발 반경', unit: 'px', values: [145, 170, 195] },
   infection: { label: '처치 시 전염 반경', unit: 'px', values: [96, 115, 134] },
 } as const satisfies Record<WeaponId, { label: string; unit: string; values: readonly [number, number, number] }>;
 

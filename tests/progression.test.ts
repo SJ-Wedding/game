@@ -104,7 +104,7 @@ describe('레벨업 선택지 새로고침', () => {
 
   it('후보가 3개 이하로 남으면 직전 후보를 다시 쓴다', () => {
     const stacks = emptyStacks();
-    for (const id of ['rapid', 'split', 'power', 'vitality', 'regen', 'guard'] as const) stacks[id] = 99;
+    for (const id of ['rapid', 'split', 'power', 'vitality', 'regen', 'guard', 'wisdom', 'fortune'] as const) stacks[id] = 99;
     const c = rollChoices(new Rng(3), stacks, 0, ['swift', 'evasion', 'magnet']);
     expect(c.map((x) => (x.kind === 'upgrade' ? x.def.id : '')).sort()).toEqual(['evasion', 'magnet', 'swift']);
   });
@@ -264,4 +264,17 @@ it('경험치 상점 강화는 구매 단계별 누적 비율을 적용한다', 
     expect(sim.xp).toBeCloseTo(5 * (1 + bonus));
     expect(sim.drainEvents().find((event) => event.type === 'pickup')?.amount).toBeCloseTo(sim.xp);
   });
+});
+
+it('상점 행운과 전투의 행운의 별을 모두 등급 확률에 반영한다', () => {
+  const sim = makeSim({ meta: { luck: 5 }, presetUpgrades: { fortune: 2 } });
+  expect(sim.luck).toBe(7);
+  const weights = gradeWeights(sim.luck);
+  expect(weights[0]).toBeLessThan(gradeWeights(0)[0]);
+  expect(weights[3]).toBeGreaterThan(gradeWeights(0)[3]);
+  const firstRun = makeSim({ meta: { luck: 5 } });
+  firstRun.gainXp(firstRun.xpNeeded);
+  firstRun.step(IDLE_INPUT);
+  expect(firstRun.choices.every((choice) => choice.kind === 'upgrade' && choice.def.weapon)).toBe(true);
+  expect(firstRun.choices.some((choice) => choice.kind === 'upgrade' && choice.grade !== 'common')).toBe(true);
 });

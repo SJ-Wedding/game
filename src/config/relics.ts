@@ -1,4 +1,7 @@
 export const RELICS = {
+  swarm: { source: 'level', symbol: '⋇', name: '군집의 북', effect: '일반 몬스터 생성 빈도와 동시 등장 한도 +30%. 경험치 획득량 +25%.' },
+  bloodPrice: { source: 'level', symbol: '◆', name: '피의 계약서', effect: '받는 피해 +25%. 경험치 획득량 +35%.' },
+  elitePact: { source: 'elite', symbol: '♜', name: '쌍둥이 수호자의 인장', effect: '이후 균열 수호자 등장마다 한 마리가 더 등장합니다. 경험치 획득량 +30%.' },
   oath: { source: 'level', symbol: '✦', name: '사냥꾼의 맹세', effect: '기본 사격 속도 −15%. 획득 후 25마리 처치마다 모든 피해 +4%, 최대 +32%.' },
   buckle: { source: 'level', symbol: '➤', name: '방랑자의 버클', effect: '2초 이상 연속으로 이동하면 이동 속도 +15%. 멈추면 초기화됩니다.' },
   knot: { source: 'level', symbol: '◇', name: '수호자의 매듭', effect: '최대 체력의 20% 이상 피해를 받으면 3초간 받는 피해 −40%. 재사용 25초.' },

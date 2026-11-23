@@ -30,6 +30,7 @@ export class Hud {
   private bossText: HTMLElement;
   private banner: HTMLElement;
   private chips: HTMLElement;
+  private recipes: HTMLButtonElement;
   private xpGainText: HTMLElement;
   private xpBatch = 0;
   private xpBatchAt = 0;
@@ -62,6 +63,9 @@ export class Hud {
     ]);
     this.banner = el('div', { class: 'banner', 'data-testid': 'hud-banner' });
     this.chips = el('div', { class: 'chips' });
+    this.recipes = el('button', { class: 'hud-recipes', type: 'button', 'data-testid': 'hud-recipes' }, [
+      '조합식 ', el('kbd', { text: 'C' }),
+    ]);
     this.xpGainText = el('span', { class: 'xp-recent', 'data-testid': 'xp-recent' });
     this.relicSlots = el('div', { class: 'relic-slots' });
     this.relicBox = el('section', { class: 'hud-relics hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
@@ -76,11 +80,15 @@ export class Hud {
         this.xpGainText,
       ]),
       el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
-      el('div', { class: 'hud-right' }, [this.kills, this.relicBox]),
+      el('div', { class: 'hud-right' }, [this.kills, this.recipes, this.relicBox]),
       this.bossBox,
       this.banner,
       this.chips,
     );
+  }
+
+  onRecipes(handler: () => void): void {
+    this.recipes.addEventListener('click', handler);
   }
 
   show(): void {
