@@ -6,11 +6,6 @@ import type { Rng } from './rng';
 import { effectValue, healOnPick, type Stacks } from './stats';
 import type { UpgradeChoice } from './types';
 
-/** 아직 최대 중첩에 도달하지 않은 강화 목록 */
-export function eligibleUpgrades(stacks: Stacks) {
-  return UPGRADES.filter((u) => (stacks[u.id] ?? 0) < u.maxStacks);
-}
-
 /** 등급별 가중치 (행운 반영) */
 export function gradeWeights(luck: number): number[] {
   const w = GRADES.map((g) => Math.max(0, g.weight + g.luckShift * luck));
@@ -35,7 +30,7 @@ export function luckFor(level: number, metaLuck: number): number {
 }
 
 /**
- * 레벨업 후보를 뽑는다. 최대 중첩인 강화는 제외하며, 같은 강화가 두 번 나오지 않는다.
+ * 일반 강화 후보를 뽑는다. 같은 강화가 한 선택 화면에 두 번 나오지 않는다.
  * exclude 에 있는 강화(새로고침 직전 후보)는 다른 후보가 충분하면 제외한다.
  * 후보가 하나도 없으면 대체 선택지(응급 처치)를 준다.
  * 후보 1개마다 난수 2개(종류·등급)를 소비하므로 같은 시드·같은 선택 → 같은 후보.
@@ -47,7 +42,7 @@ export function rollChoices(
   exclude: UpgradeId[] = [],
   count: number = PROGRESSION_CONFIG.choiceCount,
 ): UpgradeChoice[] {
-  const all = eligibleUpgrades(stacks);
+  const all = UPGRADES;
   const fresh = all.filter((u) => !exclude.includes(u.id));
   const pool = (fresh.length >= count ? fresh : [...fresh, ...all.filter((u) => exclude.includes(u.id))]).slice();
   const out: UpgradeChoice[] = [];
@@ -67,7 +62,7 @@ export function rollChoices(
 export function applyUpgrade(stacks: Stacks, id: UpgradeId): boolean {
   const def = UPGRADE_BY_ID[id];
   if (!def) return false;
-  if ((stacks[id] ?? 0) >= def.maxStacks) return false;
+  if (def.maxStacks !== undefined && (stacks[id] ?? 0) >= def.maxStacks) return false;
   stacks[id] = (stacks[id] ?? 0) + 1;
   return true;
 }

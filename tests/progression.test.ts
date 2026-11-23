@@ -71,14 +71,14 @@ describe('레벨업 보상 등급', () => {
     expect(gradeWeights(100)[0]).toBeGreaterThan(0); // 일반 등급이 0 이 되지는 않는다
   });
 
-  it('중첩 한도는 등급과 관계없이 선택 횟수로 센다', () => {
+  it('일반 중첩 수는 등급과 관계없이 선택 횟수로 센다', () => {
     const sim = makeSim({ seed: 4, god: true });
     for (let i = 0; i < 300; i++) {
       sim.gainXp(10_000);
       sim.step(IDLE_INPUT);
       while (sim.phase === 'levelup') sim.choose(0);
     }
-    expect(sim.stacks.split).toBeLessThanOrEqual(3);
+    expect(sim.stacks.split).toBeGreaterThan(3);
     expect(sim.picks.filter((p) => p.id === 'split').length).toBe(sim.stacks.split);
   });
 });
@@ -102,11 +102,12 @@ describe('레벨업 선택지 새로고침', () => {
     expect(sim.elapsed).toBe(t); // 새로고침해도 레벨업 중에는 시간이 멈춰 있다
   });
 
-  it('후보가 3개 이하로 남으면 직전 후보를 다시 쓴다', () => {
+  it('기존 한도보다 높은 후보도 새로고침의 제외 규칙을 따른다', () => {
     const stacks = emptyStacks();
-    for (const id of ['rapid', 'split', 'power', 'vitality', 'regen', 'guard', 'wisdom', 'fortune'] as const) stacks[id] = 99;
+    for (const id of ['swift', 'evasion', 'magnet'] as const) stacks[id] = 10;
     const c = rollChoices(new Rng(3), stacks, 0, ['swift', 'evasion', 'magnet']);
-    expect(c.map((x) => (x.kind === 'upgrade' ? x.def.id : '')).sort()).toEqual(['evasion', 'magnet', 'swift']);
+    expect(c).toHaveLength(3);
+    expect(c.every((choice) => choice.kind === 'upgrade' && !['swift', 'evasion', 'magnet'].includes(choice.def.id))).toBe(true);
   });
 });
 

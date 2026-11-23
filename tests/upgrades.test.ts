@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { FUSION_IDS } from '../src/config/weapons';
+import { WEAPON_MAX_RANK } from '../src/config/weapons';
 import { PLAYER_BASE_STATS } from '../src/config/player';
-import { ALL_UPGRADES, UPGRADES, UPGRADE_BY_ID } from '../src/config/upgrades';
+import { UPGRADES, UPGRADE_BY_ID } from '../src/config/upgrades';
 import { Rng } from '../src/core/rng';
 import { computeStats, effectValue, healOnPick } from '../src/core/stats';
 import { emptyStacks } from '../src/core/stats';
@@ -18,56 +18,31 @@ describe('강화 구성', () => {
 });
 
 describe('강화 중첩 한도', () => {
-  it('최대 중첩에 도달한 강화는 후보에서 제외된다', () => {
+  it('기존 최대치를 넘어도 일반 강화가 후보에 나오고 적용된다', () => {
     const stacks = emptyStacks();
-    stacks.split = UPGRADES.find((u) => u.id === 'split')!.maxStacks;
-    stacks.rapid = UPGRADES.find((u) => u.id === 'rapid')!.maxStacks;
+    for (const upgrade of UPGRADES) stacks[upgrade.id] = 8;
     const rng = new Rng(5);
-    for (let i = 0; i < 500; i++) {
-      const ids = rollChoices(rng, stacks).map((c) => (c.kind === 'upgrade' ? c.def.id : c.id));
-      expect(ids).not.toContain('split');
-      expect(ids).not.toContain('rapid');
-      expect(new Set(ids).size).toBe(ids.length); // 중복 없음
-      expect(ids.length).toBe(3);
+    const choices = rollChoices(rng, stacks);
+    expect(choices).toHaveLength(3);
+    for (const choice of choices) {
+      if (choice.kind !== 'upgrade') throw new Error('일반 강화 후보가 필요합니다');
+      expect(choice.nextStack).toBe(9);
+      expect(applyUpgrade(stacks, choice.def.id)).toBe(true);
+      expect(stacks[choice.def.id]).toBe(9);
     }
   });
 
-  it('남은 강화가 3개 미만이면 그만큼만, 0개면 대체 선택지(응급 처치)를 준다', () => {
+  it('특수 무기는 최대 레벨까지만 강화할 수 있다', () => {
     const stacks = emptyStacks();
-    for (const u of UPGRADES) stacks[u.id] = u.maxStacks;
-    stacks.magnet = 0;
-    const one = rollChoices(new Rng(1), stacks);
-    expect(one.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id))).toEqual(['magnet']);
-    stacks.magnet = 3;
-    const none = rollChoices(new Rng(1), stacks);
-    expect(none).toHaveLength(1);
-    expect(none[0].kind).toBe('fallback');
+    for (let i = 0; i < WEAPON_MAX_RANK; i++) expect(applyUpgrade(stacks, 'chain')).toBe(true);
+    expect(applyUpgrade(stacks, 'chain')).toBe(false);
+    expect(stacks.chain).toBe(WEAPON_MAX_RANK);
   });
 
-  it('한도를 넘는 적용은 거부된다', () => {
-    const stacks = emptyStacks();
-    for (let i = 0; i < 3; i++) expect(applyUpgrade(stacks, 'split')).toBe(true);
-    expect(applyUpgrade(stacks, 'split')).toBe(false);
-    expect(stacks.split).toBe(3);
-  });
-
-  it('게임에서 레벨업을 계속해도 어떤 강화도 한도를 넘지 않고, 모두 채우면 응급 처치만 나온다', () => {
-    const sim = makeSim({ seed: 11, god: true });
-    const totalStacks = ALL_UPGRADES.reduce((s, u) => s + u.maxStacks, 0);
-    for (let lv = 0; lv < totalStacks + 10; lv++) {
-      sim.gainXp(100_000);
-      sim.step(IDLE_INPUT);
-      let guard = 0;
-      while (sim.phase === 'levelup' && guard++ < 500) {
-        // 매번 다른 위치의 후보를 골라 다양한 조합을 시험
-        expect(sim.choose(lv % sim.choices.length)).toBe(true);
-        for (const u of ALL_UPGRADES) expect(sim.stacks[u.id]).toBeLessThanOrEqual(u.maxStacks);
-      }
-    }
-    for (const u of ALL_UPGRADES) expect(sim.stacks[u.id]).toBe(u.maxStacks);
-    expect(sim.pickOrder.filter((id) => id !== 'recover')).toHaveLength(totalStacks + FUSION_IDS.length);
-    expect([...sim.weapons.fusions].sort()).toEqual([...FUSION_IDS].sort());
-    expect(sim.pickOrder).toContain('recover');
+  it('일반 강화 4중첩 이상이 실제 능력치에 반영된다', () => {
+    const sim = makeSim({ presetUpgrades: { split: 6, wisdom: 4 } });
+    expect(sim.stats.projectileCount).toBe(7);
+    expect(sim.stats.xpGain).toBeCloseTo(1.4);
   });
 });
 

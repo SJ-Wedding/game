@@ -9,7 +9,7 @@ import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
 import { DROPS, DROP_CONFIG, type DropKind } from '../config/drops';
-import { ALL_UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
+import { ALL_UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeId } from '../config/upgrades';
 import { metaBonus, type MetaBonus, type MetaPurchases } from './meta';
 import { bossInvulnerable, createBoss, updateBoss } from './boss';
 import { createEnemy, updateEnemies } from './enemies';
@@ -22,7 +22,7 @@ import type {
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
 import { WeaponSystem } from './weapons';
-import { applyUpgrade, luckFor, rollRunChoices } from './upgrades';
+import { applyUpgrade, luckFor, rollGrade, rollRunChoices } from './upgrades';
 
 export interface SimOptions {
   seed: number;
@@ -64,7 +64,8 @@ export class GameSim {
   readonly weapons = new WeaponSystem(this);
   readonly relics = new RelicEffects(this);
   private readonly rngRelic: Rng;
-  private readonly pendingRelics: RelicSource[] = [];
+  private readonly pendingRewards: (RelicSource | 'armory')[] = [];
+  armoryOpen = false;
   readonly options: SimOptions;
 
   /** 경과 틱. elapsed = tick / tickRate */
@@ -251,7 +252,7 @@ export class GameSim {
     this.updatePickups(dt);
     this.cleanup();
     this.checkEnd();
-    if (this.phase === 'combat' && (this.pendingLevels || this.pendingRelics.length)) this.openLevelUp();
+    if (this.phase === 'combat' && (this.pendingLevels || this.pendingRewards.length)) this.openLevelUp();
     return true;
   }
 
@@ -589,13 +590,13 @@ export class GameSim {
 
   damageEnemy(e: Enemy, amount: number, basic = false): void {
     if (e.dead) return;
-    e.hp -= amount * this.relics.damageMultiplier(e, basic);
+    e.hp -= amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
       e.dead = true;
       this.kills++;
-      if (e.kind === 'elite') this.pendingRelics.push('elite');
+      if (e.kind === 'elite') this.pendingRewards.push('elite', 'armory');
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
       this.rollDrop(e);
@@ -607,7 +608,7 @@ export class GameSim {
   damageBoss(amount: number, basic = false): void {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
-    b.hp = Math.max(0, b.hp - amount * this.relics.damageMultiplier(b, basic));
+    b.hp = Math.max(0, b.hp - amount * this.relics.damageMultiplier(b, basic) * (basic ? 1 - BOSS_CONFIG.basicResistance : 1));
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
     if (b.hp <= 0) {
@@ -674,15 +675,45 @@ export class GameSim {
     // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
     const level = this.startPickOpen ? 0 : this.pendingLevel;
     const choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
-    const fusions = level < 3 ? [] : FUSION_IDS.filter((id) => !this.weapons.fusions.has(id)
-      && WEAPON_FUSIONS[id].pair.every((weapon) => this.stacks[weapon] === WEAPON_MAX_RANK));
-    return [...fusions.map((id): UpgradeChoice => ({ kind: 'fusion', id })), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
+    return [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
+  }
+
+  private fusionChoices(): UpgradeChoice[] {
+    return FUSION_IDS.filter((id) => !this.weapons.fusions.has(id)
+      && WEAPON_FUSIONS[id].pair.every((weapon) => this.stacks[weapon] === WEAPON_MAX_RANK))
+      .map((id) => ({ kind: 'fusion', id }));
+  }
+
+  private rollArmoryChoices(): UpgradeChoice[] {
+    const choices = this.fusionChoices().slice(0, PROGRESSION_CONFIG.choiceCount);
+    const available = WEAPON_UPGRADES.filter((def) => this.stacks[def.id] < def.maxStacks);
+    const featured = new Set<UpgradeId>();
+    for (const id of FUSION_IDS) {
+      const [a, b] = WEAPON_FUSIONS[id].pair;
+      if (this.stacks[a] > 0) featured.add(b);
+      if (this.stacks[b] > 0) featured.add(a);
+    }
+    const groups = [available.filter((def) => featured.has(def.id)), available.filter((def) => !featured.has(def.id))];
+    for (const pool of groups) {
+      while (choices.length < PROGRESSION_CONFIG.choiceCount && pool.length) {
+        const def = pool.splice(this.rngWeapon.int(pool.length), 1)[0];
+        choices.push({ kind: 'upgrade', def, grade: rollGrade(this.rngWeapon, this.luck), nextStack: this.stacks[def.id] + 1 });
+      }
+    }
+    return choices;
   }
 
   private openLevelUp(): void {
     this.choices = [];
-    while (this.pendingRelics.length && !this.choices.length) {
-      this.choices = rollRelics(this.pendingRelics.shift()!, this.rngRelic, this.relics.owned);
+    this.armoryOpen = false;
+    while (this.pendingRewards.length && !this.choices.length) {
+      const source = this.pendingRewards.shift()!;
+      if (source === 'armory') {
+        this.choices = this.rollArmoryChoices();
+        this.armoryOpen = this.choices.length > 0;
+      } else {
+        this.choices = rollRelics(source, this.rngRelic, this.relics.owned);
+      }
     }
     if (!this.choices.length && this.pendingLevels) {
       this.choices = this.rollLevelChoices();
@@ -704,7 +735,7 @@ export class GameSim {
     if (c.kind === 'relic') {
       this.relics.acquire(c.id);
     } else {
-      const rewardRelic = !this.startPickOpen && this.pendingLevel % 5 === 0;
+      const rewardRelic = !this.armoryOpen && !this.startPickOpen && this.pendingLevel % 5 === 0;
       if (c.kind === 'fusion') {
         this.weapons.fusions.add(c.id);
         this.pickOrder.push(c.id);
@@ -718,9 +749,11 @@ export class GameSim {
         this.relics.heal(c.heal);
         this.pickOrder.push(c.id);
       }
-      this.pendingLevels--;
-      this.startPickOpen = false;
-      if (rewardRelic) this.pendingRelics.push('level');
+      if (!this.armoryOpen) {
+        this.pendingLevels--;
+        this.startPickOpen = false;
+      }
+      if (rewardRelic) this.pendingRewards.push('level');
     }
     this.openLevelUp();
     this.acc = 0;
@@ -729,7 +762,7 @@ export class GameSim {
 
   /** 레벨업 후보 새로고침. 남은 횟수가 없거나 레벨업 중이 아니면 false */
   reroll(): boolean {
-    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.choices[0]?.kind === 'relic') return false;
+    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.armoryOpen || this.choices[0]?.kind === 'relic') return false;
     const prev = this.choices.filter((c) => c.kind === 'upgrade').map((c) => (c.kind === 'upgrade' ? c.def.id : ('' as UpgradeId)));
     this.rerollsLeft--;
     this.rerollsUsed++;

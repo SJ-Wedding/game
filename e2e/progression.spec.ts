@@ -111,4 +111,51 @@ test.describe('성장 시스템', () => {
     const s = await snap(page);
     expect(s.stats!.damage).toBeCloseTo(9 * 1.04, 5);
   });
+  test('승리 후 키보드로 재시작해도 유물 팝업을 거쳐야 하고, 선택 전 새로고침해도 후보가 유지된다', async ({ page }) => {
+    await startRun(page, '&seed=39');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      for (const id of ['oath', 'flint', 'crown', 'anchor']) sim.relics.acquire(id);
+      sim.spawnBoss();
+      sim.boss.state = 'idle';
+      sim.damageBoss(100000);
+    });
+    await expect(page.getByTestId('outcome')).toHaveText('승리');
+    await page.waitForTimeout(700);
+    await page.keyboard.press('Enter');
+    const modal = page.getByRole('dialog', { name: '다음 판에 가져갈 유물' });
+    await expect(modal).toBeVisible();
+    expect((await snap(page)).runsStarted).toBe(1);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('outcome')).toHaveText('승리');
+    await page.reload();
+    await page.getByTestId('play').click();
+    await expect(modal).toBeVisible();
+    const options = modal.locator('.relic-pick');
+    await expect(options).toHaveCount(4);
+    for (let i = 0; i < 3; i++) await options.nth(i).click();
+    await expect(options.nth(3)).toBeDisabled();
+    await expect(page.getByTestId('carry-confirm')).toHaveText('유물 3개로 시작');
+    await page.getByTestId('carry-confirm').click();
+    await expect(page.getByTestId('hud-relics').locator('[data-relic]')).toHaveCount(3);
+    await expect(modal).toBeHidden();
+  });
+
+  test('엘리트 처치 시 유물 선택 뒤 준비된 합체를 전용 보상에서 고를 수 있다', async ({ page }) => {
+    await startRun(page, '&seed=41&god=1');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      Object.assign(sim.stacks, { chain: 3, mark: 3 });
+      const elite = sim.spawnEnemy('elite', sim.player.x + 150, sim.player.y);
+      sim.damageEnemy(elite, elite.hp);
+    });
+    await expect(page.getByRole('heading', { name: '중간 보스 유물' })).toBeVisible();
+    await page.getByTestId('choice-0').click();
+    await expect(page.getByRole('heading', { name: '수호자의 무기 보상' })).toBeVisible();
+    await expect(page.getByTestId('reroll')).toHaveCount(0);
+    await page.locator('.fusion-card').filter({ hasText: '뇌광 연쇄' }).click();
+    await expect(page.locator('.chips .fusion-chip')).toHaveText('뇌광 연쇄 Lv 3');
+    await expect(page.locator('#overlay')).toBeHidden();
+  });
+
 });

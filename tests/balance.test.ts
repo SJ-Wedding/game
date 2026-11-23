@@ -49,3 +49,15 @@ describe('15분 설계', () => {
     }
   });
 });
+
+it('후반 적은 더 높은 체력을 가지며 갑주는 기본탄 피해에만 적용된다', () => {
+  const sim = new GameSim({ seed: 7, startTime: 540 });
+  const late = sim.spawnEnemy('charger', 900, 900);
+  const early = new GameSim({ seed: 7 }).spawnEnemy('charger', 900, 900);
+  expect(late.maxHp).toBeGreaterThan(early.maxHp);
+  expect(late.basicResistance).toBe(0.30);
+  sim.damageEnemy(late, 20, true);
+  expect(late.maxHp - late.hp).toBeCloseTo(14);
+  sim.damageEnemy(late, 20);
+  expect(late.maxHp - late.hp).toBeCloseTo(34);
+});

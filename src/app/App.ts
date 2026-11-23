@@ -11,7 +11,7 @@ import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'status' | 'shop';
+export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'status' | 'shop';
 
 /** 렌더러(Phaser 씬)가 App 에 제공하는 기능 */
 export interface SceneLink {
@@ -56,6 +56,7 @@ export class App {
   private readonly screens: Screens;
   private resultShownAt = 0;
   private assistedCarry: RelicId[] = [];
+  private assistedRelicDraft?: RelicId[];
 
   constructor(deps: AppDeps) {
     this.save = deps.save;
@@ -104,6 +105,23 @@ export class App {
     const seed = this.dev.enabled && this.dev.seed !== null ? this.dev.seed : randomSeed();
     const options = simOptionsFor(this.dev, seed);
     const assisted = Boolean(options.god || options.startTime || options.presetUpgrades);
+    const draft = assisted ? this.assistedRelicDraft : this.save.pendingRelicDraft;
+    if (!retry && draft) {
+      const back = this.screen === 'result' ? () => this.showResultView() : () => this.showTitle();
+      this.screen = 'carry';
+      this.screens.showCarry(draft, (selection) => {
+        const carry = validCarry(selection.filter((id) => draft.includes(id)));
+        if (assisted) {
+          this.assistedRelicDraft = undefined;
+          this.assistedCarry = carry;
+        } else {
+          this.save = { ...this.save, relicCarry: carry, pendingRelicDraft: undefined };
+          writeSave(this.storage, this.save);
+        }
+        this.startRun();
+      }, back);
+      return;
+    }
     const carryRelics = retry ? this.sim?.options.carryRelics
       : assisted ? this.assistedCarry : this.save.relicCarry;
     this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics });
@@ -154,7 +172,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = reward?.kind === 'relic'
+    const title = sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
@@ -162,6 +180,7 @@ export class App {
       pending: sim.pendingLevels,
       choices: sim.choices,
       rerollsLeft: sim.rerollsLeft,
+      armory: sim.armoryOpen,
       onChoose: (i) => this.choose(i),
       onReroll: () => this.reroll(),
     });
@@ -233,21 +252,22 @@ export class App {
     const result = sim.result!;
     const { data, newRecords, tokens } = recordRun(this.save, result);
     this.save = data;
+    if (result.outcome === 'victory') {
+      if (result.assisted) this.assistedRelicDraft = result.relics ?? [];
+      else this.save = { ...this.save, pendingRelicDraft: result.relics ?? [] };
+    }
     writeSave(this.storage, this.save);
     this.lastResult = result;
     this.lastNewRecords = newRecords;
     this.lastTokens = tokens;
+    this.showResultView();
+  }
+
+  private showResultView(): void {
+    if (!this.lastResult) return;
     this.screen = 'result';
     this.resultShownAt = performance.now();
-    this.screens.showResult(result, newRecords, tokens, () => this.startRun(), () => this.showTitle(), (selection) => {
-      if (result.outcome !== 'victory') return;
-      const carry = validCarry(selection.filter((id) => result.relics?.includes(id)));
-      if (result.assisted) this.assistedCarry = carry;
-      else {
-        this.save = { ...this.save, relicCarry: carry };
-        writeSave(this.storage, this.save);
-      }
-    });
+    this.screens.showResult(this.lastResult, this.lastNewRecords, this.lastTokens, () => this.startRun(), () => this.showTitle());
   }
 
   /** 렌더 루프에서 매 프레임 호출. 전투 중일 때만 시간이 흐른다. */
@@ -335,12 +355,14 @@ export class App {
         if (e.code === 'Space') e.preventDefault();
         break;
       }
-      case 'result':
-        if (target?.closest('.relic-pick') && (e.code === 'Enter' || e.code === 'Space')) {
+      case 'carry':
+        if (e.code === 'Escape' && !e.repeat) this.screens.cancelCarry();
+        if (e.code === 'Enter' || e.code === 'Space') {
           e.preventDefault();
-          if (!e.repeat) target.closest<HTMLButtonElement>('.relic-pick')?.click();
-          break;
+          if (!e.repeat && target instanceof HTMLButtonElement) target.click();
         }
+        break;
+      case 'result':
         // 죽는 순간 누르고 있던 키로 바로 넘어가지 않도록 잠깐 기다린다
         if ((e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR') && !e.repeat && performance.now() - this.resultShownAt > 600) {
           e.preventDefault();

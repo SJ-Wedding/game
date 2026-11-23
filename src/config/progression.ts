@@ -17,7 +17,7 @@ export const PROGRESSION_CONFIG = {
   choiceCount: 3,
   /** 끌려오는 경험치 보석 속도(px/초) */
   gemMagnetSpeed: 560,
-  /** 모든 강화가 최대 중첩일 때 대신 나오는 선택지 */
+  /** 후보가 없을 때 대신 나오는 선택지 */
   fallback: {
     id: 'recover',
     name: '응급 처치',

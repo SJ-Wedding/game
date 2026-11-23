@@ -142,6 +142,8 @@ export const ENEMY_CONFIG: {
  * 예) hpPerMinute 0.1 이면 10분에 등장한 적의 체력은 기본값의 2배.
  */
 export const ENEMY_SCALING = {
-  hpPerMinute: 0.075,
+  hpPerMinute: 0.09,
+  armorAt: 540,
+  basicResistance: 0.30,
   damagePerMinute: 0.02,
 } as const;

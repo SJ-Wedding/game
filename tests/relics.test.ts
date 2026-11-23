@@ -25,7 +25,7 @@ describe('유물 보상 및 계승', () => {
   });
 
   it('중간 보스 보상은 전투를 멈추고 중복 없는 별도 후보를 보여준다', () => {
-    const sim = makeSim({ carryRelics: ['crown'] });
+    const sim = makeSim({ carryRelics: ['crown'], presetUpgrades: { mark: 2 } });
     const elite = sim.spawnEnemy('elite', 900, 900);
     sim.damageEnemy(elite, elite.hp);
     sim.step(IDLE_INPUT);
@@ -40,6 +40,12 @@ describe('유물 보상 및 계승', () => {
     }
     sim.choose(0);
     expect(sim.relics.owned.size).toBe(2);
+    expect(sim.armoryOpen).toBe(true);
+    expect(sim.choices.every((c) => c.kind === 'upgrade' && c.def.weapon)).toBe(true);
+    expect(sim.choices.some((c) => c.kind === 'upgrade' && c.def.id === 'chain')).toBe(true);
+    expect(sim.reroll()).toBe(false);
+    expect(sim.choose(0)).toBe(true);
+    expect(sim.pendingLevels).toBe(0);
     expect(sim.phase).toBe('combat');
   });
 
@@ -147,7 +153,7 @@ describe('유물과 전투의 상호작용', () => {
   });
 
   it('폭풍의 왕관은 무기가 없을 때 피해를 높이고, 획득 후 번개를 최대 여섯 번 연결한다', () => {
-    const sim = makeSim({ carryRelics: ['crown'] });
+    const sim = makeSim({ carryRelics: ['crown'], presetUpgrades: { mark: 2 } });
     const enemies = Array.from({ length: 6 }, (_, i) => sim.spawnEnemy('chaser', sim.player.x + 80 + i * 60, sim.player.y));
     enemies.forEach((e) => { e.hp = e.maxHp = 1000; });
     expect(sim.relics.damageMultiplier(enemies[0], false)).toBe(1.05);
@@ -223,4 +229,11 @@ it('군집의 북은 일반 스폰을 늘리고 수호자 인장은 예약된 �
   expect(base.spawnLog.filter((entry) => entry.kind === 'elite')).toHaveLength(1);
   expect(relics.spawnLog.filter((entry) => entry.kind === 'elite')).toHaveLength(2);
   expect(relics.spawnLog.filter((entry) => entry.kind !== 'elite').length).toBeGreaterThan(base.spawnLog.filter((entry) => entry.kind !== 'elite').length);
+});
+
+it('승리 후 미선택 유물은 선택 가능 목록 전체를 저장한다', () => {
+  const draft = ['oath', 'flint', 'crown', 'anchor', 'heart'];
+  const data = parseSave(JSON.stringify({ ...defaultSave(), pendingRelicDraft: [...draft, 'bogus', 'oath'] })).data;
+  expect(data.pendingRelicDraft).toEqual(draft);
+  expect(data.relicCarry).toBeUndefined();
 });

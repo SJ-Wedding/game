@@ -52,7 +52,7 @@ const NEW_RECORD_LABEL: Record<NewRecord, string> = {
 
 export class Screens {
   private root: HTMLElement;
-  current: 'none' | 'title' | 'pause' | 'levelup' | 'result' | 'status' | 'shop' = 'none';
+  current: 'none' | 'title' | 'pause' | 'levelup' | 'result' | 'carry' | 'status' | 'shop' = 'none';
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -195,6 +195,7 @@ export class Screens {
     pending: number;
     choices: UpgradeChoice[];
     rerollsLeft: number;
+    armory: boolean;
     onChoose: (i: number) => void;
     onReroll: () => void;
   }): void {
@@ -221,7 +222,7 @@ export class Screens {
           ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',
             text: `${WEAPON_RANK_EFFECTS[weapon].label} ${weaponRankEffect(weapon, c.nextStack - 1)} → ${weaponRankEffect(weapon, c.nextStack)}${WEAPON_RANK_EFFECTS[weapon].unit}`,
           })] : []),
-          el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
+          el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? '신규 강화' : `${c.nextStack - 1} → ${c.nextStack}중첩` }),
         );
       } else if (c.kind === 'fusion') {
         const recipe = WEAPON_FUSIONS[c.id];
@@ -252,9 +253,9 @@ export class Screens {
       'levelup',
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
-        el('p', { class: 'muted', text: reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('p', { class: 'muted', text: opts.armory ? '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요' : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: 'cards' }, cards),
-        ...(reward ? [] : [reroll]),
+        ...(reward || opts.armory ? [] : [reroll]),
       ]),
     );
   }
@@ -363,7 +364,7 @@ export class Screens {
     );
   }
 
-  showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void, onCarry: (ids: RelicId[]) => void): void {
+  showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void): void {
     const win = result.outcome === 'victory';
     let cause: string;
     if (result.cause === 'boss') cause = `${josa(BOSS_CONFIG.name, '을/를')} 처치했습니다!`;
@@ -373,7 +374,7 @@ export class Screens {
         result.bossHpRatio !== null ? ` (보스 체력 ${Math.ceil(result.bossHpRatio * 100)}% 남음)` : ''
       }.`;
 
-    const restart = el('button', { class: 'primary big', 'data-testid': 'restart', 'data-autofocus': '' }, [win ? '다음 판 시작 ' : '다시 시작 ', el('kbd', { text: 'Enter' })]);
+    const restart = el('button', { class: 'primary big', 'data-testid': 'restart', 'data-autofocus': '' }, [win ? '다음 판 유물 선택 ' : '다시 시작 ', el('kbd', { text: 'Enter' })]);
     restart.addEventListener('click', onRestart);
     const title = el('button', { 'data-testid': 'result-title', text: '타이틀로' });
     title.addEventListener('click', onTitle);
@@ -412,11 +413,10 @@ export class Screens {
               el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}) — 타이틀의 강화 상점에서 사용` }),
             ])
           : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
-        ...(win && result.relics?.length ? [this.carrySelection(result.relics, onCarry)] : []),
         restart,
         el('div', { class: 'row buttons' }, [title]),
         el('small', { class: 'muted' }, [
-          win ? 'Enter · Space · R 키로 다음 판 시작' : 'Enter · Space · R 키로 다시 시작',
+          win ? 'Enter · Space · R 키로 계승 유물 선택' : 'Enter · Space · R 키로 다시 시작',
           el('br'),
           `시드 ${result.seed}${result.assisted ? ' · 개발 옵션 사용 (기록 미반영)' : ''}`,
         ]),
@@ -424,9 +424,17 @@ export class Screens {
     );
   }
 
-  private carrySelection(ids: RelicId[], onChange: (ids: RelicId[]) => void): HTMLElement {
+  cancelCarry(): void {
+    this.root.querySelector<HTMLButtonElement>('[data-testid="carry-back"]')?.click();
+  }
+
+  showCarry(ids: RelicId[], onConfirm: (ids: RelicId[]) => void, onBack: () => void): void {
     const selected = new Set<RelicId>();
     const count = el('span', { class: 'muted', 'aria-live': 'polite', text: `0 / ${CARRY_LIMIT}` });
+    const start = el('button', { class: 'primary', type: 'button', 'data-testid': 'carry-confirm', text: '유물 없이 시작' });
+    start.addEventListener('click', () => onConfirm([...selected]));
+    const back = el('button', { type: 'button', 'data-testid': 'carry-back', text: '돌아가기' });
+    back.addEventListener('click', onBack);
     const buttons = ids.map((id) => {
       const relic = RELICS[id];
       const button = el('button', { class: 'relic-pick', type: 'button', 'aria-pressed': 'false', 'data-relic': id }, [
@@ -440,14 +448,17 @@ export class Screens {
         button.setAttribute('aria-pressed', String(selected.has(id)));
         count.textContent = `${selected.size} / ${CARRY_LIMIT}`;
         for (const item of buttons) item.disabled = selected.size >= CARRY_LIMIT && item.getAttribute('aria-pressed') !== 'true';
-        onChange([...selected]);
+        start.textContent = selected.size ? `유물 ${selected.size}개로 시작` : '유물 없이 시작';
       });
       return button;
     });
-    return el('section', { class: 'carry-relics', 'aria-label': '다음 판에 가져갈 유물' }, [
-      el('h3', { text: '다음 판에 가져갈 유물' }), count,
-      el('div', { class: 'carry-grid' }, buttons),
-    ]);
+    (buttons[0] ?? back).setAttribute('data-autofocus', '');
+    this.mount('carry', el('div', { class: 'panel carry', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'carry-title' }, [
+      el('h2', { id: 'carry-title', text: '다음 판에 가져갈 유물' }),
+      el('p', { class: 'muted', text: ids.length ? `유물을 최대 ${CARRY_LIMIT}개 고르세요.` : '이번 판에 획득한 유물이 없습니다.' }),
+      ...(ids.length ? [count, el('div', { class: 'carry-grid' }, buttons)] : []),
+      el('div', { class: 'row buttons' }, [back, start]),
+    ]));
   }
 
 }

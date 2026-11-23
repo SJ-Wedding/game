@@ -211,9 +211,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 :is(.pause, .status) .relic-tooltip { left: 50%; right: auto; transform: translateX(-50%); }
 .card.relic-card { border-color: #aa7954; background: #241c2a; }
 .relic-symbol { font-size: 1.6em; line-height: 1; }
-#overlay[data-screen='result'] { align-items: safe center; }
-.result:has(.carry-relics) { gap: 0.55em; padding-block: 1.15em; }
-.carry-relics { width: 100%; }
+#overlay:is([data-screen='result'], [data-screen='carry']) { align-items: safe center; }
+.carry .carry-grid { width: 100%; max-height: 42vh; }
 .carry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(17em, 100%), 1fr)); gap: 0.5em; margin-top: 0.6em; max-height: 30vh; overflow-y: auto; padding: 1px; }
 .relic-pick { display: grid; gap: 0.25em; text-align: left; }
 .relic-pick small { color: var(--muted); }

@@ -197,7 +197,7 @@ export class Hud {
       if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
       else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
       else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
-      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장! ${formatTime(RUN_CONFIG.timeLimit)} 전에 처치하세요`, 4);
+      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장 — 기본탄 피해 감소 · ${formatTime(RUN_CONFIG.timeLimit)}까지 처치`, 4);
       else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
     }
     if (this.bannerUntil && performance.now() > this.bannerUntil) {

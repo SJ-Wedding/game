@@ -63,6 +63,7 @@ export interface Enemy {
   /** 시간 경과 피해 배율 */
   dmgMul: number;
   xp: number;
+  basicResistance: number;
   state: EnemyState;
   /** 현재 상태 남은 시간 */
   timer: number;

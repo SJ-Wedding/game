@@ -30,7 +30,11 @@ export function relicDescription(id: RelicId): string {
   return 'weapon' in relic ? `${relic.effect} 해당 무기가 없으면 모든 공격 피해 +5%.` : relic.effect;
 }
 
-export function validCarry(value: unknown): RelicId[] {
+export function validRelicIds(value: unknown): RelicId[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((id): id is RelicId => typeof id === 'string' && Object.hasOwn(RELICS, id)))].slice(0, CARRY_LIMIT);
+  return [...new Set(value.filter((id): id is RelicId => typeof id === 'string' && Object.hasOwn(RELICS, id)))];
+}
+
+export function validCarry(value: unknown): RelicId[] {
+  return validRelicIds(value).slice(0, CARRY_LIMIT);
 }

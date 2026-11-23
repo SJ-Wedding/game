@@ -235,3 +235,20 @@ it('7분 기본탄은 화면 밖 적을 겨누며 일반 적을 관통한다', (
   for (let i = 0; i < 22; i++) sim.step(IDLE_INPUT);
   expect(targets.map((enemy) => enemy.maxHp - enemy.hp)).toEqual([sim.stats.damage, sim.stats.damage, sim.stats.damage]);
 });
+
+it('엘리트 무기 보상은 준비된 합체를 제시하고 일반 레벨업 몫을 차감하지 않는다', () => {
+  const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 } });
+  sim.gainXp(sim.xpNeeded);
+  const elite = sim.spawnEnemy('elite', 900, 900);
+  sim.damageEnemy(elite, elite.hp);
+  sim.step(IDLE_INPUT);
+  expect(sim.choices[0].kind).toBe('relic');
+  sim.choose(0);
+  expect(sim.armoryOpen).toBe(true);
+  expect(sim.choices[0]).toEqual({ kind: 'fusion', id: 'storm' });
+  sim.choose(0);
+  expect(sim.weapons.fusions.has('storm')).toBe(true);
+  expect(sim.pendingLevels).toBe(1);
+  expect(sim.armoryOpen).toBe(false);
+  expect(sim.choices[0].kind).toBe('upgrade');
+});

@@ -492,6 +492,9 @@ export class GameScene extends Phaser.Scene {
     this.groundEffects.fillStyle(0x070a11, 0.55).fillCircle(e.x, e.y + 2, e.r);
     image.setVisible(true).setPosition(e.x + shake, e.y + bob)
       .setFlipX(Math.cos(angle) < -0.15).setScale(e.kind === 'elite' ? 3 : 2);
+    if (e.basicResistance > 0) {
+      this.groundEffects.lineStyle(2, 0xe2c9a3, 0.76).strokeCircle(e.x, e.y, e.r + 5);
+    }
     if (e.flash > 0) image.setTintFill(PALETTE.hit);
     else image.clearTint();
 

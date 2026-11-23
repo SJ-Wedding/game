@@ -23,6 +23,8 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
     fireSlowUntil: 0,
     dmgMul: 1 + ENEMY_SCALING.damagePerMinute * minutes,
     xp: c.xp,
+    basicResistance: t >= ENEMY_SCALING.armorAt && (kind === 'charger' || kind === 'elite')
+      ? ENEMY_SCALING.basicResistance : 0,
     state: 'move',
     timer: 0,
     // 등장 직후 바로 공격하지 않도록 첫 공격에 약간의 여유
