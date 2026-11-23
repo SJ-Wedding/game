@@ -7,7 +7,7 @@ import { makeSim, runTicks, runUntil } from './helpers';
 const BOSS_TICK = RUN_CONFIG.bossAt * RUN_CONFIG.tickRate;
 
 describe('보스 등장', () => {
-  it('처음부터 진행하면 정확히 bossAt(8:30)에 보스가 등장한다', () => {
+  it('처음부터 진행하면 정확히 bossAt(13:30)에 보스가 등장한다', () => {
     const sim = makeSim({ seed: 7, god: true });
     runUntil(sim, RUN_CONFIG.bossAt - 1 / RUN_CONFIG.tickRate);
     expect(sim.tick).toBe(BOSS_TICK - 1);
@@ -64,7 +64,7 @@ describe('승리와 패배', () => {
     expect(sim.elapsed).toBe(t); // 종료 후 시간 정지
   });
 
-  it('10:00 까지 보스를 처치하지 못하면 시간 초과 패배', () => {
+  it('15:00 까지 보스를 처치하지 못하면 시간 초과 패배', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.timeLimit - 3, god: true });
     runUntil(sim, RUN_CONFIG.timeLimit - 1 / RUN_CONFIG.tickRate);
     expect(sim.phase).not.toBe('ended');
@@ -75,7 +75,7 @@ describe('승리와 패배', () => {
     expect(sim.result!.bossHpRatio).toBeGreaterThan(0);
   });
 
-  it('처음부터 아무것도 하지 않아도(무적) 정확히 10:00 에 시간 초과로 끝난다', () => {
+  it('처음부터 아무것도 하지 않아도(무적) 정확히 15:00 에 시간 초과로 끝난다', () => {
     const sim = makeSim({ seed: 3, god: true });
     sim.player.fireCd = Infinity; // 자동 사격으로 클리어하지 않는 시간 초과 상황을 만든다.
     runUntil(sim, RUN_CONFIG.timeLimit + 10);

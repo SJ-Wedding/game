@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { collectErrors, snap } from './util';
 
 /**
- * @long — 실시간 10분 플레이 측정.
+ * @long — 실시간 15분 플레이 측정.
  *
  * 자동 플레이 봇(src/core/bot.ts)이 매 프레임 화면 상태를 보고, **브라우저 DOM 키보드·마우스 이벤트**
  * (keydown/keyup, mousedown/mousemove/mouseup, 카드 click)를 발생시켜 조작한다.

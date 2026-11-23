@@ -61,7 +61,7 @@ export const META_UNLOCKS: MetaUnlockDef[] = [
 
 /**
  * 밸런스 기준 영구 강화 (토큰 145개 사용, 3~5판 정도 플레이한 상태).
- * 시뮬레이션(npm run sim)과 밸런스 회귀 테스트는 이 상태로 "8분 30초~10분 승리"를 맞춘다.
+ * 시뮬레이션(npm run sim)과 밸런스 회귀 테스트는 이 상태로 "13분 30초~15분 승리"를 맞춘다.
  */
 export const BALANCE_REFERENCE_META: Record<string, number> = {
   hp: 2,

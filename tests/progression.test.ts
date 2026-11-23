@@ -251,8 +251,8 @@ describe('처치 드랍 아이템', () => {
 });
 
 describe('시간 규칙 유지', () => {
-  it('보스는 8:30에 등장한다', () => {
-    expect(RUN_CONFIG.bossAt).toBe(510);
+  it('보스는 13:30에 등장한다', () => {
+    expect(RUN_CONFIG.bossAt).toBe(810);
   });
 });
 

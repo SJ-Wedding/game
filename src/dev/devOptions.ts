@@ -5,8 +5,8 @@ import type { SimOptions } from '../core/sim';
 /**
  * 개발 모드 옵션. `npm run dev` 이거나 URL 에 ?dev=1 이 있으면 켜진다.
  *   ?dev=1&seed=1234            같은 시드로 시작 (스폰·강화 후보 재현)
- *   ?dev=1&start=boss           보스 직전(8:25)부터 대표 빌드로 시작
- *   ?dev=1&start=580            지정한 전투 시각(초)부터 시작
+ *   ?dev=1&start=boss           보스 직전(13:25)부터 대표 빌드로 시작
+ *   ?dev=1&start=880            지정한 전투 시각(초)부터 시작
  *   ?dev=1&god=1                무적
  */
 export interface DevOptions {

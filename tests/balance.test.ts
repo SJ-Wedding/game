@@ -6,11 +6,11 @@ import { Bot, playToEnd } from '../src/core/bot';
 import { GameSim } from '../src/core/sim';
 
 /**
- * 밸런스 회귀 테스트: 설정을 바꾼 뒤 10분 설계에서 크게 벗어나면 실패한다.
+ * 밸런스 회귀 테스트: 설정을 바꾼 뒤 15분 설계에서 크게 벗어나면 실패한다.
  * 자세한 수치는 `npm run sim` 으로 확인.
  */
-describe('10분 설계', () => {
-  it('스폰 시간표가 10분 구간 설계를 따른다', () => {
+describe('15분 설계', () => {
+  it('스폰 시간표가 15분 구간 설계를 따른다', () => {
     const at = (t: number) => SPAWN_PHASES.find((p) => t >= p.from && t < p.to)!;
     expect(Object.keys(at(40).weights)).toEqual(['chaser']);
     expect(Object.keys(at(90).weights)).toContain('charger');
@@ -18,9 +18,9 @@ describe('10분 설계', () => {
     expect(Object.keys(at(400).weights)).toEqual(expect.arrayContaining(['charger', 'spitter']));
     const firstElite = SPAWN_EVENTS.filter((e) => e.kind === 'elite').map((e) => e.at)[0];
     expect(firstElite).toBe(120);
-    expect(RUN_CONFIG.bossAt).toBe(510);
-    expect(RUN_CONFIG.timeLimit).toBe(600);
-    // 구간이 빈틈없이 0~10분을 덮는다
+    expect(RUN_CONFIG.bossAt).toBe(810);
+    expect(RUN_CONFIG.timeLimit).toBe(900);
+    // 구간이 빈틈없이 0~15분을 덮는다
     for (let t = 0; t < RUN_CONFIG.timeLimit; t += 1) expect(at(t)).toBeDefined();
   });
 
@@ -40,7 +40,7 @@ describe('10분 설계', () => {
     }
   });
 
-  it('표준 봇(기준 영구 강화)의 승리는 전투 시간 8:30~10:00 사이에 끝난다', () => {
+  it('표준 봇(기준 영구 강화)의 승리는 전투 시간 13:30~15:00 사이에 끝난다', () => {
     const wins = runs.filter((r) => r.result.outcome === 'victory');
     expect(wins.length).toBeGreaterThanOrEqual(3);
     for (const w of wins) {
