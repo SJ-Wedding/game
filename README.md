@@ -59,8 +59,9 @@ npm run build
 도메인 루트든 하위 경로(`https://아이디.github.io/저장소/`)든 그대로 동작합니다.
 플레이어는 URL 을 열기만 하면 되고 계정·설치가 필요 없습니다.
 
-- **GitHub Pages**: `dist/` 내용을 `gh-pages` 브랜치(또는 Pages 가 가리키는 폴더)에 올리고 Settings → Pages 에서 그 브랜치를 선택합니다.
-  GitHub Actions 를 쓴다면 `npm ci && npm run build` 후 `actions/upload-pages-artifact` 로 `dist` 를 올리면 됩니다.
+- **GitHub Pages (이 저장소 설정)**: `.github/workflows/deploy.yml` 이 `main` 에 푸시될 때마다 `npm test` → `npm run build` 후 `dist/` 를 자동 배포합니다.
+  처음 한 번 저장소 **Settings → Pages → Build and deployment → Source** 를 **GitHub Actions** 로 바꿔 주세요.
+  ("Deploy from a branch" 로 두면 빌드 전 소스가 그대로 올라가 빈 화면이 됩니다.) 배포 주소: `https://<계정>.github.io/<저장소>/`
 - **Netlify / Cloudflare Pages / Vercel**: 빌드 명령 `npm run build`, 게시 폴더 `dist`.
 - **S3·사내 웹서버 등**: `dist/` 를 그대로 복사.
 
