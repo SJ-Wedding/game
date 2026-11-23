@@ -30,6 +30,7 @@ const PICK_WEIGHT: Partial<Record<UpgradeId, number>> = {
   evasion: 2.4,
   swift: 2.2,
   magnet: 1.6,
+  wisdom: 2,
 };
 
 export class Bot {

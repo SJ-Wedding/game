@@ -72,7 +72,7 @@ export function applyUpgrade(stacks: Stacks, id: UpgradeId): boolean {
   return true;
 }
 
-/** 무기는 레벨 2·5·8… 처럼 세 레벨마다 일반 강화와 함께 제시된다. 무기에는 등급이 없다. */
+/** 레벨 2·5·8…에는 새 무기, 레벨 3·6·9…에는 보유 무기 강화를 제시한다. */
 export function rollRunChoices(
   rng: Rng,
   weaponRng: Rng,
@@ -82,10 +82,19 @@ export function rollRunChoices(
   exclude: UpgradeId[] = [],
 ): UpgradeChoice[] {
   const choices = rollChoices(rng, stacks, luck, exclude);
-  if (level % 3 !== 2 && choices[0].kind !== 'fallback') return choices;
-  const available = WEAPON_UPGRADES.filter((def) => !stacks[def.id]);
-  if (!available.length) return choices;
-  const weapon: UpgradeChoice = { kind: 'upgrade', def: available[weaponRng.int(available.length)], grade: 'common', nextStack: 1 };
+  const acquireWeapon = level % 3 === 2;
+  const improveWeapon = level > 0 && level % 3 === 0;
+  const onlyWeaponsRemain = choices[0].kind === 'fallback' && level > 0;
+  if (!acquireWeapon && !improveWeapon && !onlyWeaponsRemain) return choices;
+
+  const available = WEAPON_UPGRADES.filter((def) => (stacks[def.id] ?? 0) < def.maxStacks);
+  const preferred = available.filter((def) => acquireWeapon ? !stacks[def.id] : stacks[def.id] > 0);
+  const eligible = preferred.length ? preferred : acquireWeapon || onlyWeaponsRemain ? available : [];
+  if (!eligible.length) return choices;
+  const fresh = eligible.filter((def) => !exclude.includes(def.id));
+  const pool = fresh.length ? fresh : eligible;
+  const def = pool[weaponRng.int(pool.length)];
+  const weapon: UpgradeChoice = { kind: 'upgrade', def, grade: 'common', nextStack: (stacks[def.id] ?? 0) + 1 };
   if (choices[0].kind === 'fallback') return [weapon];
   return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }
@@ -100,7 +109,7 @@ const STAT_LABEL: Partial<Record<StatKey, string>> = {
   moveSpeed: '이동 속도',
   dodgeCooldown: '회피 재사용 대기시간',
   pickupRadius: '경험치 흡수 범위',
-  xpGain: '경험치 획득',
+  xpGain: '경험치 획득량',
 };
 
 const fmt = (n: number) => (Math.abs(n - Math.round(n)) < 1e-6 ? String(Math.round(n)) : n.toFixed(1).replace(/\.0$/, ''));

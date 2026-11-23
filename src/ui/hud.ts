@@ -146,7 +146,7 @@ export class Hud {
       this.chips.replaceChildren(
         ...ALL_UPGRADES.filter((u) => sim.stacks[u.id] > 0).map((u) =>
           u.weapon
-            ? el('span', { class: 'chip attack weapon-chip' }, [el('img', { src: WEAPON_TEXTURES[u.weapon], alt: '' }), u.name])
+            ? el('span', { class: 'chip attack weapon-chip' }, [el('img', { src: WEAPON_TEXTURES[u.weapon], alt: '' }), `${u.name} Lv ${sim.stacks[u.id]}`])
             : el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
         ),
       );

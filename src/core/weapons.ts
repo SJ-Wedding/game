@@ -1,4 +1,4 @@
-import type { WeaponId } from '../config/weapons';
+import { WEAPON_DAMAGE_PER_RANK, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -62,8 +62,13 @@ export class WeaponSystem {
     return closest;
   }
 
-  private damage(target: Target, factor: number): void {
-    const damage = this.sim.stats.damage * factor;
+  private weaponDamage(kind: WeaponId, factor: number): number {
+    const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
+    return this.sim.stats.damage * factor * (1 + upgrades * WEAPON_DAMAGE_PER_RANK);
+  }
+
+  private damage(kind: WeaponId, target: Target, factor: number): void {
+    const damage = this.weaponDamage(kind, factor);
     if ('id' in target) this.sim.damageEnemy(target, damage);
     else this.sim.damageBoss(damage);
   }
@@ -75,7 +80,7 @@ export class WeaponSystem {
   private area(kind: WeaponId, point: Point, radius: number, factor: number): void {
     this.trace(kind, [point], radius);
     for (const target of this.targets()) {
-      if (dist(point.x, point.y, target.x, target.y) < radius + target.r) this.damage(target, factor);
+      if (dist(point.x, point.y, target.x, target.y) < radius + target.r) this.damage(kind, target, factor);
     }
   }
 
@@ -156,7 +161,7 @@ export class WeaponSystem {
         const dy = Math.sin(direction);
         this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
         sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
-          damage: sim.stats.damage * 1.15 * (angles.length > 1 ? 0.7 : 1), life: 0.7, source: 'echo' });
+          damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.7, source: 'echo' });
       }
       this.echo = null;
     }
@@ -178,7 +183,7 @@ export class WeaponSystem {
     while (target && hit.size < (crown ? 6 : 4)) {
       hit.add(target);
       points.push(target);
-      this.damage(target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
+      this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
       target = this.nearest(target, 125, hit);
     }
     this.trace('chain', points);
@@ -198,7 +203,7 @@ export class WeaponSystem {
       for (const target of this.targets()) {
         if ((this.orbitHits.get(target) ?? 0) > elapsed
           || dist(blade.x, blade.y, target.x, target.y) >= target.r + 13) continue;
-        this.damage(target, 0.8);
+        this.damage('orbit', target, 0.8);
         if (!target.dead) this.orbitHits.set(target, elapsed + 0.42);
       }
     }
@@ -220,7 +225,7 @@ export class WeaponSystem {
       if (target) {
         this.infected.set(target, now + 5);
         this.trace('infection', [target], target.r + 7);
-        this.damage(target, 1);
+        this.damage('infection', target, 1);
       }
     }
     const origins = this.contagion.splice(0);
@@ -229,7 +234,7 @@ export class WeaponSystem {
       for (const enemy of this.sim.enemies) {
         if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > 96 + enemy.r) continue;
         this.infected.set(enemy, now + 5);
-        this.damage(enemy, 1.1);
+        this.damage('infection', enemy, 1.1);
       }
     }
   }
@@ -257,7 +262,7 @@ export class WeaponSystem {
         d.next = d.age + 0.68;
         this.trace(d.kind, [d, target], 0, 0.16);
         if ('id' in target) target.slowUntil = this.sim.elapsed + 0.9;
-        this.damage(target, 0.86);
+        this.damage(d.kind, target, 0.86);
         break;
       }
       case 'flame':
@@ -265,7 +270,7 @@ export class WeaponSystem {
         if (!finished && d.age >= d.next) {
           d.next = d.age + 0.45;
           for (const target of this.targets()) {
-            if (dist(d.x, d.y, target.x, target.y) < d.r + target.r) this.damage(target, 0.34);
+            if (dist(d.x, d.y, target.x, target.y) < d.r + target.r) this.damage(d.kind, target, 0.34);
           }
         }
         break;
@@ -288,7 +293,7 @@ export class WeaponSystem {
         for (const target of this.targets()) {
           if (d.hit.has(target) || dist(d.x, d.y, target.x, target.y) >= d.r + target.r) continue;
           d.hit.add(target);
-          this.damage(target, 1.35);
+          this.damage(d.kind, target, 1.35);
         }
         break;
       }
@@ -321,7 +326,7 @@ export class WeaponSystem {
       const previous = exposures.get(target) ?? 0;
       const duration = previous + dt;
       exposures.set(target, duration);
-      if (previous < 1 && duration >= 1) this.damage(target, 0.72);
+      if (previous < 1 && duration >= 1) this.damage(d.kind, target, 0.72);
     }
   }
 
@@ -340,7 +345,7 @@ export class WeaponSystem {
       const nail = d.kind === 'barrier' && this.sim.relics.has('nail');
       const canRoot = 'id' in target && target.state !== 'dash';
       if (nail && canRoot) target.rootedUntil = this.sim.elapsed + 0.8;
-      this.damage(target, factor * (nail && !canRoot ? 1.4 : 1));
+      this.damage(d.kind, target, factor * (nail && !canRoot ? 1.4 : 1));
     }
   }
 }

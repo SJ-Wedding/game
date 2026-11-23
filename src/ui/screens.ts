@@ -1,3 +1,4 @@
+import { WEAPON_DAMAGE_PER_RANK } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -211,10 +212,12 @@ export class Screens {
         const weapon = c.def.weapon;
         if (weapon) btn.append(el('img', { class: 'weapon-icon', src: WEAPON_TEXTURES[weapon], alt: '' }));
         btn.append(
-          el('span', { class: 'cat', text: weapon ? '특수 무기' : `${grade!.name} · ${CATEGORY_LABEL[c.def.category]}` }),
+          el('span', { class: 'cat', text: weapon ? (c.nextStack === 1 ? '특수 무기 획득' : '특수 무기 강화') : `${grade!.name} · ${CATEGORY_LABEL[c.def.category]}` }),
           el('strong', { class: 'name', text: c.def.name }),
-          el('span', { class: 'desc', text: upgradeText(c.def, c.grade) }),
-          el('span', { class: 'stack', text: weapon ? '획득 즉시 자동 발동' : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
+          el('span', { class: 'desc', text: weapon && c.nextStack > 1
+            ? `이 무기 피해 보너스 +${Math.round((c.nextStack - 2) * WEAPON_DAMAGE_PER_RANK * 100)}% → +${Math.round((c.nextStack - 1) * WEAPON_DAMAGE_PER_RANK * 100)}%`
+            : upgradeText(c.def, c.grade) }),
+          el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}회` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}회` }),
         );
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
@@ -263,14 +266,16 @@ export class Screens {
         el('td', { class: 'final', 'data-testid': `stat-${key}`, text: f(final[key]) }),
       ]),
     );
-    const grouped = new Map<string, UpgradePick[]>();
+    const grouped = new Map<UpgradePick['id'], UpgradePick[]>();
     for (const p of opts.picks) grouped.set(p.id, [...(grouped.get(p.id) ?? []), p]);
-    const picks = [...grouped.entries()].map(([id, list]) =>
-      el('li', {}, [
-        el('span', { text: `${UPGRADE_BY_ID[id as UpgradePick['id']].name} ` }),
+    const picks = [...grouped.entries()].map(([id, list]) => {
+      const def = UPGRADE_BY_ID[id];
+      if (def.weapon) return el('li', { text: `${def.name} Lv ${list.length}` });
+      return el('li', {}, [
+        el('span', { text: `${def.name} ` }),
         ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
-      ]),
-    );
+      ]);
+    });
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
     this.mount(

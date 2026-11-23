@@ -1,8 +1,8 @@
-import { WEAPONS, WEAPON_IDS, type WeaponId } from './weapons';
+import { WEAPONS, WEAPON_IDS, WEAPON_MAX_RANK, type WeaponId } from './weapons';
 import type { StatKey } from './player';
 
 /**
- * 강화 9종. 공격 / 생존 / 기동 3개 분류에 3개씩.
+ * 일반 강화는 공격, 생존, 기동으로 분류한다.
  * effects 의 계산 방식 (고른 카드마다 등급 값 v 를 구해 합산/곱셈):
  *   add : 기본값 + Σv
  *   pct : 기본값 × (1 + Σv)       (예: 0.18 → 일반 +18%, 전설 +54%)
@@ -14,7 +14,7 @@ export type UpgradeCategory = 'attack' | 'survival' | 'mobility';
 export type UpgradeId =
   | 'rapid' | 'split' | 'power'
   | 'vitality' | 'regen' | 'guard'
-  | 'swift' | 'evasion' | 'magnet'
+  | 'swift' | 'evasion' | 'magnet' | 'wisdom'
   | WeaponId;
 
 export interface UpgradeEffect {
@@ -66,11 +66,13 @@ export const UPGRADES: UpgradeDef[] = [
     effects: [{ stat: 'dodgeCooldown', op: 'mul', value: 0.82 }] },
   { id: 'magnet', name: '흡수 영역', category: 'mobility', description: '경험치 흡수 범위 +45%', maxStacks: 3,
     effects: [{ stat: 'pickupRadius', op: 'pct', value: 0.45 }] },
+  { id: 'wisdom', name: '균열의 통찰', category: 'mobility', description: '경험치 획득량 +10%', maxStacks: 3,
+    effects: [{ stat: 'xpGain', op: 'pct', value: 0.1 }] },
 ];
 
 export const WEAPON_UPGRADES: UpgradeDef[] = WEAPON_IDS.map((id) => ({
   id, weapon: id, name: WEAPONS[id].name, description: WEAPONS[id].description,
-  category: 'attack', maxStacks: 1, effects: [],
+  category: 'attack', maxStacks: WEAPON_MAX_RANK, effects: [],
 }));
 
 export const ALL_UPGRADES = [...UPGRADES, ...WEAPON_UPGRADES];

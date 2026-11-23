@@ -15,3 +15,6 @@ export const WEAPONS = {
 
 export type WeaponId = keyof typeof WEAPONS;
 export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];
+
+export const WEAPON_MAX_RANK = 3;
+export const WEAPON_DAMAGE_PER_RANK = 0.2;
