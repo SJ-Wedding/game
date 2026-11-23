@@ -181,7 +181,7 @@ scripts/simulate.ts ← 밸런스 시뮬레이션
 | `src/config/enemies.ts` | `NormalEnemyKind` 에 `'bomber'` 추가, 설정 인터페이스와 `ENEMY_CONFIG.bomber` 능력치·`attackNames` 추가 |
 | `src/config/spawns.ts` | 등장시킬 구간의 `weights` 에 `bomber: 1` 추가 |
 | `src/core/enemies.ts` | `updateEnemies` 의 `switch` 에 `case 'bomber'` 행동 추가 (예고 → 폭발은 `sim.addHazard` 활용 가능) |
-| `src/render/GameScene.ts` · `palette.ts` | `drawEnemy` 에 모양·색 추가, 예고 표시가 있으면 `draw()` 의 예고 단계에 추가 |
+| `src/assets/` · `src/render/textures.ts` | 적 스프라이트를 추가하고 적 종류와 같은 키로 등록. 공격 예고가 필요하면 `GameScene.ts`의 `draw()`에서 그린다. |
 | `src/core/bot.ts` | (선택) 봇이 새 위협을 피하도록 회피 규칙 추가 → `npm run sim` 으로 밸런스 확인 |
 | `tests/` | 행동 테스트 추가, `balance.test.ts` 기준 확인 |
 
@@ -246,5 +246,5 @@ HUD 의 강화 목록, 레벨업 카드, 결과 화면은 설정에서 자동으
 ## 알려진 한계 (MVP)
 
 - 모바일·터치 조작은 지원하지 않습니다(PC 키보드·마우스 전용).
-- 그래픽은 도형 기반의 간결한 표현이며, 배경 음악은 없습니다(효과음만 합성).
+- 배경 음악은 없습니다(효과음만 합성).
 - 밸런스 수치는 자동 플레이 봇 기준으로 맞췄습니다. 사람 플레이어 표본으로 다시 확인이 필요합니다(`docs/PLAYTEST.md`).

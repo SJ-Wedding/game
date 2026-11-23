@@ -88,10 +88,21 @@ kbd {
   font-size: clamp(11px, 1.25cqw, 19px);
 }
 #overlay[data-screen='levelup'], #overlay[data-screen='pause'] { background: rgba(4, 4, 12, 0.72); }
+#overlay[data-screen='title'] {
+  background: radial-gradient(ellipse at center, #101b2233 12%, #0a1119a8 72%, #070b11e8);
+}
 .panel {
   width: min(92cqw, 52em); padding: 1.6em 2em; border-radius: 14px;
   background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 40px #000a;
   display: grid; gap: 0.9em; justify-items: center; text-align: center;
+}
+.panel.title {
+  background: linear-gradient(155deg, #19272eef, #111921f7 70%);
+  border-color: #526671;
+  box-shadow: 0 16px 60px #03070ad0, inset 0 1px #c0e4e81c;
+}
+.title .logo {
+  background-image: linear-gradient(180deg, #fff9e5 15%, #a8c6d0);
 }
 .panel h1, .panel h2, .panel h3, .panel p { margin: 0; }
 .panel h3 { font-size: 1em; color: var(--muted); font-weight: 600; margin-bottom: 0.3em; }
