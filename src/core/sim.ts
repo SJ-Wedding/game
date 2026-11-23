@@ -5,19 +5,21 @@ import { AUTO_COMBAT, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
+import { DROPS, DROP_CONFIG, type DropKind } from '../config/drops';
 import { ALL_UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
+import { metaBonus, type MetaBonus, type MetaPurchases } from './meta';
 import { bossInvulnerable, createBoss, updateBoss } from './boss';
 import { createEnemy, updateEnemies } from './enemies';
 import { clamp, compact, dist, dist2, lerp } from './math';
 import { xpToNext } from './progression';
 import { deriveSeed, Rng } from './rng';
-import { computeStats, emptyStacks, type Stacks } from './stats';
+import { computeStats, emptyStacks, healOnPick, picksFromCounts, type Stacks, type UpgradePick } from './stats';
 import type {
-  Boss, Enemy, Gem, Hazard, InputState, Player, Projectile, RunEndCause, RunOutcome, RunResult,
+  Boss, Enemy, Gem, Hazard, InputState, Pickup, Player, Projectile, RunEndCause, RunOutcome, RunResult,
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
 import { WeaponSystem } from './weapons';
-import { applyUpgrade, rollRunChoices } from './upgrades';
+import { applyUpgrade, luckFor, rollRunChoices } from './upgrades';
 
 export interface SimOptions {
   seed: number;
@@ -28,6 +30,8 @@ export interface SimOptions {
   /** 시작 시 적용할 강화 (개발용) */
   presetUpgrades?: Partial<Record<UpgradeId, number>>;
   presetLevel?: number;
+  /** 영구 강화 구매 내역 (토큰 상점). 없으면 영구 강화 0 */
+  meta?: MetaPurchases;
 }
 
 export type SimPhase = 'combat' | 'levelup' | 'ended';
@@ -51,6 +55,8 @@ export class GameSim {
   readonly rngUpgrade: Rng;
   readonly rngAi: Rng;
   private readonly rngWeapon: Rng;
+  readonly rngDrop: Rng;
+  readonly meta: MetaBonus;
   readonly weapons = new WeaponSystem(this);
   readonly options: SimOptions;
 
@@ -67,6 +73,16 @@ export class GameSim {
   pendingLevels = 0;
   choices: UpgradeChoice[] = [];
   pickOrder: string[] = [];
+  /** 고른 강화(등급 포함) — 능력치 계산의 근거 */
+  picks: UpgradePick[] = [];
+  /** 지금 열린 레벨업 창이 '시작 강화' 선택인가 */
+  startPickOpen = false;
+  rerollsLeft = 0;
+  rerollsUsed = 0;
+  revivesLeft = 0;
+  revived = 0;
+  pickups: Pickup[] = [];
+  itemsCollected = 0;
   /** 자동 조준 중인 대상 (렌더링 표시용) */
   target: { x: number; y: number; r: number } | null = null;
 
@@ -105,14 +121,21 @@ export class GameSim {
     this.rngUpgrade = new Rng(deriveSeed(this.seed, 'upgrade'));
     this.rngAi = new Rng(deriveSeed(this.seed, 'ai'));
     this.rngWeapon = new Rng(deriveSeed(this.seed, 'weapon'));
+    this.rngDrop = new Rng(deriveSeed(this.seed, 'drop'));
+    this.meta = metaBonus(options.meta);
+    this.rerollsLeft = PROGRESSION_CONFIG.baseRerolls + this.meta.rerolls;
+    this.revivesLeft = this.meta.revives;
 
     if (options.presetUpgrades) {
-      for (const [id, n] of Object.entries(options.presetUpgrades) as [UpgradeId, number][]) {
-        for (let i = 0; i < n; i++) if (applyUpgrade(this.stacks, id)) this.pickOrder.push(id);
+      for (const pick of picksFromCounts(options.presetUpgrades)) {
+        if (applyUpgrade(this.stacks, pick.id)) {
+          this.picks.push(pick);
+          this.pickOrder.push(pick.id);
+        }
       }
     }
     if (options.presetLevel) this.level = options.presetLevel;
-    this.stats = computeStats(this.stacks);
+    this.stats = computeStats(this.picks, this.meta);
 
     this.player = {
       x: ARENA_CONFIG.width / 2,
@@ -134,6 +157,13 @@ export class GameSim {
     this.tick = Math.round(start * RUN_CONFIG.tickRate);
     while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at < start) this.eventIndex++;
     if (start >= RUN_CONFIG.bossAt) this.spawnBoss();
+
+    // 영구 강화 '시작 강화': 전투 전에 강화 1개를 고른다
+    if (this.meta.startPick) {
+      this.pendingLevels = 1;
+      this.startPickOpen = true;
+      this.openLevelUp();
+    }
   }
 
   // ───────────────────────── 시간 ─────────────────────────
@@ -208,6 +238,7 @@ export class GameSim {
     this.updateProjectiles(dt);
     this.updateHazards(dt);
     this.updateGems(dt);
+    this.updatePickups(dt);
     this.cleanup();
     this.checkEnd();
     if (this.phase === 'combat' && this.pendingLevels > 0) this.openLevelUp();
@@ -534,6 +565,7 @@ export class GameSim {
       this.kills++;
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
+      this.rollDrop(e);
       this.weapons.onEnemyKilled(e);
       this.emit('kill', e.x, e.y);
     }
@@ -588,7 +620,7 @@ export class GameSim {
   }
 
   gainXp(amount: number): void {
-    this.xp += amount;
+    this.xp += amount * this.stats.xpGain;
     this.emit('pickup', this.player.x, this.player.y);
     while (this.xp >= xpToNext(this.level)) {
       this.xp -= xpToNext(this.level);
@@ -598,8 +630,20 @@ export class GameSim {
     }
   }
 
+  /** 지금 고르는 레벨업이 몇 레벨 달성분인가 */
+  get pendingLevel(): number {
+    return this.startPickOpen ? this.level : this.level - this.pendingLevels + 1;
+  }
+
+  private rollLevelChoices(exclude: UpgradeId[] = []) {
+    const luck = luckFor(this.pendingLevel, this.meta.luck);
+    // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
+    const level = this.startPickOpen ? 0 : this.pendingLevel;
+    return rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
+  }
+
   private openLevelUp(): void {
-    this.choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, this.level - this.pendingLevels + 1);
+    this.choices = this.rollLevelChoices();
     this.phase = 'levelup';
     this.acc = 0;
     this.emit('levelup', this.player.x, this.player.y);
@@ -612,23 +656,88 @@ export class GameSim {
     if (!c) return false;
     if (c.kind === 'upgrade') {
       if (!applyUpgrade(this.stacks, c.def.id)) return false;
-      this.stats = computeStats(this.stacks);
+      this.picks.push({ id: c.def.id, grade: c.grade });
+      this.stats = computeStats(this.picks, this.meta);
       const p = this.player;
-      p.hp = Math.min(this.stats.maxHp, p.hp + (c.def.healOnPick ?? 0));
+      p.hp = Math.min(this.stats.maxHp, p.hp + healOnPick(c.def.id, c.grade));
       this.pickOrder.push(c.def.id);
     } else {
       this.player.hp = Math.min(this.stats.maxHp, this.player.hp + c.heal);
       this.pickOrder.push(c.id);
     }
     this.pendingLevels--;
+    this.startPickOpen = false;
     if (this.pendingLevels > 0) {
-      this.choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, this.level - this.pendingLevels + 1);
+      this.choices = this.rollLevelChoices();
     } else {
       this.choices = [];
       this.phase = 'combat';
     }
     this.acc = 0;
     return true;
+  }
+
+  /** 레벨업 후보 새로고침. 남은 횟수가 없거나 레벨업 중이 아니면 false */
+  reroll(): boolean {
+    if (this.phase !== 'levelup' || this.rerollsLeft <= 0) return false;
+    const prev = this.choices.filter((c) => c.kind === 'upgrade').map((c) => (c.kind === 'upgrade' ? c.def.id : ('' as UpgradeId)));
+    this.rerollsLeft--;
+    this.rerollsUsed++;
+    this.choices = this.rollLevelChoices(prev);
+    this.emit('reroll', this.player.x, this.player.y);
+    return true;
+  }
+
+  // ───────────────────────── 아이템 ─────────────────────────
+
+  /** 처치 1회당 드랍 판정. 난수는 처치마다 항상 1개 소비 (같은 시드 → 같은 드랍) */
+  private rollDrop(e: Enemy): void {
+    const r = this.rngDrop.next();
+    let kind: DropKind | null = null;
+    if (e.kind === 'elite') kind = DROP_CONFIG.eliteGuaranteed;
+    else {
+      let acc = 0;
+      for (const d of DROPS) {
+        acc += d.chance;
+        if (r < acc) {
+          kind = d.kind;
+          break;
+        }
+      }
+    }
+    if (!kind || this.pickups.length >= DROP_CONFIG.maxOnField) return;
+    this.pickups.push({ x: e.x, y: e.y, kind, life: DROP_CONFIG.life });
+  }
+
+  private updatePickups(dt: number): void {
+    const p = this.player;
+    const reach = p.r + DROP_CONFIG.pickupReach;
+    for (const it of this.pickups) {
+      it.life -= dt;
+      if (it.life > 0 && dist(it.x, it.y, p.x, p.y) < reach) {
+        this.useItem(it.kind);
+        it.life = 0;
+      }
+    }
+    compact(this.pickups, (it) => it.life > 0);
+  }
+
+  useItem(kind: DropKind): void {
+    const p = this.player;
+    this.itemsCollected++;
+    if (kind === 'heal') {
+      p.hp = Math.min(this.stats.maxHp, p.hp + DROP_CONFIG.healAmount);
+    } else if (kind === 'magnet') {
+      for (const g of this.gems) g.pulled = true;
+    } else {
+      for (const e of this.enemies) {
+        if (!e.dead && Math.abs(e.x - p.x) < DROP_CONFIG.bombHalfWidth && Math.abs(e.y - p.y) < DROP_CONFIG.bombHalfHeight) {
+          this.damageEnemy(e, DROP_CONFIG.bombDamage);
+        }
+      }
+      this.emit('bomb', p.x, p.y);
+    }
+    this.emit('item', p.x, p.y);
   }
 
   // ───────────────────────── 종료 ─────────────────────────
@@ -638,8 +747,18 @@ export class GameSim {
   }
 
   private checkEnd(): void {
+    const p = this.player;
+    if (!this.boss?.dead && p.hp <= 0 && this.revivesLeft > 0) {
+      // 영구 강화 '부활': 체력 50%로 일어나고 주변 적 탄을 지운다
+      this.revivesLeft--;
+      this.revived++;
+      p.hp = this.stats.maxHp * 0.5;
+      p.invuln = 2;
+      this.enemyShots.length = 0;
+      this.emit('revive', p.x, p.y);
+    }
     if (this.boss?.dead) this.end('victory', 'boss');
-    else if (this.player.hp <= 0) this.end('defeat', 'death');
+    else if (p.hp <= 0) this.end('defeat', 'death');
     else if (this.elapsed >= RUN_CONFIG.timeLimit) this.end('defeat', 'timeout');
   }
 
@@ -658,8 +777,12 @@ export class GameSim {
         id: u.id,
         name: UPGRADE_BY_ID[u.id].name,
         stacks: this.stacks[u.id],
+        grades: this.picks.filter((pk) => pk.id === u.id).map((pk) => pk.grade),
       })),
       pickOrder: [...this.pickOrder],
+      rerollsUsed: this.rerollsUsed,
+      revived: this.revived,
+      itemsCollected: this.itemsCollected,
       seed: this.seed,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
       assisted: this.assisted,

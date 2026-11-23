@@ -15,7 +15,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.getByTestId('play')).toBeVisible();
     await page.getByTestId('play').click();
     await expect(page.getByTestId('hud-timer')).toHaveText(/^(15:00|14:5\d)$/);
-    await expect(page.getByTestId('hud-hp')).toContainText('체력 100 / 100');
+    await expect(page.getByTestId('hud-hp')).toContainText('체력 70 / 70');
     await expect(page.getByTestId('hud-dodge')).toContainText('회피 준비');
     await expect(page.getByTestId('hud-xp')).toContainText('Lv 1');
 
@@ -38,7 +38,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
   test('강화 선택: 레벨업 중에는 시간이 멈추고, 선택한 강화가 적용된다', async ({ page }) => {
     await startRun(page, '&seed=11&god=1');
     await waitElapsed(page, 1);
-    await page.evaluate(() => (window as any).__rift.debug.addXp(25));
+    await page.evaluate(() => { const r = (window as any).__rift; r.debug.addXp((r.sim.xpNeeded - r.sim.xp) / r.sim.stats.xpGain); }); // 정확히 1레벨
     await expect(page.locator('#overlay[data-screen="levelup"]')).toBeVisible();
     await expect(page.locator('.card')).toHaveCount(3);
     const a = await snap(page);
@@ -57,7 +57,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await waitElapsed(page, a.elapsed! + 0.5);
 
     // 마우스 클릭으로도 고를 수 있다
-    await page.evaluate(() => (window as any).__rift.debug.addXp(40));
+    await page.evaluate(() => { const r = (window as any).__rift; r.debug.addXp((r.sim.xpNeeded - r.sim.xp) / r.sim.stats.xpGain); }); // 정확히 1레벨
     await expect(page.getByTestId('choice-0')).toBeVisible();
     const choice = (await snap(page)).choices![0];
     await page.getByTestId('choice-0').click();
@@ -186,11 +186,11 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     const again = await measure();
     expect(again.spawns).toEqual(first.spawns);
     expect(again.dodges).toBe(1);
-    // 기본 공격 속도 2.4회/초 — 입력이 중복되면 2배가 된다
-    expect(first.rate).toBeGreaterThan(1.8);
-    expect(first.rate).toBeLessThan(3);
-    expect(again.rate).toBeGreaterThan(1.8);
-    expect(again.rate).toBeLessThan(3);
+    // 시작 공격 속도 1.2회/초 — 입력이 중복되면 2배가 된다
+    expect(first.rate).toBeGreaterThan(0.9);
+    expect(first.rate).toBeLessThan(1.6);
+    expect(again.rate).toBeGreaterThan(0.9);
+    expect(again.rate).toBeLessThan(1.6);
     expect((await snap(page)).listenerInstalls).toBe(1);
   });
 

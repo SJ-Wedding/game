@@ -1,15 +1,17 @@
 /**
- * 플레이어 기본 능력치. 강화(upgrades.ts)는 이 값에 더하거나 곱해진다.
+ * 플레이어 시작 능력치 (영구 강화 0 기준).
+ * 계산 순서: 시작 능력치 → 영구 강화(meta.ts, 토큰 상점) → 이번 판 강화(upgrades.ts × 등급)
+ * v0.3.0 에서 시작 능력치를 낮추고, 영구 강화로 되찾도록 바꿨다.
  */
 export const PLAYER_BASE_STATS = {
   /** 최대 체력 */
-  maxHp: 100,
+  maxHp: 70,
   /** 이동 속도(px/초) */
-  moveSpeed: 220,
+  moveSpeed: 190,
   /** 투사체 1발 피해량 */
-  damage: 12,
+  damage: 9,
   /** 초당 공격 횟수 */
-  fireRate: 2.4,
+  fireRate: 1.2,
   /** 한 번 공격할 때 나가는 투사체 수 */
   projectileCount: 1,
   /** 여러 발일 때 투사체 사이 각도(도) */
@@ -21,7 +23,7 @@ export const PLAYER_BASE_STATS = {
   /** 투사체 반지름(px) */
   projectileRadius: 6,
   /** 회피 재사용 대기시간(초) */
-  dodgeCooldown: 2.4,
+  dodgeCooldown: 3.0,
   /** 회피(대시) 지속 시간(초) */
   dodgeDuration: 0.2,
   /** 회피 중 이동 속도(px/초) */
@@ -35,7 +37,9 @@ export const PLAYER_BASE_STATS = {
   /** 받는 피해 배율 (1 = 100%) */
   damageTaken: 1,
   /** 경험치 보석을 끌어당기는 거리(px) */
-  pickupRadius: 95,
+  pickupRadius: 75,
+  /** 경험치 획득 배율 (1 = 100%) */
+  xpGain: 1,
 };
 
 export type StatKey = keyof typeof PLAYER_BASE_STATS;

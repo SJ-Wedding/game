@@ -4,7 +4,9 @@
  *   npm run sim -- --runs 50 --skill 0.75 --seed 1000
  * 브라우저 없이 같은 전투 규칙(src/core)을 그대로 쓰므로 수 초 안에 끝난다.
  */
+import { BALANCE_REFERENCE_META, META_STATS, META_UNLOCKS } from '../src/config/meta';
 import { Bot } from '../src/core/bot';
+import { tokenReward, type MetaPurchases } from '../src/core/meta';
 import { formatTime } from '../src/core/math';
 import { GameSim } from '../src/core/sim';
 
@@ -16,6 +18,17 @@ function arg(name: string, def: number): number {
 const runs = arg('runs', 20);
 const skill = arg('skill', 0.75);
 const baseSeed = arg('seed', 1000);
+/** --meta ref(기본: 밸런스 기준, 토큰 145개) | none(영구 강화 없음) | max(전부 구매) */
+const metaArg = (() => {
+  const i = process.argv.indexOf('--meta');
+  return i >= 0 ? process.argv[i + 1] : 'ref';
+})();
+const META: MetaPurchases =
+  metaArg === 'none'
+    ? {}
+    : metaArg === 'max'
+      ? Object.fromEntries([...META_STATS, ...META_UNLOCKS].map((d) => [d.id, d.maxLevel]))
+      : BALANCE_REFERENCE_META;
 
 interface Row {
   seed: number;
@@ -30,12 +43,13 @@ interface Row {
   bossHp: number | null;
   kills: number;
   killedBy: string | null;
+  tokens: number;
 }
 
 const rows: Row[] = [];
 for (let i = 0; i < runs; i++) {
   const seed = baseSeed + i;
-  const sim = new GameSim({ seed });
+  const sim = new GameSim({ seed, meta: META });
   const bot = new Bot(seed, { skill });
   let levelAtBoss: number | null = null;
   let picksAtBoss: number | null = null;
@@ -43,7 +57,8 @@ for (let i = 0; i < runs; i++) {
   let guard = 0;
   while (sim.phase !== 'ended' && guard++ < 60 * 60 * 20) {
     if (sim.phase === 'levelup') {
-      sim.choose(bot.choose(sim));
+      if (bot.wantsReroll(sim)) sim.reroll();
+      else sim.choose(bot.choose(sim));
       continue;
     }
     sim.step(bot.input(sim));
@@ -67,6 +82,7 @@ for (let i = 0; i < runs; i++) {
     bossHp: r.bossHpRatio,
     kills: r.kills,
     killedBy: r.killedBy,
+    tokens: tokenReward(r).total,
   });
 }
 
@@ -94,7 +110,9 @@ const median = (xs: number[]) => (xs.length ? xs[Math.floor(xs.length / 2)] : Na
 const firsts = rows.map((r) => r.firstLevel ?? NaN).filter((x) => !isNaN(x)).sort((a, b) => a - b);
 const lvls = rows.map((r) => r.levelAtBoss).filter((x): x is number => x !== null).sort((a, b) => a - b);
 console.log('\n── 요약 ──');
-console.log(`봇 숙련도 ${skill}, ${runs}판`);
+console.log(`봇 숙련도 ${skill}, ${runs}판, 영구 강화 ${metaArg}`);
+const toks = rows.map((r) => r.tokens).sort((a, b) => a - b);
+console.log(`판당 토큰 중앙값 ${median(toks)} (범위 ${toks[0]}~${toks[toks.length - 1]})`);
 console.log(`승리 ${wins.length} / 사망 ${rows.filter((r) => r.cause === 'death').length} / 시간초과 ${rows.filter((r) => r.cause === 'timeout').length}`);
 if (wins.length) console.log(`승리 시각: 최소 ${formatTime(winTimes[0])}, 중앙값 ${formatTime(median(winTimes))}, 최대 ${formatTime(winTimes[winTimes.length - 1])}`);
 console.log(`승리 중 14:00~15:00 비율: ${wins.filter((r) => r.time >= 840).length}/${wins.length}`);

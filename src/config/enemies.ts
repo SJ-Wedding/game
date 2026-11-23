@@ -72,7 +72,7 @@ export const ENEMY_CONFIG: {
 } = {
   chaser: {
     name: '그림자 망령',
-    hp: 20,
+    hp: 15,
     speed: 92,
     radius: 13,
     contactDamage: 8,
@@ -142,6 +142,6 @@ export const ENEMY_CONFIG: {
  * 예) hpPerMinute 0.1 이면 10분에 등장한 적의 체력은 기본값의 2배.
  */
 export const ENEMY_SCALING = {
-  hpPerMinute: 0.1,
-  damagePerMinute: 0.03,
+  hpPerMinute: 0.075,
+  damagePerMinute: 0.02,
 } as const;

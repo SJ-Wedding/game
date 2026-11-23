@@ -76,7 +76,8 @@ describe('특수 무기', () => {
     const { sim, target, advance } = setup('echo');
     target(280);
     sim.player.fireCd = 0;
-    advance(65);
+    // 두 번째 기본 사격(1/공격 속도 초 뒤) + 잔영 지연 0.36초가 지날 때까지 (공격 속도와 무관하게)
+    advance(Math.ceil((1 / sim.stats.fireRate + 0.36) * 60) + 5);
     expect(sim.playerShots.some((shot) => shot.source === 'echo')).toBe(true);
   });
 

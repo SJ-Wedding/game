@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ARENA_CONFIG, VIEW_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
+import { DROP_CONFIG } from '../config/drops';
 import { ENEMY_CONFIG } from '../config/enemies';
 import type { App } from '../app/App';
 import { BOSS_CHARGE_LENGTH } from '../core/boss';
@@ -154,6 +155,13 @@ export class GameScene extends Phaser.Scene {
           this.cameras.main.shake(300, 0.012);
           this.burst(x, y, PALETTE.bossTrim, 40, 380, 5);
           break;
+        case 'bomb':
+          this.cameras.main.flash(180, 255, 220, 160);
+          this.cameras.main.shake(200, 0.01);
+          break;
+        case 'revive':
+          this.burst(x, y, 0xffffff, 40, 300, 4);
+          break;
         case 'levelup':
           this.burst(x, y, PALETTE.gem, 24, 240, 3);
           break;
@@ -275,6 +283,26 @@ export class GameScene extends Phaser.Scene {
       ground.fillStyle(big ? PALETTE.gemBig : PALETTE.gem, 1);
       ground.fillTriangle(gem.x, gem.y - s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
       ground.fillTriangle(gem.x, gem.y + s, gem.x + s * 0.75, gem.y, gem.x - s * 0.75, gem.y);
+    }
+
+    // 3-1) 드랍 아이템 (흰 테두리 원 + 아이콘). 사라지기 직전에는 깜빡인다
+    for (const it of sim.pickups) {
+      if (it.life < DROP_CONFIG.blinkTime && Math.floor(it.life * 6) % 2 === 0) continue;
+      const bob = Math.sin(t * 4 + it.x) * 2;
+      const x = it.x;
+      const y = it.y + bob;
+      g.fillStyle(0x10121c, 0.85).fillCircle(x, y, 13);
+      g.lineStyle(2, 0xffffff, 1).strokeCircle(x, y, 13);
+      if (it.kind === 'heal') {
+        g.fillStyle(0xff4d6d, 1).fillRect(x - 2.5, y - 8, 5, 16).fillRect(x - 8, y - 2.5, 16, 5);
+      } else if (it.kind === 'magnet') {
+        g.lineStyle(4, 0x6fb7ff, 1).beginPath().arc(x, y + 1, 6, Math.PI, 0, false).strokePath();
+        g.fillStyle(0xff4d6d, 1).fillRect(x - 8, y + 1, 4, 5).fillRect(x + 4, y + 1, 4, 5);
+      } else {
+        g.fillStyle(0x2b2b33, 1).fillCircle(x, y + 2, 7);
+        g.lineStyle(2, 0xffd166, 1).lineBetween(x + 3, y - 4, x + 7, y - 9);
+        g.fillStyle(0xffd166, 1).fillCircle(x + 7, y - 9, 2);
+      }
     }
 
     // 4) 적

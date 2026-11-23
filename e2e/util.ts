@@ -21,6 +21,10 @@ export type Snapshot = {
   player: { x: number; y: number; dodgeCd: number } | null;
   result: { outcome: string; cause: string; survivalTime: number; kills: number } | null;
   save: { settings: { volume: number }; records: Record<string, number | null> };
+  pickups: { kind: string }[] | null;
+  lastTokens: { total: number; survival: number } | null;
+  tokens: number;
+  stats: Record<string, number> | null;
 };
 
 export const snap = (page: Page): Promise<Snapshot> =>

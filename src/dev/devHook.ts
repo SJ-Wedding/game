@@ -35,6 +35,14 @@ export function installDevHook(app: App): void {
         boss: s?.boss ? { hp: s.boss.hp, maxHp: s.boss.maxHp, state: s.boss.state, dead: s.boss.dead } : null,
         bossSpawned: s?.bossSpawned ?? null,
         stacks: s ? { ...s.stacks } : null,
+        picks: s ? s.picks.map((p) => ({ ...p })) : null,
+        stats: s ? { ...s.stats } : null,
+        rerollsLeft: s?.rerollsLeft ?? null,
+        revivesLeft: s?.revivesLeft ?? null,
+        pickups: s ? s.pickups.map((p) => ({ ...p })) : null,
+        choiceGrades: s ? s.choices.map((c) => (c.kind === 'upgrade' ? c.grade : null)) : null,
+        tokens: app.save.meta.tokens,
+        lastTokens: app.lastTokens,
         choices: s ? s.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id)) : null,
         player: s ? { x: s.player.x, y: s.player.y, dodgeCd: s.player.dodgeCd } : null,
         result: app.lastResult,
@@ -62,6 +70,13 @@ export function installDevHook(app: App): void {
     debug: {
       addXp(n: number) {
         app.sim?.gainXp(n);
+      },
+      addTokens(n: number) {
+        app.save = { ...app.save, meta: { ...app.save.meta, tokens: app.save.meta.tokens + n } };
+      },
+      dropItem(kind: 'heal' | 'magnet' | 'bomb', dx = 60, dy = 0) {
+        const s = app.sim;
+        if (s) s.pickups.push({ x: s.player.x + dx, y: s.player.y + dy, kind, life: 20 });
       },
       setBossHp(ratio: number) {
         const b = app.sim?.boss;
