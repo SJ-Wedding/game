@@ -1,0 +1,638 @@
+import { ARENA_CONFIG } from '../config/arena';
+import { BOSS_CONFIG } from '../config/boss';
+import { ENEMY_CONFIG, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
+import { PLAYER_BODY, type PlayerStats } from '../config/player';
+import { PROGRESSION_CONFIG } from '../config/progression';
+import { RUN_CONFIG } from '../config/run';
+import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
+import { UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
+import { bossInvulnerable, createBoss, updateBoss } from './boss';
+import { createEnemy, updateEnemies } from './enemies';
+import { clamp, compact, dist, dist2, lerp } from './math';
+import { xpToNext } from './progression';
+import { deriveSeed, Rng } from './rng';
+import { computeStats, emptyStacks, type Stacks } from './stats';
+import type {
+  Boss, Enemy, Gem, Hazard, InputState, Player, Projectile, RunEndCause, RunOutcome, RunResult,
+  SimEvent, SimEventType, UpgradeChoice,
+} from './types';
+import { applyUpgrade, rollChoices } from './upgrades';
+
+export interface SimOptions {
+  seed: number;
+  /** 이 전투 시각(초)부터 시작 (개발용). 그 이전 스폰 이벤트는 건너뛰고, bossAt 이후면 보스가 바로 등장한다. */
+  startTime?: number;
+  /** 피해를 받지 않음 (개발용) */
+  god?: boolean;
+  /** 시작 시 적용할 강화 (개발용) */
+  presetUpgrades?: Partial<Record<UpgradeId, number>>;
+  presetLevel?: number;
+}
+
+export type SimPhase = 'combat' | 'levelup' | 'ended';
+
+/** 스폰 기록 (시드 재현성 검증용) */
+export interface SpawnRecord {
+  tick: number;
+  kind: EnemyKind | 'boss';
+  /** 플레이어 기준 오프셋 난수 (각도, 거리) */
+  angle: number;
+  distance: number;
+}
+
+/**
+ * 전투 규칙 전체. Phaser·DOM 에 의존하지 않으므로 Node 에서 테스트·시뮬레이션할 수 있다.
+ * 시간은 step() 이 호출된 "틱" 수로만 흐른다. 일시정지/강화 선택/종료 상태에서는 step() 이 아무것도 하지 않는다.
+ */
+export class GameSim {
+  readonly seed: number;
+  readonly rngSpawn: Rng;
+  readonly rngUpgrade: Rng;
+  readonly rngAi: Rng;
+  readonly options: SimOptions;
+
+  /** 경과 틱. elapsed = tick / tickRate */
+  tick: number;
+  phase: SimPhase = 'combat';
+  paused = false;
+
+  player: Player;
+  stacks: Stacks = emptyStacks();
+  stats: PlayerStats;
+  level = 1;
+  xp = 0;
+  pendingLevels = 0;
+  choices: UpgradeChoice[] = [];
+  pickOrder: string[] = [];
+
+  enemies: Enemy[] = [];
+  boss: Boss | null = null;
+  bossSpawned = false;
+  playerShots: Projectile[] = [];
+  enemyShots: Projectile[] = [];
+  hazards: Hazard[] = [];
+  gems: Gem[] = [];
+
+  kills = 0;
+  killsByKind: Record<string, number> = {};
+  /** 공격 입력이 실제로 발사된 횟수 (입력 중복 검사용) */
+  shotsFired = 0;
+  dodges = 0;
+  damageTakenTotal = 0;
+  firstLevelUpAt: number | null = null;
+  lastDamageSource: string | null = null;
+  spawnLog: SpawnRecord[] = [];
+  result: RunResult | null = null;
+
+  /** 렌더/오디오/UI 가 소비하는 이벤트 큐 */
+  events: SimEvent[] = [];
+
+  private acc = 0;
+  private dodgeBuffered = false;
+  private nextId = 1;
+  private spawnTimer = 0.6;
+  private eventIndex = 0;
+
+  constructor(options: SimOptions) {
+    this.options = options;
+    this.seed = options.seed >>> 0;
+    this.rngSpawn = new Rng(deriveSeed(this.seed, 'spawn'));
+    this.rngUpgrade = new Rng(deriveSeed(this.seed, 'upgrade'));
+    this.rngAi = new Rng(deriveSeed(this.seed, 'ai'));
+
+    if (options.presetUpgrades) {
+      for (const [id, n] of Object.entries(options.presetUpgrades) as [UpgradeId, number][]) {
+        for (let i = 0; i < n; i++) if (applyUpgrade(this.stacks, id)) this.pickOrder.push(id);
+      }
+    }
+    if (options.presetLevel) this.level = options.presetLevel;
+    this.stats = computeStats(this.stacks);
+
+    this.player = {
+      x: ARENA_CONFIG.width / 2,
+      y: ARENA_CONFIG.height / 2,
+      r: PLAYER_BODY.radius,
+      hp: this.stats.maxHp,
+      invuln: 0,
+      dodgeTime: 0,
+      dodgeCd: 0,
+      dodgeDx: 0,
+      dodgeDy: 0,
+      fireCd: 0,
+      aim: -Math.PI / 2,
+      hurtFlash: 0,
+    };
+
+    const start = Math.max(0, options.startTime ?? 0);
+    this.tick = Math.round(start * RUN_CONFIG.tickRate);
+    while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at < start) this.eventIndex++;
+    if (start >= RUN_CONFIG.bossAt) this.spawnBoss();
+  }
+
+  // ───────────────────────── 시간 ─────────────────────────
+
+  get elapsed(): number {
+    return this.tick / RUN_CONFIG.tickRate;
+  }
+
+  get remaining(): number {
+    return Math.max(0, RUN_CONFIG.timeLimit - this.elapsed);
+  }
+
+  get assisted(): boolean {
+    return !!(this.options.god || this.options.startTime || this.options.presetUpgrades);
+  }
+
+  get xpNeeded(): number {
+    return xpToNext(this.level);
+  }
+
+  /** 전투 시간이 흐르는 상태인가 */
+  get running(): boolean {
+    return this.phase === 'combat' && !this.paused;
+  }
+
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    this.acc = 0;
+    this.dodgeBuffered = false;
+  }
+
+  /**
+   * 실제 경과 시간(초)만큼 고정 틱을 진행한다. 프레임마다 호출.
+   * 큰 dt(탭 복귀, 느린 프레임)는 maxTicksPerFrame 으로 잘라 시간이 튀지 않게 한다.
+   * @returns 실행한 틱 수
+   */
+  advance(realDt: number, input: InputState): number {
+    if (!this.running) {
+      this.acc = 0;
+      this.dodgeBuffered = false;
+      return 0;
+    }
+    // 고주사율 모니터에서는 틱이 돌지 않는 프레임이 있으므로 회피 입력을 다음 틱까지 보관한다
+    if (input.dodge) this.dodgeBuffered = true;
+    const tickDt = 1 / RUN_CONFIG.tickRate;
+    this.acc += Math.max(0, Math.min(realDt, RUN_CONFIG.maxTicksPerFrame * tickDt));
+    let n = 0;
+    while (this.acc >= tickDt - 1e-9 && n < RUN_CONFIG.maxTicksPerFrame) {
+      this.acc -= tickDt;
+      const dodge = this.dodgeBuffered;
+      this.dodgeBuffered = false;
+      if (this.step(dodge === input.dodge ? input : { ...input, dodge })) n++;
+      if (!this.running) {
+        this.acc = 0;
+        break;
+      }
+    }
+    return n;
+  }
+
+  /** 정확히 한 틱 진행. 시간이 흐르지 않는 상태면 false. */
+  step(input: InputState): boolean {
+    if (!this.running) return false;
+    const dt = 1 / RUN_CONFIG.tickRate;
+    this.tick++;
+
+    this.updatePlayer(dt, input);
+    this.updateSpawner(dt);
+    updateEnemies(this, dt);
+    updateBoss(this, dt);
+    this.updateProjectiles(dt);
+    this.updateHazards(dt);
+    this.updateGems(dt);
+    this.cleanup();
+    this.checkEnd();
+    if (this.phase === 'combat' && this.pendingLevels > 0) this.openLevelUp();
+    return true;
+  }
+
+  // ───────────────────────── 플레이어 ─────────────────────────
+
+  private updatePlayer(dt: number, input: InputState): void {
+    const p = this.player;
+    const s = this.stats;
+    if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
+    if (p.dodgeCd > 0) p.dodgeCd = Math.max(0, p.dodgeCd - dt);
+    if (p.hurtFlash > 0) p.hurtFlash -= dt;
+    if (s.regen > 0 && p.hp > 0) p.hp = Math.min(s.maxHp, p.hp + s.regen * dt);
+
+    p.aim = Math.atan2(input.aimY - p.y, input.aimX - p.x);
+
+    let mx = input.moveX;
+    let my = input.moveY;
+    const len = Math.hypot(mx, my);
+    if (len > 1) {
+      mx /= len;
+      my /= len;
+    }
+
+    if (input.dodge && p.dodgeCd <= 0 && p.dodgeTime <= 0) {
+      if (len > 0.01) {
+        p.dodgeDx = mx / Math.hypot(mx, my);
+        p.dodgeDy = my / Math.hypot(mx, my);
+      } else {
+        p.dodgeDx = Math.cos(p.aim);
+        p.dodgeDy = Math.sin(p.aim);
+      }
+      p.dodgeTime = s.dodgeDuration;
+      p.dodgeCd = s.dodgeCooldown;
+      p.invuln = Math.max(p.invuln, s.dodgeInvuln);
+      this.dodges++;
+      this.emit('dodge', p.x, p.y);
+    }
+
+    if (p.dodgeTime > 0) {
+      p.dodgeTime -= dt;
+      p.x += p.dodgeDx * s.dodgeSpeed * dt;
+      p.y += p.dodgeDy * s.dodgeSpeed * dt;
+    } else {
+      p.x += mx * s.moveSpeed * dt;
+      p.y += my * s.moveSpeed * dt;
+    }
+    const pad = ARENA_CONFIG.wallPadding + p.r;
+    p.x = clamp(p.x, pad, ARENA_CONFIG.width - pad);
+    p.y = clamp(p.y, pad, ARENA_CONFIG.height - pad);
+
+    p.fireCd -= dt;
+    if (input.fire && p.fireCd <= 0) {
+      this.firePlayer();
+      p.fireCd += 1 / s.fireRate;
+      if (p.fireCd < 0) p.fireCd = 0;
+    } else if (!input.fire && p.fireCd < 0) {
+      p.fireCd = 0;
+    }
+  }
+
+  private firePlayer(): void {
+    const p = this.player;
+    const s = this.stats;
+    const n = Math.max(1, s.projectileCount);
+    const spread = (s.spreadDeg * Math.PI) / 180;
+    const life = s.projectileRange / s.projectileSpeed;
+    for (let i = 0; i < n; i++) {
+      const a = p.aim + (i - (n - 1) / 2) * spread;
+      const c = Math.cos(a);
+      const si = Math.sin(a);
+      this.playerShots.push({
+        x: p.x + c * (p.r + 4),
+        y: p.y + si * (p.r + 4),
+        vx: c * s.projectileSpeed,
+        vy: si * s.projectileSpeed,
+        r: s.projectileRadius,
+        damage: s.damage,
+        life,
+        source: 'player',
+      });
+    }
+    this.shotsFired++;
+    this.emit('shoot', p.x, p.y);
+  }
+
+  /** 플레이어 피해 처리. 무적·회피 중이면 무시. 실제로 피해를 입었으면 true */
+  hurtPlayer(amount: number, source: string): boolean {
+    const p = this.player;
+    if (this.phase !== 'combat' || p.hp <= 0) return false;
+    if (p.invuln > 0 || p.dodgeTime > 0) return false;
+    if (this.options.god) return false;
+    const dmg = amount * this.stats.damageTaken;
+    p.hp = Math.max(0, p.hp - dmg);
+    p.invuln = this.stats.hurtInvuln;
+    p.hurtFlash = 0.25;
+    this.damageTakenTotal += dmg;
+    this.lastDamageSource = source;
+    this.emit('hurt', p.x, p.y);
+    return true;
+  }
+
+  // ───────────────────────── 스폰 ─────────────────────────
+
+  currentSpawnPhase(t: number = this.elapsed): SpawnPhase | null {
+    for (const ph of SPAWN_PHASES) if (t >= ph.from && t < ph.to) return ph;
+    return null;
+  }
+
+  private updateSpawner(dt: number): void {
+    const t = this.elapsed;
+
+    // 시각 이벤트 (엘리트)
+    while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at <= t) {
+      const ev = SPAWN_EVENTS[this.eventIndex++];
+      for (let i = 0; i < ev.count; i++) {
+        const pos = this.rollSpawnPosition();
+        this.spawnLog.push({ tick: this.tick, kind: ev.kind, angle: pos.angle, distance: pos.distance });
+        this.spawnEnemy(ev.kind, pos.x, pos.y);
+        this.emit('eliteSpawn', pos.x, pos.y);
+      }
+    }
+
+    // 보스
+    if (!this.bossSpawned && t >= RUN_CONFIG.bossAt) this.spawnBoss();
+
+    // 주기 스폰
+    const ph = this.currentSpawnPhase(t);
+    if (!ph) return;
+    this.spawnTimer -= dt;
+    if (this.spawnTimer > 0) return;
+    const progress = clamp((t - ph.from) / (ph.to - ph.from), 0, 1);
+    this.spawnTimer += lerp(ph.interval[0], ph.interval[1], progress);
+    for (let i = 0; i < ph.batch; i++) {
+      // 난수는 생성 여부와 관계없이 항상 같은 개수를 소비 → 같은 시드면 같은 스폰 순서
+      const kind = this.rollKind(ph);
+      const pos = this.rollSpawnPosition();
+      const alive = this.enemies.length;
+      if (alive >= ph.maxAlive) continue;
+      this.spawnLog.push({ tick: this.tick, kind, angle: pos.angle, distance: pos.distance });
+      this.spawnEnemy(kind, pos.x, pos.y);
+    }
+  }
+
+  private rollKind(ph: SpawnPhase): NormalEnemyKind {
+    const entries = Object.entries(ph.weights) as [NormalEnemyKind, number][];
+    const total = entries.reduce((s, [, w]) => s + w, 0);
+    let r = this.rngSpawn.next() * total;
+    for (const [k, w] of entries) {
+      r -= w;
+      if (r < 0) return k;
+    }
+    return entries[entries.length - 1][0];
+  }
+
+  /** 화면 밖 위치를 고른다. 난수 2개(각도·거리)를 소비. */
+  private rollSpawnPosition(): { x: number; y: number; angle: number; distance: number } {
+    const angle = this.rngSpawn.next() * Math.PI * 2;
+    const [dMin, dMax] = ARENA_CONFIG.spawnDistance;
+    const distance = lerp(dMin, dMax, this.rngSpawn.next());
+    const p = this.player;
+    const place = (a: number) => {
+      const pad = ARENA_CONFIG.wallPadding + 30;
+      return {
+        x: clamp(p.x + Math.cos(a) * distance, pad, ARENA_CONFIG.width - pad),
+        y: clamp(p.y + Math.sin(a) * distance, pad, ARENA_CONFIG.height - pad),
+      };
+    };
+    let pos = place(angle);
+    if (dist(pos.x, pos.y, p.x, p.y) < ARENA_CONFIG.minSpawnDistance) {
+      const alt = place(angle + Math.PI);
+      if (dist(alt.x, alt.y, p.x, p.y) > dist(pos.x, pos.y, p.x, p.y)) pos = alt;
+    }
+    return { ...pos, angle, distance };
+  }
+
+  spawnEnemy(kind: EnemyKind, x: number, y: number): Enemy {
+    const e = createEnemy(this.nextId++, kind, x, y, this.elapsed);
+    this.enemies.push(e);
+    return e;
+  }
+
+  private spawnBoss(): void {
+    this.bossSpawned = true;
+    const p = this.player;
+    // 아레나 중앙 쪽으로, 플레이어에게서 420px 떨어진 곳
+    let dx = ARENA_CONFIG.width / 2 - p.x;
+    let dy = ARENA_CONFIG.height / 2 - p.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1) {
+      dx = 0;
+      dy = -1;
+    } else {
+      dx /= d;
+      dy /= d;
+    }
+    const pad = ARENA_CONFIG.wallPadding + BOSS_CONFIG.radius;
+    const x = clamp(p.x + dx * 420, pad, ARENA_CONFIG.width - pad);
+    const y = clamp(p.y + dy * 420, pad, ARENA_CONFIG.height - pad);
+    this.boss = createBoss(x, y);
+    this.spawnLog.push({ tick: this.tick, kind: 'boss', angle: 0, distance: 0 });
+    this.emit('bossSpawn', x, y);
+  }
+
+  spawnEnemyShot(x: number, y: number, angle: number, speed: number, damage: number, r: number, source: string): void {
+    this.enemyShots.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      r,
+      damage,
+      life: 6,
+      source,
+    });
+  }
+
+  addHazard(x: number, y: number, r: number, dur: number, damage: number, source: string): void {
+    const pad = ARENA_CONFIG.wallPadding;
+    this.hazards.push({
+      x: clamp(x, pad + r * 0.5, ARENA_CONFIG.width - pad - r * 0.5),
+      y: clamp(y, pad + r * 0.5, ARENA_CONFIG.height - pad - r * 0.5),
+      r,
+      t: 0,
+      dur,
+      damage,
+      source,
+    });
+  }
+
+  // ───────────────────────── 충돌 ─────────────────────────
+
+  private inArena(x: number, y: number): boolean {
+    return x > -20 && y > -20 && x < ARENA_CONFIG.width + 20 && y < ARENA_CONFIG.height + 20;
+  }
+
+  private updateProjectiles(dt: number): void {
+    const boss = this.boss;
+    for (const s of this.playerShots) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt;
+      if (s.life <= 0 || !this.inArena(s.x, s.y)) continue;
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const rr = e.r + s.r;
+        if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
+          this.damageEnemy(e, s.damage);
+          s.life = 0;
+          break;
+        }
+      }
+      if (s.life > 0 && boss && !boss.dead) {
+        const rr = boss.r + s.r;
+        if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
+          s.life = 0;
+          this.damageBoss(s.damage);
+        }
+      }
+    }
+    compact(this.playerShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
+
+    const p = this.player;
+    for (const s of this.enemyShots) {
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt;
+      const rr = p.r + s.r;
+      if (s.life > 0 && dist2(s.x, s.y, p.x, p.y) < rr * rr) {
+        // 무적(회피) 중이면 통과한다
+        if (this.hurtPlayer(s.damage, s.source)) s.life = 0;
+      }
+    }
+    compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
+  }
+
+  damageEnemy(e: Enemy, amount: number): void {
+    if (e.dead) return;
+    e.hp -= amount;
+    e.flash = 0.08;
+    this.emit('hit', e.x, e.y);
+    if (e.hp <= 0) {
+      e.dead = true;
+      this.kills++;
+      this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
+      this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
+      this.emit('kill', e.x, e.y);
+    }
+  }
+
+  damageBoss(amount: number): void {
+    const b = this.boss;
+    if (!b || b.dead || bossInvulnerable(b)) return;
+    b.hp = Math.max(0, b.hp - amount);
+    b.flash = 0.06;
+    this.emit('hit', b.x, b.y);
+    if (b.hp <= 0) {
+      b.dead = true;
+      this.killsByKind.boss = 1;
+      this.kills++;
+    }
+  }
+
+  private updateHazards(dt: number): void {
+    const p = this.player;
+    for (const h of this.hazards) {
+      h.t += dt;
+      if (h.t >= h.dur) {
+        if (dist(h.x, h.y, p.x, p.y) < h.r + p.r * 0.5) this.hurtPlayer(h.damage, h.source);
+        this.emit('explode', h.x, h.y);
+      }
+    }
+    compact(this.hazards, (h) => h.t < h.dur);
+  }
+
+  // ───────────────────────── 경험치 ─────────────────────────
+
+  private updateGems(dt: number): void {
+    const p = this.player;
+    const radius = this.stats.pickupRadius;
+    const speed = PROGRESSION_CONFIG.gemMagnetSpeed;
+    for (const g of this.gems) {
+      const d = dist(g.x, g.y, p.x, p.y);
+      if (g.pulled || d < radius) {
+        g.pulled = true;
+        if (d < p.r + 8) {
+          this.gainXp(g.value);
+          g.value = 0;
+          continue;
+        }
+        const step = Math.min(d, speed * dt);
+        g.x += ((p.x - g.x) / d) * step;
+        g.y += ((p.y - g.y) / d) * step;
+      }
+    }
+    compact(this.gems, (g) => g.value > 0);
+  }
+
+  gainXp(amount: number): void {
+    this.xp += amount;
+    this.emit('pickup', this.player.x, this.player.y);
+    while (this.xp >= xpToNext(this.level)) {
+      this.xp -= xpToNext(this.level);
+      this.level++;
+      this.pendingLevels++;
+      if (this.firstLevelUpAt === null) this.firstLevelUpAt = this.elapsed;
+    }
+  }
+
+  private openLevelUp(): void {
+    this.choices = rollChoices(this.rngUpgrade, this.stacks);
+    this.phase = 'levelup';
+    this.acc = 0;
+    this.emit('levelup', this.player.x, this.player.y);
+  }
+
+  /** 레벨업 후보 중 하나를 선택. 남은 레벨업이 있으면 다음 후보를 바로 보여준다. */
+  choose(index: number): boolean {
+    if (this.phase !== 'levelup') return false;
+    const c = this.choices[index];
+    if (!c) return false;
+    if (c.kind === 'upgrade') {
+      if (!applyUpgrade(this.stacks, c.def.id)) return false;
+      this.stats = computeStats(this.stacks);
+      const p = this.player;
+      p.hp = Math.min(this.stats.maxHp, p.hp + (c.def.healOnPick ?? 0));
+      this.pickOrder.push(c.def.id);
+    } else {
+      this.player.hp = Math.min(this.stats.maxHp, this.player.hp + c.heal);
+      this.pickOrder.push(c.id);
+    }
+    this.pendingLevels--;
+    if (this.pendingLevels > 0) {
+      this.choices = rollChoices(this.rngUpgrade, this.stacks);
+    } else {
+      this.choices = [];
+      this.phase = 'combat';
+    }
+    this.acc = 0;
+    return true;
+  }
+
+  // ───────────────────────── 종료 ─────────────────────────
+
+  private cleanup(): void {
+    compact(this.enemies, (e) => !e.dead);
+  }
+
+  private checkEnd(): void {
+    if (this.boss?.dead) this.end('victory', 'boss');
+    else if (this.player.hp <= 0) this.end('defeat', 'death');
+    else if (this.elapsed >= RUN_CONFIG.timeLimit) this.end('defeat', 'timeout');
+  }
+
+  private end(outcome: RunOutcome, cause: RunEndCause): void {
+    this.phase = 'ended';
+    this.choices = [];
+    this.result = {
+      outcome,
+      cause,
+      killedBy: cause === 'death' ? this.lastDamageSource : null,
+      survivalTime: this.elapsed,
+      kills: this.kills,
+      killsByKind: { ...this.killsByKind },
+      level: this.level,
+      upgrades: UPGRADES.filter((u) => this.stacks[u.id] > 0).map((u) => ({
+        id: u.id,
+        name: UPGRADE_BY_ID[u.id].name,
+        stacks: this.stacks[u.id],
+      })),
+      pickOrder: [...this.pickOrder],
+      seed: this.seed,
+      bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
+      assisted: this.assisted,
+    };
+    this.emit(outcome === 'victory' ? 'victory' : 'defeat', this.player.x, this.player.y);
+  }
+
+  emit(type: SimEventType, x?: number, y?: number): void {
+    // 소비되지 않을 때(헤드리스 시뮬레이션) 무한히 쌓이지 않도록 제한
+    if (this.events.length < 512) this.events.push({ type, x, y });
+  }
+
+  drainEvents(): SimEvent[] {
+    const out = this.events;
+    this.events = [];
+    return out;
+  }
+
+  /** 테스트/개발용: 다른 적 이름 조회 */
+  static enemyName(kind: EnemyKind | 'boss'): string {
+    return kind === 'boss' ? BOSS_CONFIG.name : ENEMY_CONFIG[kind].name;
+  }
+}
