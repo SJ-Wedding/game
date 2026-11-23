@@ -1,0 +1,153 @@
+:root {
+  color-scheme: dark;
+  --bg: #07070c;
+  --panel: rgba(18, 17, 30, 0.94);
+  --line: #3b3360;
+  --text: #ecebf7;
+  --muted: #a7a3c4;
+  --accent: #4de8ff;
+  --danger: #ff4a5a;
+  --gold: #ffd166;
+  --attack: #ff8a5c;
+  --survival: #59e38f;
+  --mobility: #6fb7ff;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+body { display: grid; place-items: center; }
+
+/* 16:9 박스를 창에 맞춘다. HUD·오버레이는 이 박스 크기를 기준으로 비례 조정(cqw). */
+#app {
+  position: relative;
+  width: min(100vw, 177.78vh);
+  height: min(56.25vw, 100vh);
+  container-type: size;
+  user-select: none;
+}
+#game-root, #hud, #overlay { position: absolute; inset: 0; }
+#game-root canvas { display: block; }
+.hidden { display: none !important; }
+
+kbd {
+  display: inline-block;
+  padding: 0.05em 0.45em;
+  border: 1px solid #5a5480;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 0.82em;
+  background: #23203a;
+  color: var(--text);
+}
+
+/* ───────── HUD ───────── */
+#hud { pointer-events: none; font-size: clamp(10px, 1.15cqw, 18px); text-shadow: 0 1px 2px #000; }
+.hud-left { position: absolute; left: 1.2cqw; top: 1.2cqw; width: 22cqw; display: grid; gap: 0.5cqw; }
+.bar { position: relative; height: 1.6cqw; min-height: 14px; background: rgba(0, 0, 0, 0.55); border: 1px solid #ffffff33; border-radius: 4px; overflow: hidden; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; width: 0; transition: width 0.12s linear; }
+.bar { display: flex; align-items: center; }
+.bar .label { position: relative; padding: 0 0.6em; line-height: 1; font-size: 0.9em; white-space: nowrap; }
+.bar.hp .fill { background: linear-gradient(90deg, #d8324b, #ff5d6c); }
+.bar.hp .fill.low { animation: pulse 0.6s infinite alternate; }
+.bar.xp { height: 1.3cqw; min-height: 13px; }
+.bar.xp .label { font-size: 0.78em; }
+.bar.xp .fill { background: linear-gradient(90deg, #1f9e5b, #45f08a); }
+.bar.dodge { width: 60%; height: 1.4cqw; min-height: 13px; }
+.bar.dodge .label { font-size: 0.78em; }
+.bar.dodge .fill { background: #2c6f8a; transition: none; }
+.bar.dodge.ready .fill { background: linear-gradient(90deg, #2bb5d6, var(--accent)); }
+.hud-center { position: absolute; left: 50%; top: 0.8cqw; transform: translateX(-50%); text-align: center; }
+.timer { font-size: 2.6em; font-weight: 800; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+.timer.urgent { color: var(--danger); animation: pulse 0.5s infinite alternate; }
+.timer-sub { color: var(--muted); font-size: 0.85em; }
+.hud-right { position: absolute; right: 1.2cqw; top: 1.2cqw; font-size: 1.15em; font-weight: 700; }
+.boss-bar { position: absolute; left: 50%; bottom: 2cqw; width: 50cqw; transform: translateX(-50%); text-align: center; }
+.boss-name { font-weight: 800; color: var(--gold); margin-bottom: 0.2em; letter-spacing: 0.1em; }
+.bar.boss { height: 1.8cqw; border-color: #ffb34788; }
+.bar.boss .fill { background: linear-gradient(90deg, #8e0f33, #e0344a); }
+
+.banner {
+  position: absolute; left: 50%; top: 22%; transform: translate(-50%, -8px);
+  padding: 0.5em 1.2em; border-radius: 8px; background: rgba(10, 8, 20, 0.75); border: 1px solid #ffffff22;
+  font-size: 1.25em; font-weight: 700; opacity: 0; transition: opacity 0.25s, transform 0.25s; white-space: nowrap;
+}
+.banner.show { opacity: 1; transform: translate(-50%, 0); }
+.chips { position: absolute; left: 1.2cqw; bottom: 1.2cqw; display: flex; flex-wrap: wrap; gap: 0.3em; max-width: 30cqw; }
+.chip { font-size: 0.75em; padding: 0.1em 0.5em; border-radius: 999px; background: rgba(0, 0, 0, 0.55); border: 1px solid; }
+.chip.attack { border-color: var(--attack); color: var(--attack); }
+.chip.survival { border-color: var(--survival); color: var(--survival); }
+.chip.mobility { border-color: var(--mobility); color: var(--mobility); }
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.55; } }
+
+/* ───────── 오버레이 화면 ───────── */
+#overlay {
+  display: grid; place-items: center; overflow: auto;
+  background: radial-gradient(ellipse at center, rgba(20, 14, 40, 0.75), rgba(4, 4, 10, 0.92));
+  font-size: clamp(11px, 1.25cqw, 19px);
+}
+#overlay[data-screen='levelup'], #overlay[data-screen='pause'] { background: rgba(4, 4, 12, 0.72); }
+.panel {
+  width: min(92cqw, 52em); padding: 1.6em 2em; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 40px #000a;
+  display: grid; gap: 0.9em; justify-items: center; text-align: center;
+}
+.panel h1, .panel h2, .panel h3, .panel p { margin: 0; }
+.panel h3 { font-size: 1em; color: var(--muted); font-weight: 600; margin-bottom: 0.3em; }
+.muted { color: var(--muted); }
+.logo { font-size: 3.2em; letter-spacing: 0.08em; background: linear-gradient(180deg, #fff, #b48cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tagline { color: var(--muted); }
+.row { display: flex; gap: 1.2em; justify-content: center; flex-wrap: wrap; width: 100%; }
+.row > .controls, .row > .records { flex: 1 1 14em; text-align: left; padding: 0.8em 1em; background: #ffffff08; border-radius: 10px; }
+.controls ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35em; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3em 1em; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+button {
+  font: inherit; color: var(--text); cursor: pointer;
+  padding: 0.55em 1.3em; border-radius: 8px; border: 1px solid var(--line); background: #241f3d;
+}
+button:hover, button:focus-visible { border-color: var(--accent); outline: none; background: #2d2750; }
+button.primary { background: linear-gradient(180deg, #2fb8d6, #1d7f9c); border-color: #7cf0ff; color: #fff; font-weight: 800; }
+button.primary:hover, button.primary:focus-visible { filter: brightness(1.12); }
+button.big { font-size: 1.3em; padding: 0.6em 2.4em; }
+.buttons { gap: 0.6em; }
+
+.volume { display: flex; align-items: center; gap: 0.6em; color: var(--muted); }
+.volume input { width: 12em; accent-color: var(--accent); }
+.vol-value { width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+
+fieldset.dev { border: 1px dashed #ffb347; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 0.8em; align-items: center; justify-content: center; color: var(--gold); }
+fieldset.dev input[type='text'], fieldset.dev select { font: inherit; background: #15132a; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 0.2em 0.4em; }
+fieldset.dev small { width: 100%; color: var(--muted); }
+
+/* 레벨업 카드 */
+.levelup h2 { font-size: 2em; color: var(--gold); }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; width: 100%; }
+.card {
+  position: relative; display: grid; gap: 0.45em; align-content: start; text-align: left;
+  min-height: 11em; padding: 1em 1.1em; border-width: 2px; background: #1a1730;
+}
+.card .cat { font-size: 0.8em; font-weight: 800; letter-spacing: 0.1em; }
+.card .name { font-size: 1.25em; }
+.card .desc { color: var(--text); }
+.card .stack { color: var(--muted); font-size: 0.85em; margin-top: auto; }
+.card .key { position: absolute; right: 0.7em; top: 0.7em; }
+.card.attack { border-color: #ff8a5c88; } .card.attack .cat { color: var(--attack); }
+.card.survival { border-color: #59e38f88; } .card.survival .cat { color: var(--survival); }
+.card.mobility { border-color: #6fb7ff88; } .card.mobility .cat { color: var(--mobility); }
+.card.fallback .cat { color: var(--gold); }
+.card:hover, .card:focus-visible { transform: translateY(-3px); border-color: #fff; }
+
+/* 결과 */
+.result .outcome { font-size: 3em; letter-spacing: 0.1em; }
+.result.win .outcome { color: var(--gold); }
+.result.lose .outcome { color: var(--danger); }
+.cause { font-size: 1.1em; }
+.badges { display: flex; gap: 0.5em; flex-wrap: wrap; justify-content: center; }
+.badge { padding: 0.2em 0.8em; border-radius: 999px; background: #ffd16622; border: 1px solid var(--gold); color: var(--gold); font-weight: 700; }
+.result .stats { font-size: 1.15em; }
+.result .upgrades { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.4em; justify-content: center; max-width: 40em; }
+.result .upgrades li { padding: 0.15em 0.7em; border-radius: 999px; background: #ffffff10; }

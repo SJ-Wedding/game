@@ -1,22 +1,246 @@
-# 균열의 심판자 (Rift Judge)
+# 균열 아레나 (Rift Arena)
 
-PC/웹용 2D 액션 로그라이크 RPG MVP. 설치 없이 브라우저에서 바로 실행됩니다.
+PC 브라우저에서 설치 없이 바로 플레이하는 **2D 탑다운 액션 로그라이크 RPG**의 MVP입니다.
+아레나 하나에서 몰려오는 괴물을 쓰러뜨리고, 레벨이 오를 때마다 강화 3개 중 1개를 골라 빌드를 만들고,
+**전투 시간 13:30에 등장하는 보스 '잿불 군주'를 15:00 전에 처치하면 승리**합니다.
+
+- 기술 스택: TypeScript · Phaser 3 · Vite (배포물은 정적 파일만 있으면 됨, 서버·계정 불필요)
+- 기획 문서: [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md)
+- 플레이 시간 측정·검증 기록: [`docs/PLAYTEST.md`](docs/PLAYTEST.md)
+- 변경 이력: [`CHANGELOG.md`](CHANGELOG.md)
+- 이전 프로토타입(바닐라 JS, 별개 게임)은 [`legacy/rift-judge-prototype/`](legacy/rift-judge-prototype/)에 보관되어 있으며 빌드에 포함되지 않습니다.
 
 ## 조작
-WASD 이동 · 마우스 조준/클릭 공격 · T 자동공격 토글 · Space 대시 · Q/E 스킬 · F 패링
 
-## 로컬 실행
-`index.html`을 브라우저로 열면 됩니다. (빌드 불필요)
+| 입력 | 동작 |
+| --- | --- |
+| `W` `A` `S` `D` (방향키도 가능) | 이동 |
+| 마우스 | 조준 |
+| 좌클릭 (누르고 있기) | 기본 공격 |
+| `Space` | 회피 — 짧게 돌진하며 잠깐 무적 |
+| `Esc` | 일시정지 / 재개 |
+| `1` `2` `3` | 레벨업 강화 선택 (클릭도 가능) |
+| `Enter` / `Space` / `R` | 결과 화면에서 바로 다시 시작 |
 
-## GitHub Pages 배포
-1. 이 폴더의 파일(`index.html`, `style.css`, `game.js`)을 저장소 루트에 업로드
-2. 저장소 **Settings → Pages → Build and deployment**
-3. Source: **Deploy from a branch**, Branch: **main** / **/ (root)** → Save
-4. 1~2분 뒤 `https://<사용자명>.github.io/<저장소명>/` 에서 플레이
+## 빠른 시작
 
-## 파일 구조
-- `index.html` — 페이지 골격
-- `style.css` — 스타일
-- `game.js` — 게임 로직 (오브젝트 풀, 스킬트리, 유물 시너지, 보스 AI, 메타 진행)
+Node.js 20 이상이 필요합니다.
 
-메타 진행(영구 강화)은 브라우저 `localStorage`에 저장됩니다.
+```bash
+npm install
+```
+
+```bash
+npm run dev
+```
+
+브라우저에서 `http://localhost:5173` 을 엽니다. `npm run dev` 에서는 **개발 모드**가 자동으로 켜집니다(아래 참고).
+
+| 명령 | 설명 |
+| --- | --- |
+| `npm run dev` | 개발 서버 (코드 수정 시 자동 새로고침, 개발 모드 ON) |
+| `npm run build` | 타입 검사 후 배포용 정적 파일을 `dist/` 에 생성 |
+| `npm run preview` | `dist/` 를 `http://localhost:4173` 에서 미리보기 |
+| `npm test` | 단위 테스트 (전투 규칙·시간·보스·강화·저장·밸런스 회귀) |
+| `npm run test:e2e` | 실제 브라우저 자동 테스트 (빌드 → 미리보기 서버 자동 실행, 약 2분) |
+| `npm run test:e2e:full` | 봇이 실제 키보드·마우스 입력으로 15분 한 판을 끝까지 플레이하며 시간 측정 (실시간 15분) |
+| `npm run sim` | 브라우저 없이 봇으로 여러 판을 빠르게 시뮬레이션해 밸런스 요약 출력 (수 초) |
+| `npm run typecheck` | 타입 검사만 |
+
+> 브라우저 자동 테스트는 Playwright 를 씁니다. 처음 한 번은 `npx playwright install chromium` 으로 브라우저를 받아야 할 수 있습니다.
+
+## 배포 (정적 호스팅)
+
+```bash
+npm run build
+```
+
+**`dist/` 폴더 안의 파일 전체**를 정적 호스팅에 올리면 끝입니다. 상대 경로(`base: './'`)로 빌드되므로
+도메인 루트든 하위 경로(`https://아이디.github.io/저장소/`)든 그대로 동작합니다.
+플레이어는 URL 을 열기만 하면 되고 계정·설치가 필요 없습니다.
+
+- **GitHub Pages**: `dist/` 내용을 `gh-pages` 브랜치(또는 Pages 가 가리키는 폴더)에 올리고 Settings → Pages 에서 그 브랜치를 선택합니다.
+  GitHub Actions 를 쓴다면 `npm ci && npm run build` 후 `actions/upload-pages-artifact` 로 `dist` 를 올리면 됩니다.
+- **Netlify / Cloudflare Pages / Vercel**: 빌드 명령 `npm run build`, 게시 폴더 `dist`.
+- **S3·사내 웹서버 등**: `dist/` 를 그대로 복사.
+
+주의: `dist/index.html` 을 파일 탐색기에서 더블클릭(`file://`)하면 브라우저 보안 정책 때문에 실행되지 않습니다. 반드시 웹 서버(위 호스팅 또는 `npm run preview`)로 여세요.
+
+## 폴더 구조와 책임
+
+책임을 네 갈래로 나눴습니다. **전투 규칙은 Phaser·DOM 을 전혀 모르기 때문에** Node 에서 그대로 테스트·시뮬레이션할 수 있습니다.
+
+```
+src/
+  config/        ← 콘텐츠·밸런스 설정 (숫자와 데이터만, 로직 없음)
+  core/          ← 전투 규칙 (순수 TypeScript, 고정 틱 시뮬레이션)
+    sim.ts         GameSim: 시간·스폰·충돌·경험치·레벨업·승패
+    enemies.ts     일반 적 3종 + 엘리트 행동
+    boss.ts        보스 행동(패턴·페이즈)
+    upgrades.ts    강화 후보 추첨·중첩 한도
+    stats.ts       기본 능력치 + 강화 → 최종 능력치
+    progression.ts 경험치 곡선
+    rng.ts         시드 난수 (스폰·강화·AI 스트림 분리)
+    bot.ts         밸런스 측정용 자동 플레이어
+  render/        ← 화면 그리기 (Phaser). 입력 수집도 여기서
+    GameScene.ts   월드·적·투사체·예고 그리기, 키보드·마우스 → InputState
+    palette.ts     색상 규칙
+  ui/            ← DOM 화면 UI
+    hud.ts         체력·경험치·남은 시간·회피 대기·처치 수·보스 체력·안내 문구
+    screens.ts     타이틀 / 일시정지 / 레벨업 / 결과 화면
+  storage/       ← 브라우저 저장 (localStorage, 버전·검증)
+    save.ts
+  app/App.ts     ← 화면 흐름(타이틀→전투→레벨업/일시정지→결과→재시작), 전역 입력(Esc 등)
+  audio/sfx.ts   ← WebAudio 합성 효과음 (음원 파일 없음)
+  dev/           ← 개발 모드 옵션(시드·보스 구간 시작·무적), 디버그 훅 window.__rift
+  main.ts        ← 조립 (저장 읽기 → App → Phaser.Game)
+tests/           ← 단위 테스트 (Vitest)
+e2e/             ← 브라우저 테스트 (Playwright)
+scripts/simulate.ts ← 밸런스 시뮬레이션
+```
+
+데이터 흐름: `GameScene`(입력 수집) → `App.frame()` → `GameSim.advance()`(전투 중일 때만) → 이벤트 → 효과음·HUD·이펙트 → `GameScene`(그리기)
+
+## 설정 파일 가이드 — 무엇을 바꾸면 무엇이 달라지나
+
+모든 밸런스 값은 `src/config/` 에 있습니다. 시간 단위는 **전투 시간(초)** 입니다(일시정지·강화 선택 중에는 흐르지 않음).
+
+### `src/config/run.ts` — 한 판의 시간 구조
+| 값 | 기본 | 바꾸면 |
+| --- | --- | --- |
+| `timeLimit` | 900 (15:00) | 이 시각까지 보스를 못 잡으면 시간 초과 패배. 한 판 최대 길이 |
+| `bossAt` | 810 (13:30) | 보스 등장 시각. 줄이면 보스전이 길어지고, 늘리면 보스를 잡을 시간이 줄어듦 |
+| `tickRate` | 60 | 판정 정밀도(초당 틱). 보통 그대로 둠 |
+| `maxTicksPerFrame` | 6 | 느린 프레임에서 한 번에 따라잡는 최대 틱. 키우면 렉 후 시간이 튀고, 줄이면 느린 기기에서 게임이 느려짐 |
+
+### `src/config/spawns.ts` — 적 생성 시간표
+- `SPAWN_PHASES`: 구간별(`from`~`to`) 생성 규칙
+  - `interval: [시작, 끝]` — 몇 초마다 생성할지. 작을수록 적이 많아짐 (구간 안에서 선형 변화)
+  - `batch` — 한 번에 생성할 수
+  - `maxAlive` — 동시에 살아 있는 적 상한. **낮추면 이동·회피 공간이 넓어짐**
+  - `weights` — 종류별 비율. 예) `{ chaser: 3, charger: 1 }` 이면 4마리 중 1마리꼴로 돌진형
+  - `announce` — 구간이 시작될 때 화면에 띄우는 안내 문구
+- `SPAWN_EVENTS`: 특정 시각 1회 이벤트. 현재 엘리트 등장(7:30, 10:00, 12:00)
+
+### `src/config/enemies.ts` — 적 능력치
+- `ENEMY_CONFIG.chaser` (그림자 망령, 추격형) / `charger` (뿔 돌격수, 돌진형) / `spitter` (가시 포자, 원거리형) / `elite` (균열 수호자)
+  - `hp`, `speed`, `radius`, `contactDamage`, `xp`(처치 시 경험치)
+  - 돌진형: `windup`(예고선 표시 시간 — **늘리면 피하기 쉬움**), `dashSpeed`·`dashTime`(돌진 거리 = 속도×시간), `cooldown`
+  - 원거리형: `preferredRange`(유지 거리), `fireInterval`, `windup`(발사 전 부풀어 오르는 예고), `projectileSpeed`·`projectileDamage`
+  - 엘리트: 돌진과 원형 파편(`burstCount`)을 번갈아 사용
+  - `attackNames`: 사망 원인으로 결과 화면에 표시되는 이름
+- `ENEMY_SCALING`: 시간에 따른 강화. `hpPerMinute: 0.1` → 10분에 등장한 적의 체력 2배
+
+### `src/config/boss.ts` — 보스 '잿불 군주'
+| 값 | 바꾸면 |
+| --- | --- |
+| `hp` | **보스전 길이 = 승리 시각을 가장 크게 좌우**. 현재 10500 → 표준 플레이 승리 14:05~14:55 |
+| `phase2At` | 이 비율 이하 체력에서 2페이즈(공격 간격 단축, 탄막 2연발, 소환 추가) |
+| `attackCooldown: [1페이즈, 2페이즈]` | 공격 사이 대기. 줄이면 어려워짐 |
+| `patterns` | 페이즈별 사용 패턴 목록 (`ring` 불씨 고리 / `charge` 돌진 / `meteor` 낙화 장판 / `summon` 소환) |
+| `ring`, `charge`, `meteor` 의 `windup`·`delay` | 공격 예고 시간. 늘리면 피하기 쉬움 |
+
+### `src/config/progression.ts` — 경험치 곡선
+- 레벨 L→L+1 필요 경험치 = `round(xpBase + xpGrowth × (L-1)^xpExponent)`
+  - `xpBase` ↑ → **첫 레벨업이 늦어짐** (현재 22 → 약 40초)
+  - `xpGrowth`, `xpExponent` ↑ → 후반 레벨업이 느려져 보스전까지의 강화 수가 줄어듦 (현재 13:30 에 Lv 18 전후)
+- `choiceCount`: 레벨업 후보 수 (3)
+- `fallback`: 모든 강화가 최대일 때 대신 나오는 선택지(응급 처치)
+
+### `src/config/upgrades.ts` — 강화 9종과 중첩 한도
+- `effects`: `{ stat, op, value }` — `add` 는 더하기, `pct` 는 %(중첩끼리 더한 뒤 곱), `mul` 은 중첩마다 곱하기
+- `maxStacks`: 중첩 한도. 도달하면 후보에서 제외됨
+- `healOnPick`: 고르는 즉시 회복량
+
+### `src/config/player.ts` — 플레이어 기본 능력치
+최대 체력, 이동 속도, 피해량, 공격 속도(`fireRate`), 투사체 수·속도·사거리, 회피 대기시간·지속·무적 시간, 피격 후 무적, 경험치 흡수 범위 등. 강화는 이 값을 기준으로 계산됩니다.
+
+### `src/config/arena.ts` — 아레나·카메라
+아레나 크기(`width`/`height`), 적 생성 거리(`spawnDistance` — 화면 밖에서 나타나도록), 화면 논리 해상도(`VIEW_CONFIG`).
+
+### `src/config/dev.ts` — 개발용 '보스 직전 시작' 빌드
+`bossPreset` 은 표준 플레이에서 13:30 무렵 평균적으로 갖추는 레벨과 강화입니다. 밸런스를 바꾸면 `npm run sim` 의 "보스 등장 시 레벨"을 보고 함께 맞춰 주세요.
+
+## 밸런스 조정 절차
+
+1. `src/config/` 값을 수정
+2. `npm run sim` — 봇 20판 요약을 봅니다(수 초). 옵션: `npm run sim -- --runs 50 --skill 0.5 --seed 2000`
+   - 확인할 줄: `승리 시각`(목표 14:00~15:00), `첫 레벨업 중앙값`(목표 1분 이내), `보스 등장 시 레벨`, 사망 원인 분포
+3. `npm test` — `tests/balance.test.ts` 가 15분 설계에서 벗어나면 실패합니다(의도한 변경이면 테스트 기준도 함께 수정)
+4. `npm run dev` 로 직접 플레이 (개발 모드에서 시드 고정·보스 직전 시작 활용)
+5. 측정 결과를 `docs/PLAYTEST.md` 에 기록
+
+## 신규 콘텐츠 추가 예시
+
+### 적 1종 추가 (예: 폭발형 '불씨 벌레')
+| 파일 | 할 일 |
+| --- | --- |
+| `src/config/enemies.ts` | `NormalEnemyKind` 에 `'bomber'` 추가, 설정 인터페이스와 `ENEMY_CONFIG.bomber` 능력치·`attackNames` 추가 |
+| `src/config/spawns.ts` | 등장시킬 구간의 `weights` 에 `bomber: 1` 추가 |
+| `src/core/enemies.ts` | `updateEnemies` 의 `switch` 에 `case 'bomber'` 행동 추가 (예고 → 폭발은 `sim.addHazard` 활용 가능) |
+| `src/render/GameScene.ts` · `palette.ts` | `drawEnemy` 에 모양·색 추가, 예고 표시가 있으면 `draw()` 의 예고 단계에 추가 |
+| `src/core/bot.ts` | (선택) 봇이 새 위협을 피하도록 회피 규칙 추가 → `npm run sim` 으로 밸런스 확인 |
+| `tests/` | 행동 테스트 추가, `balance.test.ts` 기준 확인 |
+
+### 강화 1종 추가 (예: '관통 탄환')
+| 파일 | 할 일 |
+| --- | --- |
+| `src/config/upgrades.ts` | `UpgradeId` 에 `'pierce'` 추가, `UPGRADES` 에 항목 추가(분류·설명·`maxStacks`·`effects`) |
+| `src/config/player.ts` | 새 능력치가 필요하면 `PLAYER_BASE_STATS` 에 `pierce: 0` 추가 (기존 능력치만 바꾸는 강화면 불필요) |
+| `src/core/sim.ts` | 새 능력치를 실제로 쓰는 규칙 추가 (예: 투사체 충돌 시 관통 횟수 차감) |
+| `src/core/bot.ts` | `PICK_WEIGHT` 에 선호도 추가 (타입 검사가 누락을 알려 줌) |
+| `tests/upgrades.test.ts` | '강화 9종' 개수 검사를 새 개수로 수정, 효과 테스트 추가 |
+
+HUD 의 강화 목록, 레벨업 카드, 결과 화면은 설정에서 자동으로 만들어지므로 따로 고칠 필요가 없습니다.
+
+## 개발 모드
+
+`npm run dev` 이거나 URL 에 `?dev=1` 을 붙이면 켜집니다(배포 빌드에서도 URL 로 켤 수 있지만 평소엔 숨겨져 있음).
+
+| URL 예시 | 효과 |
+| --- | --- |
+| `?dev=1&seed=1234` | 시드 고정 → 같은 입력이면 스폰 순서·위치 난수와 강화 후보가 그대로 재현됨 |
+| `?dev=1&start=boss` | 보스 등장 5초 전(13:25)부터, `config/dev.ts` 의 대표 빌드(Lv 18)로 시작 |
+| `?dev=1&start=880` | 지정한 전투 시각(초)부터 시작 (시간 초과 테스트 등) |
+| `?dev=1&god=1` | 무적 |
+
+타이틀 화면의 '개발 모드' 패널에서도 시드·시작 구간·무적을 바꿀 수 있습니다. 결과 화면에는 항상 그 판의 시드가 표시되므로 버그 제보 시 함께 적어 주세요.
+**보스 직전 시작·무적·시작 시각 지정을 쓴 판은 최고 기록에 반영되지 않습니다.**
+
+개발 모드에서는 콘솔에서 `window.__rift.snapshot()` 으로 현재 상태를 볼 수 있습니다(자동 테스트도 이것을 사용).
+
+### 시드 재현 범위
+난수는 용도별로 분리되어 있습니다: 스폰(`spawn`), 강화 후보(`upgrade`), 보스 패턴(`ai`).
+- 스폰 난수는 플레이어 행동과 관계없이 항상 같은 순서로 소비되므로, 같은 시드면 **적 종류·등장 시각·등장 방향/거리 난수**가 같습니다(실제 좌표는 플레이어 위치 기준).
+- 강화 후보는 같은 시드에서 **같은 선택을 하면** 같은 후보가 나옵니다.
+
+## 저장 데이터
+
+`localStorage` 의 `rift-arena/save` 키에 JSON 으로 저장합니다.
+
+```json
+{ "version": 1, "settings": { "volume": 0.6 },
+  "records": { "runs": 3, "wins": 1, "bestSurvival": 862.5, "bestKills": 1180, "fastestWin": 862.5 } }
+```
+
+- 값이 없거나, JSON 이 깨졌거나, 버전이 다르면 **기본값으로 실행**합니다(게임이 멈추지 않음). 일부 필드만 잘못되면 그 필드만 기본값으로 바꿉니다.
+- 저장소 접근이 막힌 환경(일부 비공개 모드)에서도 저장 없이 정상 실행됩니다.
+- 저장 형식을 바꿀 때: `src/storage/save.ts` 의 `SAVE_VERSION` 을 올리고 `migrate()` 에 이전 버전 변환을 추가한 뒤 `tests/save.test.ts` 에 테스트를 추가하세요.
+
+## 테스트가 검증하는 것
+
+- **단위 테스트** (`npm test`, 41개)
+  - 시간: 전투 중에만 흐름, 일시정지·레벨업 중 시간·스폰·적 이동 정지, 큰 프레임 간격 제한, 60/144fps 에서 실시간과 일치, 짧은 회피 입력 보존
+  - 보스·승패: 13:30 정확히 1회 등장, 등장 연출 무적, 2페이즈 전환, 처치 즉시 승리, 15:00 시간 초과, 사망 원인 기록
+  - 강화: 9종·3분류, 중첩 한도 도달 시 후보 제외, 한도 초과 적용 거부, 모두 채우면 응급 처치, 효과 수치
+  - 재현성: 같은 시드 → 같은 스폰·강화·결과, 스폰 난수는 행동과 무관
+  - 저장: 없음·손상·버전 불일치·부분 손상·접근 차단, 최고 기록 갱신, 개발 옵션 판 제외
+  - 밸런스 회귀: 시간표 구성, 첫 레벨업 ≤ 65초, 봇 승리 시각 14:00~15:00
+- **브라우저 테스트** (`npm run test:e2e`, 11개): 새로 시작·이동·공격·회피, 강화 선택, Esc 일시정지, 탭 숨김 자동 정지, 보스 처치 승리, 시간 초과, 재시작 반복(입력·스폰 중복 없음), 새로고침 후 기록·음량 유지, 손상된 저장, 배포 모드에서 디버그 도구 비노출
+- **실시간 한 판** (`npm run test:e2e:full`): 봇이 실제 입력으로 15분을 플레이하고 `test-results/full-run-<seed>.json` 에 결과 기록
+
+## 알려진 한계 (MVP)
+
+- 모바일·터치 조작은 지원하지 않습니다(PC 키보드·마우스 전용).
+- 그래픽은 도형 기반의 간결한 표현이며, 배경 음악은 없습니다(효과음만 합성).
+- 밸런스 수치는 자동 플레이 봇 기준으로 맞췄습니다. 사람 플레이어 표본으로 다시 확인이 필요합니다(`docs/PLAYTEST.md`).

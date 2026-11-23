@@ -1,0 +1,66 @@
+import type { StatKey } from './player';
+
+/**
+ * 강화 9종. 공격 / 생존 / 기동 3개 분류에 3개씩.
+ * effects 의 계산 방식 (stacks = 현재 중첩 수):
+ *   add : 기본값 + value × stacks
+ *   pct : 기본값 × (1 + value × stacks)       (예: 0.18 → 중첩당 +18%)
+ *   mul : 기본값 × value ^ stacks            (예: 0.82 → 중첩당 18% 감소)
+ * maxStacks 에 도달한 강화는 후보에서 제외된다.
+ */
+export type UpgradeCategory = 'attack' | 'survival' | 'mobility';
+export type UpgradeId =
+  | 'rapid' | 'split' | 'power'
+  | 'vitality' | 'regen' | 'guard'
+  | 'swift' | 'evasion' | 'magnet';
+
+export interface UpgradeEffect {
+  stat: StatKey;
+  op: 'add' | 'pct' | 'mul';
+  value: number;
+}
+
+export interface UpgradeDef {
+  id: UpgradeId;
+  name: string;
+  category: UpgradeCategory;
+  description: string;
+  maxStacks: number;
+  effects: UpgradeEffect[];
+  /** 선택 즉시 회복량 */
+  healOnPick?: number;
+}
+
+export const CATEGORY_LABEL: Record<UpgradeCategory, string> = {
+  attack: '공격',
+  survival: '생존',
+  mobility: '기동',
+};
+
+export const UPGRADES: UpgradeDef[] = [
+  // ── 공격 ──
+  { id: 'rapid', name: '연사 숙련', category: 'attack', description: '공격 속도 +18%', maxStacks: 5,
+    effects: [{ stat: 'fireRate', op: 'pct', value: 0.18 }] },
+  { id: 'split', name: '분열 사격', category: 'attack', description: '투사체 +1 (부채꼴)', maxStacks: 3,
+    effects: [{ stat: 'projectileCount', op: 'add', value: 1 }] },
+  { id: 'power', name: '날 선 탄환', category: 'attack', description: '피해 +22%', maxStacks: 5,
+    effects: [{ stat: 'damage', op: 'pct', value: 0.22 }] },
+  // ── 생존 ──
+  { id: 'vitality', name: '강인한 육체', category: 'survival', description: '최대 체력 +25, 즉시 25 회복', maxStacks: 4,
+    effects: [{ stat: 'maxHp', op: 'add', value: 25 }], healOnPick: 25 },
+  { id: 'regen', name: '재생', category: 'survival', description: '초당 체력 0.8 회복', maxStacks: 3,
+    effects: [{ stat: 'regen', op: 'add', value: 0.8 }] },
+  { id: 'guard', name: '수호 결계', category: 'survival', description: '받는 피해 -12%', maxStacks: 3,
+    effects: [{ stat: 'damageTaken', op: 'mul', value: 0.88 }] },
+  // ── 기동 ──
+  { id: 'swift', name: '질풍 걸음', category: 'mobility', description: '이동 속도 +10%', maxStacks: 4,
+    effects: [{ stat: 'moveSpeed', op: 'pct', value: 0.1 }] },
+  { id: 'evasion', name: '순간 회피', category: 'mobility', description: '회피 재사용 대기시간 -18%', maxStacks: 3,
+    effects: [{ stat: 'dodgeCooldown', op: 'mul', value: 0.82 }] },
+  { id: 'magnet', name: '흡수 영역', category: 'mobility', description: '경험치 흡수 범위 +45%', maxStacks: 3,
+    effects: [{ stat: 'pickupRadius', op: 'pct', value: 0.45 }] },
+];
+
+export const UPGRADE_BY_ID: Record<UpgradeId, UpgradeDef> = Object.fromEntries(
+  UPGRADES.map((u) => [u.id, u]),
+) as Record<UpgradeId, UpgradeDef>;

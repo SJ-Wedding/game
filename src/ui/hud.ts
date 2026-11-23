@@ -1,0 +1,155 @@
+import { BOSS_CONFIG } from '../config/boss';
+import { RUN_CONFIG } from '../config/run';
+import { UPGRADES } from '../config/upgrades';
+import { formatTime } from '../core/math';
+import type { GameSim } from '../core/sim';
+import type { SimEvent } from '../core/types';
+import { Cached, el, josa } from './dom';
+
+/**
+ * 전투 중 HUD: 체력, 경험치, 남은 시간, 회피 재사용 대기시간, 처치 수, 보스 체력, 안내 문구.
+ */
+export class Hud {
+  private root: HTMLElement;
+  private c = new Cached();
+  private hpFill: HTMLElement;
+  private hpText: HTMLElement;
+  private xpFill: HTMLElement;
+  private xpText: HTMLElement;
+  private dodgeFill: HTMLElement;
+  private dodgeText: HTMLElement;
+  private dodgeBox: HTMLElement;
+  private timer: HTMLElement;
+  private timerSub: HTMLElement;
+  private kills: HTMLElement;
+  private bossBox: HTMLElement;
+  private bossFill: HTMLElement;
+  private bossText: HTMLElement;
+  private banner: HTMLElement;
+  private chips: HTMLElement;
+  private bannerUntil = 0;
+  private lastPhaseLabel: string | null = null;
+  private lastPicks = -1;
+
+  constructor(root: HTMLElement) {
+    this.root = root;
+    root.replaceChildren();
+    this.hpFill = el('div', { class: 'fill' });
+    this.hpText = el('span', { class: 'label', 'data-testid': 'hud-hp' });
+    this.xpFill = el('div', { class: 'fill' });
+    this.xpText = el('span', { class: 'label', 'data-testid': 'hud-xp' });
+    this.dodgeFill = el('div', { class: 'fill' });
+    this.dodgeText = el('span', { class: 'label', 'data-testid': 'hud-dodge' });
+    this.dodgeBox = el('div', { class: 'bar dodge' }, [this.dodgeFill, this.dodgeText]);
+    this.timer = el('div', { class: 'timer', 'data-testid': 'hud-timer' });
+    this.timerSub = el('div', { class: 'timer-sub' });
+    this.kills = el('div', { class: 'kills', 'data-testid': 'hud-kills' });
+    this.bossFill = el('div', { class: 'fill' });
+    this.bossText = el('span', { class: 'label', 'data-testid': 'hud-boss' });
+    this.bossBox = el('div', { class: 'boss-bar hidden' }, [
+      el('div', { class: 'boss-name', text: BOSS_CONFIG.name }),
+      el('div', { class: 'bar boss' }, [this.bossFill, this.bossText]),
+    ]);
+    this.banner = el('div', { class: 'banner', 'data-testid': 'hud-banner' });
+    this.chips = el('div', { class: 'chips' });
+
+    root.append(
+      el('div', { class: 'hud-left' }, [
+        el('div', { class: 'bar hp' }, [this.hpFill, this.hpText]),
+        el('div', { class: 'bar xp' }, [this.xpFill, this.xpText]),
+        this.dodgeBox,
+      ]),
+      el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
+      el('div', { class: 'hud-right' }, [this.kills]),
+      this.bossBox,
+      this.banner,
+      this.chips,
+    );
+  }
+
+  show(): void {
+    this.root.classList.remove('hidden');
+  }
+
+  hide(): void {
+    this.root.classList.add('hidden');
+  }
+
+  /** 새 판 시작 시 캐시 초기화 */
+  reset(): void {
+    this.c.reset();
+    this.bannerUntil = 0;
+    this.lastPhaseLabel = null;
+    this.lastPicks = -1;
+    this.banner.textContent = '';
+    this.banner.classList.remove('show');
+  }
+
+  flash(text: string, seconds = 3): void {
+    this.banner.textContent = text;
+    this.banner.classList.add('show');
+    this.bannerUntil = performance.now() + seconds * 1000;
+  }
+
+  update(sim: GameSim, events: SimEvent[]): void {
+    const c = this.c;
+    const p = sim.player;
+    const s = sim.stats;
+
+    c.style(this.hpFill, 'hp', 'width', `${(100 * p.hp) / s.maxHp}%`);
+    c.text(this.hpText, 'hp', `체력 ${Math.ceil(p.hp)} / ${Math.round(s.maxHp)}`);
+    c.toggle(this.hpFill, 'hpLow', 'low', p.hp / s.maxHp < 0.3);
+
+    const need = sim.xpNeeded;
+    c.style(this.xpFill, 'xp', 'width', `${(100 * sim.xp) / need}%`);
+    c.text(this.xpText, 'xp', `Lv ${sim.level}  ·  경험치 ${sim.xp} / ${need}`);
+
+    const ready = p.dodgeCd <= 0;
+    c.style(this.dodgeFill, 'dodge', 'width', `${ready ? 100 : (100 * (1 - p.dodgeCd / s.dodgeCooldown)).toFixed(0)}%`);
+    c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
+    c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
+
+    c.text(this.timer, 'timer', formatTime(Math.ceil(sim.remaining)));
+    const toBoss = RUN_CONFIG.bossAt - sim.elapsed;
+    c.text(
+      this.timerSub,
+      'timerSub',
+      sim.bossSpawned ? '남은 시간 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`,
+    );
+    c.toggle(this.timer, 'urgent', 'urgent', sim.bossSpawned && sim.remaining < 30);
+    c.text(this.kills, 'kills', `처치 ${sim.kills}`);
+
+    const b = sim.boss;
+    c.toggle(this.bossBox, 'boss', 'hidden', !b || b.dead);
+    if (b && !b.dead) {
+      c.style(this.bossFill, 'bossHp', 'width', `${(100 * b.hp) / b.maxHp}%`);
+      c.text(this.bossText, 'bossHp', `${Math.ceil(b.hp)} / ${b.maxHp}${b.phase === 2 ? '  ·  격노' : ''}`);
+    }
+
+    if (sim.pickOrder.length !== this.lastPicks) {
+      this.lastPicks = sim.pickOrder.length;
+      this.chips.replaceChildren(
+        ...UPGRADES.filter((u) => sim.stacks[u.id] > 0).map((u) =>
+          el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
+        ),
+      );
+    }
+
+    // 안내 문구
+    const ph = sim.currentSpawnPhase();
+    if (ph && ph.label !== this.lastPhaseLabel) {
+      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 마우스 조준 · 좌클릭 공격 · Space 회피', 5);
+      else if (ph.announce) this.flash(ph.announce, 4);
+      this.lastPhaseLabel = ph.label;
+    }
+    for (const ev of events) {
+      if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
+      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장! 15:00 전에 처치하세요`, 4);
+      else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
+    }
+    if (this.bannerUntil && performance.now() > this.bannerUntil) {
+      this.bannerUntil = 0;
+      this.banner.classList.remove('show');
+    }
+  }
+}
