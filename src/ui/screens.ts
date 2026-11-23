@@ -1,3 +1,4 @@
+import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { CATEGORY_LABEL } from '../config/upgrades';
@@ -172,11 +173,13 @@ export class Screens {
       const btn = el('button', { class: `card ${c.kind === 'upgrade' ? c.def.category : 'fallback'}`, 'data-testid': `choice-${i}` });
       if (i === 0) btn.setAttribute('data-autofocus', '');
       if (c.kind === 'upgrade') {
+        const weapon = c.def.weapon;
+        if (weapon) btn.append(el('img', { class: 'weapon-icon', src: WEAPON_TEXTURES[weapon], alt: '' }));
         btn.append(
-          el('span', { class: 'cat', text: CATEGORY_LABEL[c.def.category] }),
+          el('span', { class: 'cat', text: weapon ? '특수 무기' : CATEGORY_LABEL[c.def.category] }),
           el('strong', { class: 'name', text: c.def.name }),
           el('span', { class: 'desc', text: c.def.description }),
-          el('span', { class: 'stack', text: c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}` }),
+          el('span', { class: 'stack', text: weapon ? '획득 즉시 자동 발동' : c.nextStack === 1 ? `신규 · 최대 ${c.def.maxStacks}` : `${c.nextStack - 1} → ${c.nextStack} / 최대 ${c.def.maxStacks}` }),
         );
       } else {
         btn.append(el('span', { class: 'cat', text: '회복' }), el('strong', { class: 'name', text: c.name }), el('span', { class: 'desc', text: c.description }));

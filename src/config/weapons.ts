@@ -1,0 +1,17 @@
+export const WEAPONS = {
+  chain: { name: '연쇄 번개', description: '가까운 적에게 번개를 쏴 주변 적 3마리까지 연쇄 타격합니다.', color: 0x8be9ff },
+  mine: { name: '균열 지뢰', description: '지나온 자리에 적이 접근하면 터지는 지뢰를 설치합니다.', color: 0xffad67 },
+  orbit: { name: '회전 칼날', description: '두 개의 칼날이 몸 주위를 돌며 닿는 적을 벱니다.', color: 0xcce9f5 },
+  axe: { name: '부메랑 도끼', description: '적을 관통하며, 돌아올 때 현재 위치를 따라옵니다.', color: 0xffd17c },
+  turret: { name: '서리 포탑', description: '잠시 머무는 포탑이 주변 적에게 둔화탄을 쏩니다.', color: 0x96c8ff },
+  flame: { name: '화염 발자국', description: '움직인 자리에 잠깐 남는 불길이 적을 태웁니다.', color: 0xff9559 },
+  barrier: { name: '균열 장벽', description: '회피 경로에 균열을 남겨 처음 건너는 적에게 피해를 줍니다.', color: 0xd698ff },
+  spear: { name: '관통 창', description: '잠깐 조준한 뒤 같은 선 위의 적을 한꺼번에 꿰뚫습니다.', color: 0xffecac },
+  mark: { name: '낙뢰 표식', description: '같은 적에게 기본탄을 세 번 맞히면 주변에도 낙뢰가 떨어집니다.', color: 0xe2bbff },
+  echo: { name: '메아리 사격', description: '이전 사격 위치에 나타난 잔영이 같은 방향으로 한 발 더 쏩니다.', color: 0x7df2dd },
+  gravity: { name: '중력 구체', description: '느리게 전진하며 일반 적을 끌어당긴 뒤 폭발합니다.', color: 0xb6a2ff },
+  infection: { name: '처치 전염', description: '적을 감염시킵니다. 감염된 적이 쓰러지면 주변 적으로 번집니다.', color: 0xa6ea73 },
+} as const;
+
+export type WeaponId = keyof typeof WEAPONS;
+export const WEAPON_IDS = Object.keys(WEAPONS) as WeaponId[];

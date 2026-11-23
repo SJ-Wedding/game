@@ -1,5 +1,5 @@
 import { PROGRESSION_CONFIG } from '../config/progression';
-import { UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
+import { UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeId } from '../config/upgrades';
 import type { Rng } from './rng';
 import type { Stacks } from './stats';
 import type { UpgradeChoice } from './types';
@@ -35,4 +35,15 @@ export function applyUpgrade(stacks: Stacks, id: UpgradeId): boolean {
   if ((stacks[id] ?? 0) >= def.maxStacks) return false;
   stacks[id] = (stacks[id] ?? 0) + 1;
   return true;
+}
+
+/** 무기는 처음과 이후 세 레벨마다 일반 강화와 함께 제시된다. */
+export function rollRunChoices(rng: Rng, weaponRng: Rng, stacks: Stacks, level: number): UpgradeChoice[] {
+  const choices = rollChoices(rng, stacks);
+  if (level % 3 !== 2 && choices[0].kind !== 'fallback') return choices;
+  const available = WEAPON_UPGRADES.filter((def) => !stacks[def.id]);
+  if (!available.length) return choices;
+  const weapon: UpgradeChoice = { kind: 'upgrade', def: available[weaponRng.int(available.length)], nextStack: 1 };
+  if (choices[0].kind === 'fallback') return [weapon];
+  return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }

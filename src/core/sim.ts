@@ -5,7 +5,7 @@ import { AUTO_COMBAT, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
-import { UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
+import { ALL_UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../config/upgrades';
 import { bossInvulnerable, createBoss, updateBoss } from './boss';
 import { createEnemy, updateEnemies } from './enemies';
 import { clamp, compact, dist, dist2, lerp } from './math';
@@ -16,7 +16,8 @@ import type {
   Boss, Enemy, Gem, Hazard, InputState, Player, Projectile, RunEndCause, RunOutcome, RunResult,
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
-import { applyUpgrade, rollChoices } from './upgrades';
+import { WeaponSystem } from './weapons';
+import { applyUpgrade, rollRunChoices } from './upgrades';
 
 export interface SimOptions {
   seed: number;
@@ -49,6 +50,8 @@ export class GameSim {
   readonly rngSpawn: Rng;
   readonly rngUpgrade: Rng;
   readonly rngAi: Rng;
+  private readonly rngWeapon: Rng;
+  readonly weapons = new WeaponSystem(this);
   readonly options: SimOptions;
 
   /** 경과 틱. elapsed = tick / tickRate */
@@ -101,6 +104,7 @@ export class GameSim {
     this.rngSpawn = new Rng(deriveSeed(this.seed, 'spawn'));
     this.rngUpgrade = new Rng(deriveSeed(this.seed, 'upgrade'));
     this.rngAi = new Rng(deriveSeed(this.seed, 'ai'));
+    this.rngWeapon = new Rng(deriveSeed(this.seed, 'weapon'));
 
     if (options.presetUpgrades) {
       for (const [id, n] of Object.entries(options.presetUpgrades) as [UpgradeId, number][]) {
@@ -122,6 +126,7 @@ export class GameSim {
       dodgeDy: 0,
       fireCd: 0,
       aim: -Math.PI / 2,
+      facingLeft: false,
       hurtFlash: 0,
     };
 
@@ -199,6 +204,7 @@ export class GameSim {
     this.updateSpawner(dt);
     updateEnemies(this, dt);
     updateBoss(this, dt);
+    this.weapons.update(dt);
     this.updateProjectiles(dt);
     this.updateHazards(dt);
     this.updateGems(dt);
@@ -250,8 +256,12 @@ export class GameSim {
       p.dodgeCd = s.dodgeCooldown;
       p.invuln = Math.max(p.invuln, s.dodgeInvuln);
       this.dodges++;
+      this.weapons.onDodge();
       this.emit('dodge', p.x, p.y);
     }
+
+    const horizontal = p.dodgeTime > 0 ? p.dodgeDx : mx;
+    if (Math.abs(horizontal) > 0.08) p.facingLeft = horizontal < 0;
 
     if (p.dodgeTime > 0) {
       p.dodgeTime -= dt;
@@ -317,6 +327,7 @@ export class GameSim {
         source: 'player',
       });
     }
+    this.weapons.onShot();
     this.shotsFired++;
     this.emit('shoot', p.x, p.y);
   }
@@ -482,6 +493,7 @@ export class GameSim {
         if (e.dead) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
+          if (s.source === 'player') this.weapons.onBulletHit(e);
           this.damageEnemy(e, s.damage);
           s.life = 0;
           break;
@@ -491,6 +503,7 @@ export class GameSim {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
+          if (s.source === 'player' && !bossInvulnerable(boss)) this.weapons.onBulletHit(boss);
           this.damageBoss(s.damage);
         }
       }
@@ -521,6 +534,7 @@ export class GameSim {
       this.kills++;
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
+      this.weapons.onEnemyKilled(e);
       this.emit('kill', e.x, e.y);
     }
   }
@@ -585,7 +599,7 @@ export class GameSim {
   }
 
   private openLevelUp(): void {
-    this.choices = rollChoices(this.rngUpgrade, this.stacks);
+    this.choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, this.level - this.pendingLevels + 1);
     this.phase = 'levelup';
     this.acc = 0;
     this.emit('levelup', this.player.x, this.player.y);
@@ -608,7 +622,7 @@ export class GameSim {
     }
     this.pendingLevels--;
     if (this.pendingLevels > 0) {
-      this.choices = rollChoices(this.rngUpgrade, this.stacks);
+      this.choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, this.level - this.pendingLevels + 1);
     } else {
       this.choices = [];
       this.phase = 'combat';
@@ -640,7 +654,7 @@ export class GameSim {
       kills: this.kills,
       killsByKind: { ...this.killsByKind },
       level: this.level,
-      upgrades: UPGRADES.filter((u) => this.stacks[u.id] > 0).map((u) => ({
+      upgrades: ALL_UPGRADES.filter((u) => this.stacks[u.id] > 0).map((u) => ({
         id: u.id,
         name: UPGRADE_BY_ID[u.id].name,
         stacks: this.stacks[u.id],

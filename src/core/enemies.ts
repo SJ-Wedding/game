@@ -18,6 +18,7 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
     hp,
     maxHp: hp,
     speed: c.speed,
+    slowUntil: 0,
     dmgMul: 1 + ENEMY_SCALING.damagePerMinute * minutes,
     xp: c.xp,
     state: 'move',
@@ -56,15 +57,16 @@ export function updateEnemies(sim: GameSim, dt: number): void {
     let contactSource: string = ENEMY_CONFIG[e.kind].attackNames.contact;
     let contactDamage = ENEMY_CONFIG[e.kind].contactDamage;
 
+    const speed = e.speed * (e.slowUntil > sim.elapsed ? 0.55 : 1);
     switch (e.kind) {
       case 'chaser':
-        moveToward(e, p.x, p.y, e.speed, dt);
+        moveToward(e, p.x, p.y, speed, dt);
         break;
 
       case 'charger': {
         const c = ENEMY_CONFIG.charger;
         if (e.state === 'move') {
-          moveToward(e, p.x, p.y, e.speed, dt);
+          moveToward(e, p.x, p.y, speed, dt);
           e.cd -= dt;
           if (e.cd <= 0 && d < c.triggerRange) {
             e.state = 'windup';
@@ -101,15 +103,15 @@ export function updateEnemies(sim: GameSim, dt: number): void {
         const c = ENEMY_CONFIG.spitter;
         if (e.state === 'move') {
           const [minR, maxR] = c.preferredRange;
-          if (d > maxR) moveToward(e, p.x, p.y, e.speed, dt);
-          else if (d < minR) moveToward(e, e.x * 2 - p.x, e.y * 2 - p.y, e.speed, dt);
+          if (d > maxR) moveToward(e, p.x, p.y, speed, dt);
+          else if (d < minR) moveToward(e, e.x * 2 - p.x, e.y * 2 - p.y, speed, dt);
           else {
             // 거리를 유지하며 옆으로 맴돈다 (id 짝/홀로 방향 결정)
             const sgn = e.id % 2 === 0 ? 1 : -1;
             const nx = -(p.y - e.y) / (d || 1);
             const ny = (p.x - e.x) / (d || 1);
-            e.x += nx * sgn * e.speed * 0.5 * dt;
-            e.y += ny * sgn * e.speed * 0.5 * dt;
+            e.x += nx * sgn * speed * 0.5 * dt;
+            e.y += ny * sgn * speed * 0.5 * dt;
           }
           e.cd -= dt;
           if (e.cd <= 0 && d < c.fireRange) {
@@ -131,7 +133,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
       case 'elite': {
         const c = ENEMY_CONFIG.elite;
         if (e.state === 'move') {
-          moveToward(e, p.x, p.y, e.speed, dt);
+          moveToward(e, p.x, p.y, speed, dt);
           e.cd -= dt;
           if (e.cd <= 0 && d < 520) {
             if (e.attackIndex % 2 === 0) {

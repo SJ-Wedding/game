@@ -31,6 +31,7 @@ export interface Player {
   fireCd: number;
   /** 조준 각도(라디안) */
   aim: number;
+  facingLeft: boolean;
   /** 피격 연출용 */
   hurtFlash: number;
 }
@@ -52,6 +53,7 @@ export interface Enemy {
   hp: number;
   maxHp: number;
   speed: number;
+  slowUntil: number;
   /** 시간 경과 피해 배율 */
   dmgMul: number;
   xp: number;

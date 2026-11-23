@@ -1,6 +1,7 @@
+import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
-import { UPGRADES } from '../config/upgrades';
+import { ALL_UPGRADES } from '../config/upgrades';
 import { formatTime } from '../core/math';
 import type { GameSim } from '../core/sim';
 import type { SimEvent } from '../core/types';
@@ -129,8 +130,10 @@ export class Hud {
     if (sim.pickOrder.length !== this.lastPicks) {
       this.lastPicks = sim.pickOrder.length;
       this.chips.replaceChildren(
-        ...UPGRADES.filter((u) => sim.stacks[u.id] > 0).map((u) =>
-          el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
+        ...ALL_UPGRADES.filter((u) => sim.stacks[u.id] > 0).map((u) =>
+          u.weapon
+            ? el('span', { class: 'chip attack weapon-chip' }, [el('img', { src: WEAPON_TEXTURES[u.weapon], alt: '' }), u.name])
+            : el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
         ),
       );
     }

@@ -19,7 +19,7 @@ export interface BotOptions {
   skill?: number;
 }
 
-const PICK_WEIGHT: Record<UpgradeId, number> = {
+const PICK_WEIGHT: Partial<Record<UpgradeId, number>> = {
   split: 6,
   power: 5,
   rapid: 5,
@@ -47,7 +47,7 @@ export class Bot {
     let best = 0;
     let bestScore = -Infinity;
     sim.choices.forEach((c, i) => {
-      let score = c.kind === 'fallback' ? 0 : PICK_WEIGHT[c.def.id];
+      let score = c.kind === 'fallback' ? 0 : (PICK_WEIGHT[c.def.id] ?? 3.1);
       if (c.kind === 'upgrade' && lowHp && c.def.category === 'survival') score += 2;
       score += this.rng.range(0, 2.5);
       if (score > bestScore) {

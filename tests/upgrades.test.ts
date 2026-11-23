@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLAYER_BASE_STATS } from '../src/config/player';
-import { UPGRADES } from '../src/config/upgrades';
+import { ALL_UPGRADES, UPGRADES } from '../src/config/upgrades';
 import { Rng } from '../src/core/rng';
 import { computeStats, emptyStacks } from '../src/core/stats';
 import { IDLE_INPUT } from '../src/core/types';
@@ -51,7 +51,7 @@ describe('강화 중첩 한도', () => {
 
   it('게임에서 레벨업을 계속해도 어떤 강화도 한도를 넘지 않고, 모두 채우면 응급 처치만 나온다', () => {
     const sim = makeSim({ seed: 11, god: true });
-    const totalStacks = UPGRADES.reduce((s, u) => s + u.maxStacks, 0);
+    const totalStacks = ALL_UPGRADES.reduce((s, u) => s + u.maxStacks, 0);
     for (let lv = 0; lv < totalStacks + 10; lv++) {
       sim.gainXp(100_000);
       sim.step(IDLE_INPUT);
@@ -59,10 +59,10 @@ describe('강화 중첩 한도', () => {
       while (sim.phase === 'levelup' && guard++ < 500) {
         // 매번 다른 위치의 후보를 골라 다양한 조합을 시험
         expect(sim.choose(lv % sim.choices.length)).toBe(true);
-        for (const u of UPGRADES) expect(sim.stacks[u.id]).toBeLessThanOrEqual(u.maxStacks);
+        for (const u of ALL_UPGRADES) expect(sim.stacks[u.id]).toBeLessThanOrEqual(u.maxStacks);
       }
     }
-    for (const u of UPGRADES) expect(sim.stacks[u.id]).toBe(u.maxStacks);
+    for (const u of ALL_UPGRADES) expect(sim.stacks[u.id]).toBe(u.maxStacks);
     expect(sim.pickOrder.filter((id) => id !== 'recover')).toHaveLength(totalStacks);
     expect(sim.pickOrder).toContain('recover');
   });

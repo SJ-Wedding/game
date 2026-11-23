@@ -1,3 +1,4 @@
+import { WEAPONS, WEAPON_IDS, type WeaponId } from './weapons';
 import type { StatKey } from './player';
 
 /**
@@ -12,7 +13,8 @@ export type UpgradeCategory = 'attack' | 'survival' | 'mobility';
 export type UpgradeId =
   | 'rapid' | 'split' | 'power'
   | 'vitality' | 'regen' | 'guard'
-  | 'swift' | 'evasion' | 'magnet';
+  | 'swift' | 'evasion' | 'magnet'
+  | WeaponId;
 
 export interface UpgradeEffect {
   stat: StatKey;
@@ -29,6 +31,7 @@ export interface UpgradeDef {
   effects: UpgradeEffect[];
   /** 선택 즉시 회복량 */
   healOnPick?: number;
+  weapon?: WeaponId;
 }
 
 export const CATEGORY_LABEL: Record<UpgradeCategory, string> = {
@@ -61,6 +64,13 @@ export const UPGRADES: UpgradeDef[] = [
     effects: [{ stat: 'pickupRadius', op: 'pct', value: 0.45 }] },
 ];
 
+export const WEAPON_UPGRADES: UpgradeDef[] = WEAPON_IDS.map((id) => ({
+  id, weapon: id, name: WEAPONS[id].name, description: WEAPONS[id].description,
+  category: 'attack', maxStacks: 1, effects: [],
+}));
+
+export const ALL_UPGRADES = [...UPGRADES, ...WEAPON_UPGRADES];
+
 export const UPGRADE_BY_ID: Record<UpgradeId, UpgradeDef> = Object.fromEntries(
-  UPGRADES.map((u) => [u.id, u]),
+  ALL_UPGRADES.map((u) => [u.id, u]),
 ) as Record<UpgradeId, UpgradeDef>;

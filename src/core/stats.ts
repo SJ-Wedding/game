@@ -1,10 +1,10 @@
 import { PLAYER_BASE_STATS, type PlayerStats, type StatKey } from '../config/player';
-import { UPGRADES, type UpgradeId } from '../config/upgrades';
+import { ALL_UPGRADES, UPGRADES, type UpgradeId } from '../config/upgrades';
 
 export type Stacks = Record<UpgradeId, number>;
 
 export function emptyStacks(): Stacks {
-  return Object.fromEntries(UPGRADES.map((u) => [u.id, 0])) as Stacks;
+  return Object.fromEntries(ALL_UPGRADES.map((u) => [u.id, 0])) as Stacks;
 }
 
 /** 기본 능력치 + 강화 중첩 → 최종 능력치 */

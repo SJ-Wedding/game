@@ -7,7 +7,8 @@ import { BOSS_CHARGE_LENGTH } from '../core/boss';
 import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
-import { ARENA_TEXTURE, ACTOR_TEXTURES } from './textures';
+import { WEAPONS } from '../config/weapons';
+import { ARENA_TEXTURE, ACTOR_TEXTURES, WEAPON_FRAMES, weaponEffects, type WeaponSprite } from './textures';
 
 interface Particle {
   x: number;
@@ -32,6 +33,8 @@ export class GameScene extends Phaser.Scene {
   private bossImage!: Phaser.GameObjects.Image;
   private readonly enemyImages: Phaser.GameObjects.Image[] = [];
   private visibleEnemies = 0;
+  private readonly weaponImages: Phaser.GameObjects.Image[] = [];
+  private visibleWeapons = 0;
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SPACE', Phaser.Input.Keyboard.Key>;
   private particles: Particle[] = [];
   private renderedSim: GameSim | null = null;
@@ -48,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     this.load.image('arena-slate', ARENA_TEXTURE);
     for (const [key, url] of Object.entries(ACTOR_TEXTURES)) this.load.image(key, url);
+    this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
   }
 
   create(): void {
@@ -189,7 +193,7 @@ export class GameScene extends Phaser.Scene {
     const W = ARENA_CONFIG.width;
     const H = ARENA_CONFIG.height;
     const pad = ARENA_CONFIG.wallPadding;
-    this.add.tileSprite(0, 0, W, H, 'arena-slate').setOrigin(0).setTileScale(1.25);
+    this.add.tileSprite(0, 0, W, H, 'arena-slate').setOrigin(0).setTileScale(4);
     const f = this.add.graphics();
     const cx = W / 2;
     const cy = H / 2;
@@ -232,6 +236,7 @@ export class GameScene extends Phaser.Scene {
     this.visibleEnemies = enemyCount;
     this.playerImage.setVisible(sim !== null);
     this.bossImage.setVisible(Boolean(sim?.boss && !sim.boss.dead));
+    this.drawWeapons(sim);
     if (!sim) return;
     const t = sim.elapsed;
 
@@ -282,10 +287,10 @@ export class GameScene extends Phaser.Scene {
       const angle = b.state === 'charge' || b.state === 'chargeWindup'
         ? Math.atan2(b.dy, b.dx)
         : Math.atan2(sim.player.y - b.y, sim.player.x - b.x);
-      const r = b.r * (1 + Math.sin(t * 5) * 0.025);
+      const r = b.r;
       ground.fillStyle(0x070a11, 0.55).fillCircle(b.x, b.y + 3, r);
       ground.lineStyle(2, PALETTE.bossTrim, b.phase === 2 ? 0.9 : 0.48).strokeCircle(b.x, b.y, b.r + 3);
-      this.bossImage.setPosition(b.x, b.y).setRotation(angle - Math.PI / 2).setScale(r * 2.3 / this.bossImage.width);
+      this.bossImage.setPosition(b.x, b.y).setFlipX(Math.cos(angle) < -0.15).setScale(5);
       if (flash) this.bossImage.setTintFill(PALETTE.hit);
       else this.bossImage.clearTint();
     }
@@ -294,7 +299,7 @@ export class GameScene extends Phaser.Scene {
     for (const s of sim.playerShots) {
       const l = Math.hypot(s.vx, s.vy) || 1;
       g.lineStyle(s.r, PALETTE.player, 0.35).lineBetween(s.x, s.y, s.x - (s.vx / l) * 16, s.y - (s.vy / l) * 16);
-      g.fillStyle(PALETTE.playerShot, 1).fillCircle(s.x, s.y, s.r * 0.8);
+      g.fillStyle(s.source === 'echo' ? WEAPONS.echo.color : PALETTE.playerShot, 1).fillCircle(s.x, s.y, s.r * 0.8);
     }
 
     // 7) 적 투사체 (가장 위에 — 놓치지 않도록)
@@ -314,19 +319,19 @@ export class GameScene extends Phaser.Scene {
     const blink = p.invuln > 0 && !dodging && Math.floor(t * 20) % 2 === 0;
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
-    ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 4);
+    ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
     this.playerImage.setPosition(p.x, p.y)
-      .setScale(p.r * 2.65 / this.playerImage.width)
-      .setRotation(p.aim - Math.PI / 2)
+      .setScale(2)
+      .setFlipX(p.facingLeft)
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
-      p.x + ax * (p.r + 12), p.y + ay * (p.r + 12),
-      p.x + ax * (p.r + 2) - ay * 6, p.y + ay * (p.r + 2) + ax * 6,
-      p.x + ax * (p.r + 2) + ay * 6, p.y + ay * (p.r + 2) - ax * 6,
+      p.x + ax * (p.r + 18), p.y + ay * (p.r + 18),
+      p.x + ax * (p.r + 9) - ay * 4, p.y + ay * (p.r + 9) + ax * 4,
+      p.x + ax * (p.r + 9) + ay * 4, p.y + ay * (p.r + 9) - ax * 4,
     );
     // 자동 조준 대상 표시 (청록 꺾쇠)
     const tg = sim.target;
@@ -350,6 +355,83 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private drawWeapons(sim: GameSim | null): void {
+    let count = 0;
+    const ground = this.groundEffects;
+    const g = this.g;
+    if (sim) {
+      for (const d of sim.weapons.devices) {
+        const color = WEAPONS[d.kind].color;
+        switch (d.kind) {
+          case 'spear':
+          case 'barrier': {
+            const endX = d.x + Math.cos(d.angle) * d.r;
+            const endY = d.y + Math.sin(d.angle) * d.r;
+            ground.lineStyle(d.kind === 'barrier' ? 6 : 2, color, d.kind === 'barrier' ? 0.5 : 0.33)
+              .lineBetween(d.x, d.y, endX, endY);
+            if (d.kind === 'barrier') this.weaponImage(count++, d.kind, endX, endY);
+            break;
+          }
+          case 'flame':
+          case 'gravity':
+            ground.fillStyle(color, d.kind === 'flame' ? 0.2 : 0.1).fillCircle(d.x, d.y, d.r);
+            ground.lineStyle(2, color, 0.35).strokeCircle(d.x, d.y, d.r);
+            this.weaponImage(count++, d.kind, d.x, d.y);
+            break;
+          case 'mine':
+          case 'axe':
+          case 'turret':
+            this.weaponImage(count++, d.kind, d.x, d.y);
+            break;
+        }
+      }
+      for (const blade of sim.weapons.blades) this.weaponImage(count++, 'orbit', blade.x, blade.y);
+
+      for (const fx of sim.weapons.effects) {
+        const color = WEAPONS[fx.kind].color;
+        const alpha = fx.life / fx.duration;
+        const start = fx.points[0];
+        if (fx.radius) {
+          g.lineStyle(2, color, alpha * 0.85).strokeCircle(start.x, start.y, fx.radius);
+          if (fx.radius >= 40) ground.fillStyle(color, alpha * 0.19).fillCircle(start.x, start.y, fx.radius);
+          continue;
+        }
+        if (fx.kind === 'echo') this.weaponImage(count++, 'echo', start.x, start.y);
+        for (let i = 1; i < fx.points.length; i++) {
+          const a = fx.points[i - 1];
+          const b = fx.points[i];
+          g.lineStyle(fx.kind === 'spear' ? 10 : 5, color, alpha * 0.6);
+          if (fx.kind === 'chain') {
+            const x = (a.x + b.x) / 2 + (b.y - a.y) * 0.13;
+            const y = (a.y + b.y) / 2 - (b.x - a.x) * 0.13;
+            g.lineBetween(a.x, a.y, x, y).lineBetween(x, y, b.x, b.y);
+            g.lineStyle(2, 0xf1fcff, alpha).lineBetween(a.x, a.y, x, y).lineBetween(x, y, b.x, b.y);
+          } else {
+            g.lineBetween(a.x, a.y, b.x, b.y);
+          }
+        }
+      }
+      for (const enemy of sim.weapons.infected.keys()) {
+        if (enemy.dead) continue;
+        ground.lineStyle(2, WEAPONS.infection.color, 0.68).strokeCircle(enemy.x, enemy.y, enemy.r + 4);
+      }
+    }
+    for (let i = count; i < this.visibleWeapons; i++) this.weaponImages[i].setVisible(false);
+    this.visibleWeapons = count;
+  }
+
+  private weaponImage(index: number, kind: WeaponSprite, x: number, y: number): void {
+    const frame = WEAPON_FRAMES[kind];
+    let image = this.weaponImages[index];
+    if (!image) {
+      image = this.add.image(x, y, 'weapon-effects', frame).setDepth(4);
+      this.weaponImages[index] = image;
+    } else if (Number(image.frame.name) !== frame) {
+      image.setFrame(frame);
+    }
+    image.setPosition(x, y).setVisible(true);
+  }
+
   private drawEnemy(e: Enemy, index: number, sim: GameSim, t: number): void {
     let image = this.enemyImages[index];
     if (!image) {
@@ -362,12 +444,11 @@ export class GameScene extends Phaser.Scene {
     const aim = (e.kind === 'charger' && e.state !== 'move')
       || (e.kind === 'elite' && (e.state === 'windup' || e.state === 'dash'));
     const angle = aim ? Math.atan2(e.dy, e.dx) : Math.atan2(sim.player.y - e.y, sim.player.x - e.x);
-    const wobble = Math.sin(t * 8 + e.id) * 0.045;
-    const swell = e.kind === 'spitter' && e.state === 'aim' ? 1.22 : 1;
+    const bob = Math.round(Math.sin(t * 8 + e.id));
     const shake = e.state === 'windup' ? Math.sin(t * 60) * 1.7 : 0;
     this.groundEffects.fillStyle(0x070a11, 0.55).fillCircle(e.x, e.y + 2, e.r);
-    image.setVisible(true).setPosition(e.x + shake, e.y).setRotation(angle - Math.PI / 2)
-      .setScale((e.r * 2.5 * (swell + wobble)) / image.width);
+    image.setVisible(true).setPosition(e.x + shake, e.y + bob)
+      .setFlipX(Math.cos(angle) < -0.15).setScale(e.kind === 'elite' ? 3 : 2);
     if (e.flash > 0) image.setTintFill(PALETTE.hit);
     else image.clearTint();
 

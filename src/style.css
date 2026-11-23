@@ -162,3 +162,8 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 .result .stats { font-size: 1.15em; }
 .result .upgrades { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 0.4em; justify-content: center; max-width: 40em; }
 .result .upgrades li { padding: 0.15em 0.7em; border-radius: 999px; background: #ffffff10; }
+
+#game-root canvas, .weapon-icon, .weapon-chip img { image-rendering: pixelated; }
+.weapon-icon { width: 2.5em; height: 2.5em; }
+.weapon-chip { display: inline-flex; align-items: center; gap: 0.25em; }
+.weapon-chip img { width: 1.35em; height: 1.35em; }

@@ -34,6 +34,7 @@ const app = new App({
 
 new Phaser.Game({
   type: Phaser.AUTO,
+  pixelArt: true,
   parent: 'game-root',
   width: VIEW_CONFIG.width,
   height: VIEW_CONFIG.height,
