@@ -9,8 +9,12 @@ import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
-import { ARENA_TEXTURE, ACTOR_TEXTURES, WEAPON_FRAMES, WEAPON_TEXTURES, weaponEffects, type WeaponSprite } from './textures';
-import { drawExplosion, drawFlame, drawGravityPull, drawInfected, drawInfectionSmoke, drawLightning } from './weaponEffects';
+import { ARENA_TEXTURE, ACTOR_TEXTURES, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
+import {
+  drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
+  drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
+} from './weaponEffects';
+import { drawResonance } from './fusionEffects';
 
 interface Particle {
   x: number;
@@ -54,8 +58,7 @@ export class GameScene extends Phaser.Scene {
     this.load.image('arena-slate', ARENA_TEXTURE);
     for (const [key, url] of Object.entries(ACTOR_TEXTURES)) this.load.image(key, url);
     this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
-    this.load.image('weapon-axe', WEAPON_TEXTURES.axe);
-    this.load.image('weapon-orbit', WEAPON_TEXTURES.orbit);
+    for (const [key, url] of Object.entries(WEAPON_SPRITES)) this.load.image(`weapon-${key}`, url);
   }
 
   create(): void {
@@ -335,14 +338,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 6) 플레이어 투사체
-    for (const s of sim.playerShots) {
-      const l = Math.hypot(s.vx, s.vy) || 1;
-      const charged = s.pierceLeft !== undefined;
-      const trail = charged ? 35 : 16;
-      g.lineStyle(s.r * (charged ? 1.6 : 1), charged ? 0xffc980 : PALETTE.player, charged ? 0.58 : 0.35)
-        .lineBetween(s.x, s.y, s.x - (s.vx / l) * trail, s.y - (s.vy / l) * trail);
-      g.fillStyle(s.source === 'echo' ? WEAPONS.echo.color : PALETTE.playerShot, 1).fillCircle(s.x, s.y, s.r * 0.8);
-    }
+    for (const s of sim.playerShots) drawPlayerShot(g, s);
 
     // 7) 적 투사체 (가장 위에 — 놓치지 않도록)
     for (const s of sim.enemyShots) {
@@ -403,21 +399,13 @@ export class GameScene extends Phaser.Scene {
     const g = this.g;
     if (sim) {
       for (const d of sim.weapons.devices) {
-        const color = WEAPONS[d.kind].color;
         switch (d.kind) {
           case 'spear':
-          case 'barrier': {
-            const endX = d.x + Math.cos(d.angle) * d.r;
-            const endY = d.y + Math.sin(d.angle) * d.r;
-            if (d.kind === 'barrier') {
-              const width = weaponRankEffect('barrier', sim.stacks.barrier) * 2;
-              ground.lineStyle(width, color, 0.16).lineBetween(d.x, d.y, endX, endY);
-            }
-            ground.lineStyle(d.kind === 'barrier' ? 6 : 2, color, d.kind === 'barrier' ? 0.5 : 0.33)
-              .lineBetween(d.x, d.y, endX, endY);
-            if (d.kind === 'barrier') this.weaponImage(count++, d.kind, endX, endY);
+            drawSpearAim(ground, g, d.x, d.y, d.angle, d.r, d.age / d.duration);
             break;
-          }
+          case 'barrier':
+            drawRiftBarrier(ground, d, d.angle, d.r, weaponRankEffect('barrier', sim.stacks.barrier), d.duration - d.age, d.age);
+            break;
           case 'flame':
             drawFlame(ground, g, d.x, d.y, d.r, d.age, d.duration);
             break;
@@ -427,47 +415,59 @@ export class GameScene extends Phaser.Scene {
             break;
           case 'axe':
             ground.lineStyle(5, 0xffb660, 0.36).lineBetween(d.x, d.y, d.x - Math.cos(d.angle) * 35, d.y - Math.sin(d.angle) * 35);
-            this.weaponImage(count++, d.kind, d.x, d.y, d.age * 19, 1.4);
+            this.weaponImage(count++, d.kind, d.x, d.y, { rotation: d.age * 19, scale: 1.4 });
+            break;
+          case 'turret':
+            this.weaponImage(count++, d.kind, d.x, d.y, { scale: 1.3 });
+            drawFrostBarrel(g, d.x, d.y, d.angle);
             break;
           case 'mine':
-          case 'turret':
             this.weaponImage(count++, d.kind, d.x, d.y);
             break;
         }
       }
       for (const blade of sim.weapons.blades) {
         const angle = Math.atan2(blade.y - sim.player.y, blade.x - sim.player.x);
-        this.weaponImage(count++, 'orbit', blade.x, blade.y, angle + Math.PI / 2, 1.4);
+        this.weaponImage(count++, 'orbit', blade.x, blade.y, { rotation: angle + Math.PI / 2, scale: 1.4 });
       }
 
       for (const fx of sim.weapons.effects) {
-        if (fx.variant !== 'resonance') {
-          if (fx.kind === 'infection') {
-            drawInfectionSmoke(g, fx);
-            continue;
-          }
-          if (fx.kind === 'mine' || fx.kind === 'gravity') {
-            drawExplosion(ground, g, fx);
-            continue;
-          }
-          if (fx.kind === 'mark' || (fx.kind === 'chain' && !fx.radius)) {
-            drawLightning(g, fx);
-            continue;
-          }
+        if (fx.variant === 'resonance') {
+          drawResonance(ground, g, fx);
+          continue;
         }
-        const color = WEAPONS[fx.kind].color;
+        if (fx.kind === 'infection') {
+          drawInfectionSmoke(g, fx);
+          continue;
+        }
+        if (fx.kind === 'mine' || fx.kind === 'gravity') {
+          drawExplosion(ground, g, fx);
+          continue;
+        }
+        if (fx.kind === 'mark' || (fx.kind === 'chain' && !fx.radius)) {
+          drawLightning(g, fx);
+          continue;
+        }
+        if (fx.kind === 'turret') {
+          drawFrostShot(g, fx);
+          continue;
+        }
+        if (fx.kind === 'spear') {
+          drawSpearStrike(g, fx);
+          continue;
+        }
         const alpha = fx.life / fx.duration;
         const start = fx.points[0];
+        if (fx.kind === 'echo') {
+          const opacity = fx.variant === 'echoCharge' ? 0.18 + (1 - alpha) * 0.59 : alpha * 0.87;
+          this.weaponImage(count++, 'echo', start.x, start.y, { scale: 1.32, alpha: opacity, flipX: fx.points[1].x < start.x });
+          drawEcho(ground, g, fx, opacity);
+          continue;
+        }
+        const color = WEAPONS[fx.kind].color;
         if (fx.radius) {
           g.lineStyle(2, color, alpha * 0.85).strokeCircle(start.x, start.y, fx.radius);
           if (fx.radius >= 40) ground.fillStyle(color, alpha * 0.19).fillCircle(start.x, start.y, fx.radius);
-          continue;
-        }
-        if (fx.kind === 'echo') this.weaponImage(count++, 'echo', start.x, start.y);
-        for (let i = 1; i < fx.points.length; i++) {
-          const a = fx.points[i - 1];
-          const b = fx.points[i];
-          g.lineStyle(fx.kind === 'spear' ? 10 : 5, color, alpha * 0.6).lineBetween(a.x, a.y, b.x, b.y);
         }
       }
       for (const enemy of sim.weapons.infected.keys()) {
@@ -479,9 +479,11 @@ export class GameScene extends Phaser.Scene {
     this.visibleWeapons = count;
   }
 
-  private weaponImage(index: number, kind: WeaponSprite, x: number, y: number, rotation = 0, scale = 1): void {
-    const texture = kind === 'axe' || kind === 'orbit' ? `weapon-${kind}` : 'weapon-effects';
-    const frame = texture === 'weapon-effects' ? WEAPON_FRAMES[kind] : undefined;
+  private weaponImage(index: number, kind: WeaponSprite, x: number, y: number,
+    { rotation = 0, scale = 1, alpha = 1, flipX = false } = {}): void {
+    const usesSheet = kind === 'mine' || kind === 'gravity';
+    const texture = usesSheet ? 'weapon-effects' : `weapon-${kind}`;
+    const frame = usesSheet ? WEAPON_FRAMES[kind] : undefined;
     let image = this.weaponImages[index];
     if (!image) {
       image = this.add.image(x, y, texture, frame).setDepth(4);
@@ -489,7 +491,7 @@ export class GameScene extends Phaser.Scene {
     } else if (image.texture.key !== texture || (frame !== undefined && Number(image.frame.name) !== frame)) {
       image.setTexture(texture, frame);
     }
-    image.setPosition(x, y).setRotation(rotation).setScale(scale).setVisible(true);
+    image.setPosition(x, y).setRotation(rotation).setScale(scale).setAlpha(alpha).setFlipX(flipX).setVisible(true);
   }
 
   private drawEnemy(e: Enemy, index: number, sim: GameSim, t: number): void {

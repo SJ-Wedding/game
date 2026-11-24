@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { WeaponId } from '../src/config/weapons';
+import { FUSION_IDS, WEAPON_FUSIONS, type WeaponId } from '../src/config/weapons';
 import { IDLE_INPUT, type InputState } from '../src/core/types';
 import { makeSim } from './helpers';
 
@@ -103,15 +103,29 @@ describe('특수 무기', () => {
     expect(sim.damageByAttack.mark).toBe(damage);
   });
 
-  it('잔영이 이전 사격 위치에서 추가탄을 쏜다', () => {
+  it('이전 사격 위치에서 잔영이 먼저 나타나고 추가탄을 쏜다', () => {
     const { sim, target, advance } = setup('echo');
     target(280);
     sim.player.fireCd = 0;
     const shotOrigin = sim.player.x;
-    advance(Math.ceil(0.36 * 60) + 5);
+    advance(1);
+    expect(sim.weapons.effects.find((effect) => effect.variant === 'echoCharge')?.points[0].x).toBe(shotOrigin);
+    expect(sim.playerShots.some((shot) => shot.source === 'echo')).toBe(false);
+    advance(Math.ceil(0.36 * 60) + 4);
     const echo = sim.playerShots.find((shot) => shot.source === 'echo');
     expect(echo?.x).toBeGreaterThan(shotOrigin);
     expect(echo?.x).toBeLessThan(shotOrigin + 70);
+  });
+
+  it('서리 포탑 포신과 탄도 연출이 둔화된 적을 향한다', () => {
+    const { sim, target, advance } = setup('turret');
+    const enemy = target(-110, 70);
+    advance(1);
+    const turret = sim.weapons.devices.find((device) => device.kind === 'turret')!;
+    expect(turret.angle).toBeCloseTo(Math.atan2(enemy.y - turret.y, enemy.x - turret.x));
+    const shot = sim.weapons.effects.find((effect) => effect.kind === 'turret');
+    expect(shot?.points).toEqual([{ x: turret.x, y: turret.y }, { x: enemy.x, y: enemy.y }]);
+    expect(enemy.slowUntil).toBeGreaterThan(sim.elapsed);
   });
 
   it('중력 구체가 적을 끌어온 뒤 피해를 준다', () => {
@@ -224,6 +238,28 @@ describe('특수 무기 합체', () => {
     expect(next.hp).toBe(1000);
     sim.weapons.onFusionHit('chain', first);
     expect(next.hp).toBeCloseTo(1000 - sim.stats.damage * 2.1);
+  });
+
+  it.each(FUSION_IDS)('%s 공명은 재료 적중 순서와 관계없이 같은 연출과 피해 범위를 사용한다', (id) => {
+    const recipe = WEAPON_FUSIONS[id];
+    const [a, b] = recipe.pair;
+    for (const [first, second] of [[a, b], [b, a]]) {
+      const sim = makeSim();
+      sim.weapons.fusions.add(id);
+      const target = sim.spawnEnemy('chaser', 900, 900);
+      const nearby = sim.spawnEnemy('chaser', 900 + recipe.radius, 900);
+      const outside = sim.spawnEnemy('chaser', nearby.x + nearby.r + 1, nearby.y);
+      target.hp = nearby.hp = outside.hp = 1000;
+      sim.weapons.onFusionHit(first, target);
+      expect(sim.weapons.effects).toHaveLength(0);
+      sim.weapons.onFusionHit(second, target);
+      expect(sim.weapons.effects).toHaveLength(1);
+      const [effect] = sim.weapons.effects;
+      expect(effect).toMatchObject({ kind: id, variant: 'resonance', radius: recipe.radius });
+      expect(effect.points[0]).toEqual({ x: target.x, y: target.y });
+      expect(nearby.hp).toBeCloseTo(1000 - sim.stats.damage * recipe.damage);
+      expect(outside.hp).toBe(1000);
+    }
   });
 });
 
