@@ -40,7 +40,7 @@ export interface ResonanceEffect extends EffectTiming {
 }
 
 const RESONANCE_DURATION: Record<FusionId, number> = {
-  storm: 0.56, bastion: 0.68, tempest: 0.55, inferno: 0.8, volley: 0.52, eclipse: 0.76,
+  storm: 0.85, bastion: 0.95, tempest: 0.86, inferno: 1.02, volley: 0.84, eclipse: 1.04,
 };
 const ECHO_DELAY = 0.36;
 

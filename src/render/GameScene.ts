@@ -15,7 +15,7 @@ import {
   drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
 } from './weaponEffects';
-import { drawResonance } from './fusionEffects';
+import { drawResonance, drawResonanceDirection } from './fusionEffects';
 
 interface Particle {
   x: number;
@@ -35,6 +35,7 @@ interface Particle {
 export class GameScene extends Phaser.Scene {
   private readonly app: App;
   private groundEffects!: Phaser.GameObjects.Graphics;
+  private weaponEffects!: Phaser.GameObjects.Graphics;
   private g!: Phaser.GameObjects.Graphics;
   private playerImage!: Phaser.GameObjects.Image;
   private bossImage!: Phaser.GameObjects.Image;
@@ -67,6 +68,7 @@ export class GameScene extends Phaser.Scene {
     this.groundEffects = this.add.graphics().setDepth(1);
     this.bossImage = this.add.image(0, 0, 'boss').setDepth(3).setVisible(false);
     this.playerImage = this.add.image(0, 0, 'player').setDepth(5).setVisible(false);
+    this.weaponEffects = this.add.graphics().setDepth(5.5);
     this.g = this.add.graphics().setDepth(6);
     const kb = this.input.keyboard!;
     // 문자 키는 캡처하지 않는다(개발 패널 입력칸을 방해하지 않도록). Space·방향키만 캡처해 페이지 스크롤을 막는다.
@@ -253,6 +255,7 @@ export class GameScene extends Phaser.Scene {
     const ground = this.groundEffects;
     const g = this.g;
     ground.clear();
+    this.weaponEffects.clear();
     g.clear();
     const enemyCount = sim?.enemies.length ?? 0;
     for (let i = enemyCount; i < this.visibleEnemies; i++) this.enemyImages[i].setVisible(false);
@@ -261,6 +264,13 @@ export class GameScene extends Phaser.Scene {
     this.bossImage.setVisible(Boolean(sim?.boss && !sim.boss.dead));
     this.drawWeapons(sim);
     if (!sim) return;
+    const camera = this.cameras.main;
+    const view = { x: camera.scrollX, y: camera.scrollY, width: camera.width, height: camera.height };
+    for (const effect of sim.weapons.effects) {
+      if (effect.variant !== 'resonance') continue;
+      drawResonance(ground, this.weaponEffects, effect);
+      drawResonanceDirection(g, effect, view);
+    }
     const t = sim.elapsed;
 
     const assault = sim.assaultWarning;
@@ -423,7 +433,7 @@ export class GameScene extends Phaser.Scene {
   private drawWeapons(sim: GameSim | null): void {
     let count = 0;
     const ground = this.groundEffects;
-    const g = this.g;
+    const g = this.weaponEffects;
     if (sim) {
       for (const d of sim.weapons.devices) {
         switch (d.kind) {
@@ -459,10 +469,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       for (const fx of sim.weapons.effects) {
-        if (fx.variant === 'resonance') {
-          drawResonance(ground, g, fx);
-          continue;
-        }
+        if (fx.variant === 'resonance') continue;
         if (fx.kind === 'infection') {
           drawInfectionSmoke(g, fx);
           continue;

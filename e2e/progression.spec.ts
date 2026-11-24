@@ -66,6 +66,43 @@ test.describe('성장 시스템', () => {
     await expect(page.locator('#overlay[data-screen="pause"]')).toBeVisible();
   });
 
+  test('Tab 상태창의 특수·융합 무기 효과 이미지를 hover 및 키보드로 볼 수 있다', async ({ page }) => {
+    await startRun(page, '&seed=42&god=1');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      Object.assign(sim.stacks, { mine: 1, chain: 3, mark: 3 });
+      sim.picks.push({ id: 'mine', grade: 'rare' });
+      if (!sim.weapons.fuse('storm')) throw new Error('뇌광 연쇄를 준비하지 못했습니다.');
+    });
+    await page.keyboard.press('Tab');
+    const overlay = page.locator('#overlay[data-screen="status"]');
+    await expect(overlay).toBeVisible();
+    const tooltip = page.locator('#status-weapon-preview');
+    const image = tooltip.locator('img');
+    const checkImage = async (name: string) => {
+      await expect(tooltip).toBeVisible();
+      await expect(image).toHaveAttribute('alt', `${name} 인게임 효과`);
+      await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBeGreaterThan(0);
+    };
+    const mine = overlay.getByRole('button', { name: '균열 지뢰 Lv 1' });
+    await mine.hover();
+    await checkImage('균열 지뢰');
+    await overlay.getByRole('heading', { name: '이번 판 강화 (점 색 = 등급)' }).hover();
+    await expect(tooltip).toBeHidden();
+    const storm = overlay.getByRole('button', { name: '뇌광 연쇄 Lv 3' });
+    await storm.focus();
+    await checkImage('뇌광 연쇄');
+    await page.keyboard.press('Tab');
+    await expect(mine).toBeFocused();
+    await checkImage('균열 지뢰');
+    await overlay.locator('.fusion-recipes summary').click();
+    await overlay.getByRole('button', { name: '관통 창 Lv 0' }).hover();
+    await checkImage('관통 창');
+    await page.keyboard.press('Escape');
+    await expect(overlay).toBeHidden();
+    await expect(tooltip).toBeHidden();
+  });
+
   test('드랍 아이템을 밟으면 효과가 적용된다 (회복 물약)', async ({ page }) => {
     await startRun(page, '&seed=33');
     await waitElapsed(page, 1);

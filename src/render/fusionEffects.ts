@@ -1,4 +1,5 @@
 import type { GameObjects } from 'phaser';
+import type { FusionId } from '../config/weapons';
 import type { ResonanceEffect } from '../core/weapons';
 import { drawBolt, drawFlame } from './weaponEffects';
 
@@ -6,6 +7,9 @@ type Graphics = GameObjects.Graphics;
 type Point = { x: number; y: number };
 type Frame = { ground: Graphics; g: Graphics; center: Point; r: number; t: number; alpha: number; angle: number };
 const TAU = 2 * Math.PI;
+const RESONANCE_COLORS: Record<FusionId, number> = {
+  storm: 0x8fa7ff, bastion: 0x94eaff, tempest: 0xffd491, inferno: 0xff984f, volley: 0x82ffd7, eclipse: 0xc6a3ff,
+};
 
 function polar(origin: Point, angle: number, distance: number): Point {
   return { x: origin.x + Math.cos(angle) * distance, y: origin.y + Math.sin(angle) * distance };
@@ -149,7 +153,19 @@ function eclipse({ ground, g, center, r, t, alpha }: Frame): void {
 
 export function drawResonance(ground: Graphics, g: Graphics, fx: ResonanceEffect): void {
   const t = 1 - fx.life / fx.duration;
-  const frame = { ground, g, center: fx.points[0], r: fx.radius, t, alpha: 1 - t ** 1.6, angle: fx.angle };
+  const center = fx.points[0];
+  const color = RESONANCE_COLORS[fx.kind];
+  const sweep = 1 - (1 - t) ** 2.6;
+  const radius = fx.radius * (0.35 + sweep * 0.62);
+  const alpha = 1 - t ** 2;
+  for (let i = 0; i < 4; i++) {
+    const a = fx.angle + i * TAU / 4 + t * 0.65;
+    arc(g, center, radius, a, a + 0.54, 9, 0x101526, alpha * 0.76);
+    arc(g, center, radius, a, a + 0.54, 3, color, alpha * 0.87);
+    const spark = polar(center, a + 0.54, radius);
+    g.fillStyle(0xf7fff4, alpha).fillCircle(spark.x, spark.y, 2.6);
+  }
+  const frame = { ground, g, center, r: fx.radius, t, alpha, angle: fx.angle };
   switch (fx.kind) {
     case 'storm': storm(frame, fx.points); break;
     case 'bastion': bastion(frame); break;
@@ -158,4 +174,25 @@ export function drawResonance(ground: Graphics, g: Graphics, fx: ResonanceEffect
     case 'volley': volley(frame, fx.points[1], fx.points[2]); break;
     case 'eclipse': eclipse(frame); break;
   }
+}
+
+/** 화면 밖에서 발동한 융합 공격의 방향을 카메라 가장자리에 표시한다. */
+export function drawResonanceDirection(g: Graphics, fx: ResonanceEffect, view: { x: number; y: number; width: number; height: number }): void {
+  const middle = { x: view.x + view.width / 2, y: view.y + view.height / 2 };
+  const target = fx.points[0];
+  const dx = target.x - middle.x;
+  const dy = target.y - middle.y;
+  if (Math.abs(dx) <= view.width / 2 && Math.abs(dy) <= view.height / 2) return;
+  const angle = Math.atan2(dy, dx);
+  const verticalMargin = dy < 0 ? 104 : 72;
+  const scale = Math.min((view.width / 2 - 55) / Math.abs(dx), (view.height / 2 - verticalMargin) / Math.abs(dy));
+  const tip = { x: middle.x + dx * scale, y: middle.y + dy * scale };
+  const back = polar(tip, angle, -24);
+  const left = polar(back, angle - Math.PI / 2, 11);
+  const right = polar(back, angle + Math.PI / 2, 11);
+  const opacity = Math.min(1, 2 * fx.life / fx.duration);
+  g.fillStyle(0x141e2f, opacity * 0.88).fillPoints([tip, left, right], true);
+  g.lineStyle(4, RESONANCE_COLORS[fx.kind], opacity).strokePoints([left, tip, right]);
+  const spark = polar(back, angle, -7);
+  g.fillStyle(0xf5ffff, opacity).fillCircle(spark.x, spark.y, 2.7);
 }

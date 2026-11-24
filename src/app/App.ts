@@ -339,7 +339,7 @@ export class App {
         }
         break;
       case 'status':
-        if ((e.code === 'Escape' || (e.code === 'Tab' && !this.sim?.relics.owned.size)) && !e.repeat) {
+        if ((e.code === 'Escape' || (e.code === 'Tab' && !this.screens.hasStatusPreviewTargets)) && !e.repeat) {
           e.preventDefault();
           this.closeStatus();
         }

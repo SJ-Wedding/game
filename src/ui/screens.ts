@@ -1,6 +1,7 @@
 import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
+import { weaponPreview } from './weaponPreview';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
@@ -56,6 +57,10 @@ export class Screens {
 
   constructor(root: HTMLElement) {
     this.root = root;
+  }
+
+  get hasStatusPreviewTargets(): boolean {
+    return Boolean(this.root.querySelector('.status .relic-icon, .status .upgrades .weapon-preview-trigger, .status .fusion-recipes[open] .weapon-preview-trigger'));
   }
 
   hide(): void {
@@ -298,23 +303,27 @@ export class Screens {
     for (const p of opts.picks) {
       if (!isFusionIngredient(opts.fusions, p.id)) grouped.set(p.id, [...(grouped.get(p.id) ?? []), p]);
     }
+    const preview = weaponPreview();
     const picks = [...grouped.entries()].map(([id, list]) => {
       const def = UPGRADE_BY_ID[id];
-
+      const item = def.weapon ? preview.trigger(def.weapon, `${def.name} Lv ${list.length}`) : el('span', { text: def.name });
       return el('li', {}, [
-        el('span', { text: `${def.name}${def.weapon ? ` Lv ${list.length}` : ''} ` }),
+        item,
         ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
       ]);
     });
-    picks.unshift(...opts.fusions.map((id) => el('li', { class: 'fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}` })));
+    picks.unshift(...opts.fusions.map((id) => el('li', {}, [preview.trigger(id, `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`, 'fusion-chip')])));
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
     const recipes = el('details', { class: 'fusion-recipes', ...(opts.recipesOpen ? { open: '' } : {}) }, [
           el('summary', { text: '특수 무기 합체 조합식' }),
           el('ul', {}, FUSION_IDS.map((id) => {
             const recipe = WEAPON_FUSIONS[id];
-            const ingredients = recipe.pair.map((weapon) => `${WEAPONS[weapon].name} Lv ${grouped.get(weapon)?.length ?? (opts.fusions.includes(id) ? WEAPON_MAX_RANK : 0)}`);
-            return el('li', { text: `${recipe.name} · ${ingredients.join(' + ')}` });
+            const ingredients = recipe.pair.map((weapon) => {
+              const level = grouped.get(weapon)?.length ?? (opts.fusions.includes(id) ? WEAPON_MAX_RANK : 0);
+              return preview.trigger(weapon, `${WEAPONS[weapon].name} Lv ${level}`);
+            });
+            return el('li', {}, [preview.trigger(id, recipe.name), el('small', {}, [ingredients[0], ' + ', ingredients[1]])]);
           })),
           el('small', { class: 'muted', text: `두 재료가 모두 Lv ${WEAPON_MAX_RANK}이면 합체를 선택할 수 있습니다. 합체하면 재료 공격을 대체합니다.` }),
         ]);
@@ -337,6 +346,7 @@ export class Screens {
           : el('p', { class: 'muted', text: '아직 없음' }),
         el('p', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` }),
         close,
+        preview.tooltip,
       ]),
     );
   }
