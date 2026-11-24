@@ -19,14 +19,8 @@ export class RelicEffects {
   readonly owned = new Set<RelicId>();
   private oathKills = 0;
   private bountyKills = 0;
-  private flintUntil: number | null = null;
-  private flintBonus = 0;
-  private guardUntil = -Infinity;
-  private guardReady = -Infinity;
-  private scarCharges = 0;
   private lastMatchSpent = false;
   private movingSince: number | null = null;
-  dodgeUntil = -Infinity;
 
   constructor(private readonly sim: GameSim) {}
 
@@ -37,7 +31,6 @@ export class RelicEffects {
     this.owned.add(id);
     if (id === 'tripleChoice') this.sim.grantBonusChoices(TRIPLE_CHOICE_COUNT);
     if (id === 'oath') this.oathKills = this.sim.kills;
-    if (id === 'flint') this.flintUntil = this.sim.elapsed + 60;
   }
 
   moveMultiplier(moving: boolean): number {
@@ -51,7 +44,7 @@ export class RelicEffects {
   }
 
   get maxHp(): number {
-    return (this.sim.stats.maxHp + this.flintBonus) * (this.lastMatchSpent ? 0.8 : 1);
+    return this.sim.stats.maxHp * (this.lastMatchSpent ? 0.8 : 1);
   }
 
   get xpMultiplier(): number {
@@ -109,22 +102,11 @@ export class RelicEffects {
     p.hp = Math.min(this.maxHp, p.hp + amount * (this.heartActive ? 0.5 : 1));
   }
 
-  update(): void {
-    if (this.flintUntil === null || this.sim.elapsed < this.flintUntil) return;
-    this.flintUntil = null;
-    this.flintBonus = 15;
-    this.heal(15);
-  }
+  update(): void {}
 
   onHurt(amount: number): number {
-    const now = this.sim.elapsed;
     const p = this.sim.player;
-    const damage = amount * (now < this.guardUntil ? 0.6 : 1);
-    if (this.has('knot') && damage >= this.maxHp * 0.2 && now >= this.guardReady) {
-      this.guardUntil = now + 3;
-      this.guardReady = now + 25;
-    }
-    if (this.has('scars')) this.scarCharges = Math.min(3, this.scarCharges + 1);
+    const damage = amount;
     if (damage >= p.hp && this.has('lastMatch') && !this.lastMatchSpent) {
       this.lastMatchSpent = true;
       p.invuln = 2;
@@ -135,11 +117,7 @@ export class RelicEffects {
   }
 
   shotDamage(): number {
-    let multiplier = this.flintUntil === null ? 1 : 1.25;
-    if (this.scarCharges > 0) {
-      this.scarCharges--;
-      multiplier *= 1.3;
-    }
+    let multiplier = 1;
     if (this.has('anvil')) multiplier *= 1.55;
     if (this.has('catalyst')) multiplier *= 0.75;
     if (this.has('scatterSeal')) multiplier *= 0.82;

@@ -117,7 +117,7 @@ test.describe('성장 시스템', () => {
     await startRun(page, '&seed=39');
     await page.evaluate(() => {
       const sim = (window as any).__rift.sim;
-      for (const id of ['oath', 'flint', 'crown', 'anchor']) sim.relics.acquire(id);
+      for (const id of ['oath', 'buckle', 'crown', 'anchor']) sim.relics.acquire(id);
       sim.spawnBoss();
       sim.boss.state = 'idle';
       sim.damageBoss(100000);
