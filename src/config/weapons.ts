@@ -7,7 +7,7 @@ export const WEAPONS = {
   flame: { name: '화염 발자국', description: '움직인 자리에 잠깐 남는 불길이 적을 태웁니다.', color: 0xff9559 },
   barrier: { name: '균열 장벽', description: '회피 경로에 균열을 남겨 처음 건너는 적에게 피해를 줍니다.', color: 0xd698ff },
   spear: { name: '관통 창', description: '잠깐 조준한 뒤 같은 선 위의 적을 한꺼번에 꿰뚫습니다.', color: 0xffecac },
-  mark: { name: '낙뢰 표식', description: '같은 적에게 기본탄을 세 번 맞히면 주변에도 낙뢰가 떨어집니다.', color: 0xe2bbff },
+  mark: { name: '낙뢰 표식', description: '같은 적에게 기본탄을 세 번 맞히거나 기본탄으로 처치하면 그 자리에 낙뢰가 떨어져 주변 적도 맞힙니다.', color: 0xe2bbff },
   echo: { name: '메아리 사격', description: '이전 사격 위치에 나타난 잔영이 같은 방향으로 한 발 더 쏩니다.', color: 0x7df2dd },
   gravity: { name: '중력 구체', description: '느리게 전진하며 일반 적을 끌어당긴 뒤 폭발합니다.', color: 0xb6a2ff },
   infection: { name: '처치 전염', description: '적을 감염시킵니다. 감염된 적이 쓰러지면 주변 적으로 번집니다.', color: 0xa6ea73 },

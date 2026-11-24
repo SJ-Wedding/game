@@ -19,8 +19,9 @@ interface Device extends Point {
   secondary?: boolean;
   exposures?: Map<Target, number>;
 }
-interface Effect {
+export interface WeaponEffect {
   kind: WeaponId;
+  variant?: 'resonance' | 'markCharge';
   points: Point[];
   radius: number;
   life: number;
@@ -33,7 +34,7 @@ export class WeaponSystem {
   readonly fusions = new Set<FusionId>();
   private readonly fusionHits = new WeakMap<Target, Partial<Record<FusionId, { weapon: WeaponId; at: number }>>>();
   readonly devices: Device[] = [];
-  readonly effects: Effect[] = [];
+  readonly effects: WeaponEffect[] = [];
   readonly blades: Point[] = [];
   private readonly ready = new Map<WeaponId, number>();
   private readonly marks = new Map<Target, number>();
@@ -101,7 +102,7 @@ export class WeaponSystem {
       const hit = recent[id];
       if (hit && now - hit.at <= FUSION_HIT_WINDOW && hit.weapon !== kind) {
         delete recent[id];
-        this.trace(kind, [target], recipe.radius, 0.36);
+        this.trace(kind, [target], recipe.radius, 0.36, 'resonance');
         for (const nearby of this.targets()) {
           if (dist(target.x, target.y, nearby.x, nearby.y) > recipe.radius + nearby.r) continue;
           const damage = this.sim.stats.damage * recipe.damage;
@@ -115,15 +116,19 @@ export class WeaponSystem {
     }
   }
 
-  private trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24): void {
-    this.effects.push({ kind, points: points.map(({ x, y }) => ({ x, y })), radius, life: duration, duration });
+  private trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24, variant?: WeaponEffect['variant']): void {
+    this.effects.push({ kind, variant, points: points.map(({ x, y }) => ({ x, y })), radius, life: duration, duration });
   }
 
   private area(kind: WeaponId, point: Point, radius: number, factor: number): void {
-    this.trace(kind, [point], radius);
+    const points = [point];
     for (const target of this.targets()) {
-      if (dist(point.x, point.y, target.x, target.y) < radius + target.r) this.damage(kind, target, factor);
+      if (dist(point.x, point.y, target.x, target.y) >= radius + target.r) continue;
+      if (kind === 'mark' && target !== point && points.length < 7) points.push(target);
+      this.damage(kind, target, factor);
     }
+    const duration = kind === 'mine' ? 0.58 : kind === 'gravity' ? 0.62 : kind === 'mark' ? 0.38 : 0.24;
+    this.trace(kind, points, radius, duration);
   }
 
   private device(kind: WeaponId, origin: Point, duration: number, r: number, angle = 0): Device {
@@ -149,14 +154,15 @@ export class WeaponSystem {
   }
 
   onBulletHit(target: Target): void {
-    if (!this.sim.stacks.mark || target.dead) return;
+    if (!this.sim.stacks.mark) return;
     const hits = (this.marks.get(target) ?? 0) + 1;
-    if (hits < 3) {
+    if (!target.dead && hits < 3) {
       this.marks.set(target, hits);
-      this.trace('mark', [target], target.r + 4, 0.13);
+      this.trace('mark', [target], target.r, 0.2, 'markCharge');
       return;
     }
     this.marks.delete(target);
+    if (target.dead) this.onFusionHit('mark', target);
     this.area('mark', target, this.rankEffect('mark') + this.sim.reachBonus * 0.12, 1.45);
   }
 
@@ -230,7 +236,7 @@ export class WeaponSystem {
       this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
       target = this.nearest(target, 125, hit);
     }
-    this.trace('chain', points);
+    this.trace('chain', points, 0, 0.32);
     if (crown) this.area('chain', points[points.length - 1], 54, 0.75);
   }
 
@@ -268,17 +274,17 @@ export class WeaponSystem {
       }
       if (target) {
         this.infected.set(target, now + 5);
-        this.trace('infection', [target], target.r + 7);
+        this.trace('infection', [target], target.r, 0.46);
         this.damage('infection', target, 1);
       }
     }
     const origins = this.contagion.splice(0);
     for (const origin of origins) {
       const radius = this.rankEffect('infection');
-      this.trace('infection', [origin], radius);
       for (const enemy of this.sim.enemies) {
         if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > radius + enemy.r) continue;
         this.infected.set(enemy, now + 5);
+        this.trace('infection', [origin, enemy], enemy.r, 0.62);
         this.damage('infection', enemy, 1.1);
       }
     }

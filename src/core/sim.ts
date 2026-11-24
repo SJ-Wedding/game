@@ -554,8 +554,7 @@ export class GameSim {
         if (e.dead || s.hitIds?.has(e.id)) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
-          if (s.source === 'player') this.weapons.onBulletHit(e);
-          else if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
+          if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
           this.damageEnemy(e, s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
           if (s.pierceLeft) {
             s.pierceLeft--;
@@ -570,10 +569,7 @@ export class GameSim {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
-          if (!bossInvulnerable(boss)) {
-            if (s.source === 'player') this.weapons.onBulletHit(boss);
-            else if (s.source === 'echo') this.weapons.onFusionHit('echo', boss);
-          }
+          if (s.source === 'echo' && !bossInvulnerable(boss)) this.weapons.onFusionHit('echo', boss);
           this.damageBoss(s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
         }
       }
@@ -617,6 +613,7 @@ export class GameSim {
       this.weapons.onEnemyKilled(e);
       this.emit('kill', e.x, e.y);
     }
+    if (basic) this.weapons.onBulletHit(e);
   }
 
   damageBoss(amount: number, source?: AttackId): void {
@@ -633,6 +630,7 @@ export class GameSim {
       this.killsByKind.boss = 1;
       this.kills++;
     }
+    if (basic) this.weapons.onBulletHit(b);
   }
 
   private updateHazards(dt: number): void {

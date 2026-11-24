@@ -71,17 +71,36 @@ describe('특수 무기', () => {
     expect(enemy.hp).toBe(hp);
   });
 
-  it('세 번째 명중이 적을 처치해도 낙뢰가 주변 적을 맞힌다', () => {
+  it.each([1, 2, 3])('기본탄 %d번째 명중으로 처치하면 낙뢰가 한 번 발동한다', (lethalHit) => {
     const { sim, target, advance } = setup('mark');
     const enemy = target(145);
     const nearby = target(145, 44);
-    sim.weapons.onBulletHit(enemy);
-    sim.weapons.onBulletHit(enemy);
-    enemy.hp = 1;
-    sim.playerShots.push({ x: enemy.x, y: enemy.y, vx: 0, vy: 0, r: 4, damage: 4, life: 1, source: 'player' });
-    advance(1);
+    enemy.hp = lethalHit * 4;
+    for (let i = 0; i < lethalHit; i++) {
+      sim.playerShots.push({ x: enemy.x, y: enemy.y, vx: 0, vy: 0, r: 4, damage: 4, life: 1, source: 'player' });
+      advance(1);
+    }
     expect(enemy.dead).toBe(true);
     expect(nearby.hp).toBeLessThan(nearby.maxHp);
+    expect(sim.damageByAttack.basic).toBe(lethalHit * 4);
+    const strikes = sim.weapons.effects.filter((effect) => effect.kind === 'mark' && !effect.variant);
+    expect(strikes).toHaveLength(1);
+    expect(strikes[0].points).toEqual([{ x: enemy.x, y: enemy.y }, { x: nearby.x, y: nearby.y }]);
+  });
+
+  it('낙뢰는 생존한 적에게 기본탄이 세 번 적중할 때마다 발동한다', () => {
+    const { sim, target } = setup('mark');
+    const enemy = target(145);
+    sim.damageEnemy(enemy, 1, 'basic');
+    sim.damageEnemy(enemy, 1, 'echo');
+    sim.damageEnemy(enemy, 1, 'basic');
+    expect(sim.damageByAttack.mark).toBeUndefined();
+    sim.damageEnemy(enemy, 1, 'basic');
+    expect(sim.damageByAttack.mark).toBeGreaterThan(0);
+    const damage = sim.damageByAttack.mark;
+    sim.damageEnemy(enemy, 1, 'basic');
+    sim.damageEnemy(enemy, 1000, 'echo');
+    expect(sim.damageByAttack.mark).toBe(damage);
   });
 
   it('잔영이 이전 사격 위치에서 추가탄을 쏜다', () => {
@@ -110,12 +129,16 @@ describe('특수 무기', () => {
     const { sim, target, advance } = setup('infection');
     const first = target(100);
     const second = target(175);
+    const outside = target(400);
     advance(1);
     expect(sim.weapons.infected.has(first)).toBe(true);
     sim.damageEnemy(first, 1000);
     advance(1);
     expect(sim.weapons.infected.has(second)).toBe(true);
     expect(second.hp).toBeLessThan(second.maxHp);
+    expect(sim.weapons.infected.has(outside)).toBe(false);
+    expect(sim.weapons.effects.filter((effect) => effect.kind === 'infection' && effect.points.length > 1)
+      .map((effect) => effect.points)).toEqual([[{ x: first.x, y: first.y }, { x: second.x, y: second.y }]]);
   });
 });
 
