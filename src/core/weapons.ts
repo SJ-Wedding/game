@@ -1,3 +1,4 @@
+import { chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
 import { WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
@@ -31,7 +32,7 @@ interface EffectTiming {
 
 export interface WeaponEffect extends EffectTiming {
   kind: WeaponId;
-  variant?: 'markCharge' | 'echoCharge';
+  variant?: 'markCharge' | 'echoCharge' | 'frostBurst';
 }
 
 export interface ResonanceEffect extends EffectTiming {
@@ -127,7 +128,9 @@ export class WeaponSystem {
 
   private weaponDamage(kind: WeaponId, factor: number): number {
     const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
-    return this.sim.stats.damage * factor * SPECIAL_WEAPON_POWER[kind]
+    const specialist = this.sim.loadout.character === 'lumen' && this.sim.loadout.weapon === kind;
+    const focus = specialist ? this.sim.starterDamageMultiplier : 1;
+    return this.sim.stats.damage * factor * SPECIAL_WEAPON_POWER[kind] * focus
       * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
 
@@ -138,7 +141,9 @@ export class WeaponSystem {
   }
 
   private enabled(kind: WeaponId): boolean {
-    return this.sim.stacks[kind] > 0 && !this.fusedIngredients.has(kind);
+    const { loadout } = this.sim;
+    const allowed = loadout.character === 'ranger' || (loadout.character === 'lumen' && loadout.weapon === kind);
+    return allowed && this.sim.stacks[kind] > 0 && !this.fusedIngredients.has(kind);
   }
 
   canFuse(id: FusionId): boolean {
@@ -429,12 +434,7 @@ export class WeaponSystem {
 
     if (this.enabled('chain') && now >= (this.ready.get('chain') ?? 0)) this.chain();
     if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 96);
-    if (this.available('turret', this.rankEffect('turret'))) {
-      // 겨울 등불: 지속시간 −30%, 한 번에 2대
-      if (sim.relics.has('winterLantern')) {
-        for (const side of [-1, 1]) this.device('turret', { x: p.x + side * 34, y: p.y }, 6 * 0.7, 340 + sim.reachBonus * 0.55);
-      } else this.device('turret', p, 6, 340 + sim.reachBonus * 0.55);
-    }
+    if (this.available('turret', this.rankEffect('turret') * (sim.loadout.character === 'lumen' && sim.relics.has('winterLantern') ? 0.7 : 1))) this.deployTurrets();
     if (this.enabled('flame') && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
       this.trail = { x: p.x, y: p.y };
       this.device('flame', p, 2, this.rankEffect('flame'));
@@ -533,24 +533,105 @@ export class WeaponSystem {
   }
 
   private chain(): void {
-    const p = this.sim.player;
-    let target = this.nearest(p, 390);
+    const { player, relics, reachBonus } = this.sim;
+    const specialist = this.sim.loadout.character === 'lumen';
+    let target = this.nearest(player, 390 + (specialist ? reachBonus * 0.65 : 0));
     if (!target) return;
-    const crown = this.sim.relics.has('crown');
-    this.ready.set('chain', this.sim.elapsed + 2.15 * this.sim.relics.cooldownMultiplier);
-    if (this.sim.relics.onWeaponActivated()) this.ready.set('chain', this.sim.elapsed);
+    const crown = relics.has('crown');
+    const voltage = this.sim.mastery('chainVoltage');
+    const branches = this.sim.mastery('chainFork') * 2;
+    const speed = chainDelay(this.sim.mastery('chainSpeed'));
+    const interval = specialist ? 1.7 * speed : 2.15;
+    this.ready.set('chain', this.sim.elapsed + Math.max(0.12, interval * relics.cooldownMultiplier));
+    if (relics.onWeaponActivated()) this.ready.set('chain', this.sim.elapsed);
     const hit = new Set<Target>();
-    const points: Point[] = [p];
-    while (target && hit.size < this.rankEffect('chain') + (crown ? 2 : 0)) {
+    const points: Point[] = [player];
+    const maxLinks = this.rankEffect('chain') + (crown ? 2 : 0) + this.sim.mastery('chainLinks');
+    const range = 125 + (specialist ? reachBonus * 0.12 : 0);
+    let firstBranch: Point | null = null;
+    for (let link = 0; target && link < maxLinks; link++) {
       hit.add(target);
       points.push(target);
       const at = { x: target.x, y: target.y };
-      this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown ? 0.75 : 1));
-      // 폭풍의 왕관: 연쇄 번개가 맞힌 모든 적 자리에서 폭발
+      const voltageFactor = link === 0 ? 1 + 0.45 * voltage : 0.85 ** voltage;
+      const falloff = specialist ? Math.max(0.4, 0.76 ** link) : 0.76 ** link;
+      this.damage('chain', target, 1.85 * falloff * voltageFactor * (crown ? 0.75 : 1));
       if (crown) this.area('chain', at, 54, 0.75);
-      target = this.nearest(target, 125, hit);
+      if (link === 2) firstBranch = at;
+      target = this.nearest(at, range, hit);
     }
     this.trace('chain', points, 0, 0.32);
+    if (!firstBranch) return;
+    for (let branch = 0; branch < branches; branch++) {
+      const extra = this.nearest(firstBranch, range, hit);
+      if (!extra) break;
+      hit.add(extra);
+      this.trace('chain', [firstBranch, extra], 0, 0.32);
+      this.damage('chain', extra, 1.85 * 0.5 * (crown ? 0.75 : 1));
+      if (crown) this.area('chain', extra, 54, 0.75);
+    }
+  }
+
+  private deployTurrets(): void {
+    const { player, relics, loadout, reachBonus } = this.sim;
+    const winter = relics.has('winterLantern');
+    const duration = 6 * (winter ? 0.7 : 1);
+    const count = 1 + Number(winter) + this.sim.mastery('turretMount');
+    const range = 340 + reachBonus * 0.55;
+    if (loadout.character !== 'lumen') {
+      if (winter) {
+        for (const side of [-1, 1]) this.device('turret', { x: player.x + side * 34, y: player.y }, duration, range);
+      } else this.device('turret', player, duration, range);
+      return;
+    }
+    compact(this.devices, (device) => device.kind !== 'turret');
+    for (let i = 0; i < count; i++) {
+      const angle = Math.PI * 2 * i / count;
+      const spacing = count === 1 ? 0 : 38 + count * 3;
+      const pad = ARENA_CONFIG.wallPadding + 10;
+      const x = clamp(player.x + Math.cos(angle) * spacing, pad, ARENA_CONFIG.width - pad);
+      const y = clamp(player.y + Math.sin(angle) * spacing, pad, ARENA_CONFIG.height - pad);
+      this.device('turret', { x, y }, duration, range);
+    }
+  }
+
+  private fireTurret(turret: Device, target: Target): void {
+    const { relics, elapsed } = this.sim;
+    const speed = turretDelay(this.sim.mastery('turretSpeed'));
+    turret.next = turret.age + Math.max(0.09, 0.48 * relics.periodicHitMultiplier * speed);
+    const angle = Math.atan2(target.y - turret.y, target.x - turret.x);
+    turret.angle = angle;
+    const factor = 0.86 * turretMountDamage(this.sim.mastery('turretMount'));
+    const pierce = this.sim.mastery('turretPierce');
+    const targets = [target];
+    if (pierce > 0) {
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const depth = (t: Point) => (t.x - turret.x) * ux + (t.y - turret.y) * uy;
+      const end = { x: turret.x + ux * turret.r, y: turret.y + uy * turret.r };
+      const extra = [...this.targets()].filter((t) => t !== target && depth(t) >= depth(target)
+        && distToSegment(t.x, t.y, turret.x, turret.y, end.x, end.y) <= t.r + 8);
+      extra.sort((a, b) => depth(a) - depth(b));
+      targets.push(...extra.slice(0, pierce));
+    }
+    this.trace('turret', [turret, targets[targets.length - 1]], 0, 0.26);
+    for (const t of targets) {
+      if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.9);
+      this.damage('turret', t, factor);
+    }
+    const frost = this.sim.mastery('turretFrost');
+    if (!frost) return;
+    const radius = frostRadius(frost);
+    const splash = new Set<Target>(targets);
+    for (const impact of targets) {
+      this.trace('turret', [impact], radius, 0.4, 'frostBurst');
+      for (const t of this.targets()) {
+        if (splash.has(t) || dist(impact.x, impact.y, t.x, t.y) > radius + t.r) continue;
+        splash.add(t);
+        if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.8 * frost);
+        this.damage('turret', t, factor * 0.35 * frost);
+      }
+    }
   }
 
   private orbit(): void {
@@ -649,11 +730,7 @@ export class WeaponSystem {
         if (finished || d.age < d.next) break;
         const target = this.nearest(d, d.r);
         if (!target) break;
-        d.next = d.age + 0.48 * this.sim.relics.periodicHitMultiplier;
-        d.angle = Math.atan2(target.y - d.y, target.x - d.x);
-        this.trace(d.kind, [d, target], 0, 0.26);
-        if ('id' in target) target.slowUntil = this.sim.elapsed + 0.9;
-        this.damage(d.kind, target, 0.86);
+        this.fireTurret(d, target);
         break;
       }
       case 'flame':

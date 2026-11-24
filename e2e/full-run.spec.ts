@@ -131,6 +131,7 @@ for (const seed of seeds) {
     const errors = collectErrors(page);
     await page.goto(`/?dev=1&seed=${seed}`);
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     const wallStart = Date.now();
     await page.evaluate(installDriver);
 

@@ -43,6 +43,7 @@ export function collectErrors(page: Page): string[] {
 export async function startRun(page: Page, query: string): Promise<void> {
   await page.goto(`/?dev=1${query}`);
   await page.getByTestId('play').click();
+  await page.getByTestId('character-ranger').click();
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
 }
 

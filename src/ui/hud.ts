@@ -129,6 +129,7 @@ export class Hud {
 
   update(sim: GameSim, events: SimEvent[]): void {
     const c = this.c;
+    c.toggle(this.recipes, 'recipeAvailability', 'hidden', sim.loadout.character !== 'ranger');
     const p = sim.player;
     const maxHp = sim.relics.maxHp;
     if (this.lastRelics !== sim.relics.owned.size || this.lastRelicFusions !== sim.weapons.fusions.size) {

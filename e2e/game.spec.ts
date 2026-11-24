@@ -10,10 +10,11 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     expect(errors, errors.join('\n')).toEqual([]);
   });
 
-  test('새로 시작: 플레이를 누르면 바로 이동·공격할 수 있고 HUD 가 표시된다', async ({ page }) => {
+  test('새로 시작: 캐릭터를 고르면 이동·공격할 수 있고 HUD 가 표시된다', async ({ page }) => {
     await page.goto('/?dev=1&seed=7');
     await expect(page.getByTestId('play')).toBeVisible();
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await expect(page.getByTestId('hud-timer')).toHaveText(/^(15:00|14:5\d)$/);
     await expect(page.getByTestId('hud-hp')).toContainText('체력 70 / 70');
     await expect(page.getByTestId('hud-dodge')).toContainText('회피 준비');
@@ -150,6 +151,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
       const before = (await snap(page)).runsStarted;
       await page.waitForTimeout(700); // 결과 화면 입력 보호 시간
       await page.keyboard.press('Enter');
+      await page.getByTestId('character-ranger').click();
       await expect.poll(async () => (await snap(page)).screen).toBe('playing');
       const after = await snap(page);
       expect(after.runsStarted).toBe(before + 1); // 한 번 눌러 한 판만 시작
@@ -159,6 +161,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     // 결과 화면의 버튼 클릭으로도 재시작
     await finishRun();
     await page.getByTestId('restart').click();
+    await page.getByTestId('character-ranger').click();
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   });
 
@@ -201,6 +204,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await page.keyboard.press('Escape');
     await page.getByTestId('pause-title').click();
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     const again = await measure();
     expect(again.spawns).toEqual(first.spawns);
     expect(again.dodges).toBe(1);
@@ -222,6 +226,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     });
     // 개발 옵션 없이 10초 이상 실제로 싸운 뒤(자동 공격으로 처치 발생) 쓰러진다 → 기록에 반영됨
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await expect.poll(async () => (await snap(page)).kills ?? 0, { timeout: 60_000 }).toBeGreaterThan(0);
     await waitElapsed(page, 10);
     await page.evaluate(() => (window as any).__rift.sim.hurtPlayer(9999, '시험용 일격'));
@@ -245,6 +250,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.getByTestId('runs')).toHaveText('0 / 0');
     await expect(page.getByTestId('volume')).toHaveValue('60');
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await waitElapsed(page, 1);
   });
 

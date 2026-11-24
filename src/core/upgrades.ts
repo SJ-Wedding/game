@@ -1,7 +1,8 @@
+import { CHARACTER_UPGRADES, characterUpgradeValue, type Loadout } from '../config/characters';
 import { GRADE_CONFIG, GRADES, type GradeId } from '../config/grades';
 import type { StatKey } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
-import { UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeDef, type UpgradeId } from '../config/upgrades';
+import { MASTERY_UPGRADES, UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeDef, type UpgradeId } from '../config/upgrades';
 import type { Rng } from './rng';
 import { effectValue, healOnPick, type Stacks } from './stats';
 import type { UpgradeChoice } from './types';
@@ -42,8 +43,8 @@ export function rollChoices(
   luck = 0,
   exclude: UpgradeId[] = [],
   count: number = PROGRESSION_CONFIG.choiceCount,
+  all: readonly UpgradeDef[] = UPGRADES,
 ): UpgradeChoice[] {
-  const all = UPGRADES;
   const fresh = all.filter((u) => !exclude.includes(u.id));
   const pool = (fresh.length >= count ? fresh : [...fresh, ...all.filter((u) => exclude.includes(u.id))]).slice();
   const out: UpgradeChoice[] = [];
@@ -106,6 +107,32 @@ export function rollRunChoices(
   return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }
 
+function masteryAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
+  if (!def.mastery || loadout.character === 'ranger') return false;
+  const mastery = CHARACTER_UPGRADES[def.mastery];
+  return mastery.path === (loadout.character === 'lumen' ? loadout.weapon : 'roan')
+    && (!('minLevel' in mastery) || level >= mastery.minLevel);
+}
+
+export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
+  if (def.mastery) return masteryAvailable(loadout, def, level);
+  if (loadout.character === 'ranger') return true;
+  if (def.weapon) return loadout.character === 'lumen' && loadout.weapon === def.weapon;
+  return def.category !== 'attack';
+}
+
+export function rollMasteryChoices(
+  rng: Rng, stacks: Stacks, loadout: Loadout, level: number, luck: number, exclude: UpgradeId[] = [], armory = false,
+): UpgradeChoice[] {
+  const weapon = loadout.character === 'lumen' ? UPGRADE_BY_ID[loadout.weapon] : undefined;
+  const mastery = MASTERY_UPGRADES.filter((def) => masteryAvailable(loadout, def, level));
+  if (weapon?.maxStacks !== undefined && stacks[weapon.id] < weapon.maxStacks) mastery.push(weapon);
+  if (armory) return rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount, mastery);
+  const dedicated = rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount - 1, mastery);
+  const common = UPGRADES.filter((def) => def.category !== 'attack');
+  return [...rollChoices(rng, stacks, luck, exclude, 1, common), ...dedicated];
+}
+
 const STAT_LABEL: Partial<Record<StatKey, string>> = {
   fireRate: '공격 속도',
   damage: '피해',
@@ -124,6 +151,7 @@ const fmt = (n: number) => (Math.abs(n - Math.round(n)) < 1e-6 ? String(Math.rou
 
 /** 등급을 반영한 카드 효과 문구 (예: "피해 +33%") */
 export function upgradeText(def: UpgradeDef, grade: GradeId): string {
+  if (def.mastery) return CHARACTER_UPGRADES[def.mastery].text(characterUpgradeValue(def.mastery, grade));
   if (def.weapon || def.effects.length === 0) return def.description;
   const parts = def.effects.map((e) => {
     const v = effectValue(e, grade);

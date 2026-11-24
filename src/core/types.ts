@@ -1,3 +1,4 @@
+import type { Loadout } from '../config/characters';
 import type { FusionId, WeaponId } from '../config/weapons';
 import type { RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
@@ -36,6 +37,7 @@ export interface Player {
   /** 조준 각도(라디안) */
   aim: number;
   facingLeft: boolean;
+  facing: 'north' | 'south' | 'east' | 'west';
   /** 피격 연출용 */
   hurtFlash: number;
 }
@@ -158,6 +160,7 @@ export interface Pickup {
 
 export type SimEventType =
   | 'shoot'
+  | 'swing'
   | 'hit'
   | 'kill'
   | 'hurt'
@@ -193,12 +196,13 @@ export type UpgradeChoice =
   | { kind: 'coin'; id: 'flip' | 'pass' }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
-export type AttackId = 'basic' | 'bomb' | 'relic' | WeaponId | FusionId;
+export type AttackId = 'basic' | 'sword' | 'bomb' | 'relic' | WeaponId | FusionId;
 
 export type RunOutcome = 'victory' | 'defeat';
 export type RunEndCause = 'boss' | 'death' | 'timeout';
 
 export interface RunResult {
+  loadout?: Loadout;
   outcome: RunOutcome;
   cause: RunEndCause;
   /** 사망 시 마지막으로 받은 공격 */

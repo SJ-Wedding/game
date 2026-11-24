@@ -1,3 +1,7 @@
+import type { Loadout } from '../config/characters';
+import lumenChain from '../assets/lumen-chain.png';
+import lumenTurret from '../assets/lumen-turret.png';
+import roan from '../assets/roan.png';
 import type { WeaponId } from '../config/weapons';
 import arena from '../assets/arena.png';
 import player from '../assets/player.png';
@@ -20,6 +24,11 @@ import echo from '../assets/echo.png';
 import gravity from '../assets/gravity.png';
 import infection from '../assets/infection.png';
 import weaponEffects from '../assets/weapon-effects.png';
+
+export const CHARACTER_SHEETS = { 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan };
+export function characterTexture(loadout: Loadout): 'player' | keyof typeof CHARACTER_SHEETS {
+  return loadout.character === 'lumen' ? `lumen-${loadout.weapon}` : loadout.character === 'roan' ? 'roan' : 'player';
+}
 
 export const ARENA_TEXTURE = arena;
 export const ACTOR_TEXTURES = { player, chaser, charger, spitter, elite, boss };

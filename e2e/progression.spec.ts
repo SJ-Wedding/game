@@ -154,6 +154,7 @@ test.describe('성장 시스템', () => {
     await page.goto('/?dev=1&seed=34');
     await expect(page.getByTestId('title-tokens')).toHaveText('◆ 0');
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await waitElapsed(page, 1);
     // 생존 1분(토큰 2)을 만들기 위해 개발 훅으로 전투 시간을 1:01 로 옮긴 뒤 쓰러진다
     await page.evaluate(() => {
@@ -179,6 +180,7 @@ test.describe('성장 시스템', () => {
     await page.reload();
     await expect(page.getByTestId('title-tokens')).toHaveText(`◆ ${tokens - 10}`);
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await waitElapsed(page, 0.5);
     const s = await snap(page);
     expect(s.stats!.damage).toBeCloseTo(9 * 1.04, 5);
@@ -195,6 +197,7 @@ test.describe('성장 시스템', () => {
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await page.waitForTimeout(700);
     await page.keyboard.press('Enter');
+    await page.getByTestId('character-ranger').click();
     const modal = page.getByRole('dialog', { name: '다음 판에 가져갈 유물' });
     await expect(modal).toBeVisible();
     expect((await snap(page)).runsStarted).toBe(1);
@@ -202,6 +205,7 @@ test.describe('성장 시스템', () => {
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await page.reload();
     await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
     await expect(modal).toBeVisible();
     const options = modal.locator('.relic-pick');
     await expect(options).toHaveCount(4);

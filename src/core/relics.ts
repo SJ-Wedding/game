@@ -1,4 +1,5 @@
-import { OPENING_RELICS, RELICS, RELIC_IDS, TRIPLE_CHOICE_COUNT, type RelicId, type RelicSource } from '../config/relics';
+import { DEFAULT_LOADOUT, type Loadout } from '../config/characters';
+import { OPENING_RELICS, RELICS, RELIC_IDS, TRIPLE_CHOICE_COUNT, relicAllowed, type RelicId, type RelicSource } from '../config/relics';
 import type { DropKind } from '../config/drops';
 import { ARENA_CONFIG } from '../config/arena';
 import { PLAYER_BODY } from '../config/player';
@@ -12,9 +13,13 @@ import type { AttackId, Boss, Enemy, UpgradeChoice } from './types';
 type Target = Boss | Enemy;
 interface Point { x: number; y: number }
 
-export function rollRelics(source: RelicSource, rng: Rng, owned: ReadonlySet<RelicId>): UpgradeChoice[] {
+export function rollRelics(source: RelicSource, rng: Rng, owned: ReadonlySet<RelicId>, loadout: Loadout = DEFAULT_LOADOUT): UpgradeChoice[] {
   const offered: readonly RelicId[] = source === 'opening' ? OPENING_RELICS : RELIC_IDS.filter((id) => RELICS[id].source === source);
-  const pool = offered.filter((id) => !owned.has(id));
+  const pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout));
+  if (source === 'opening' && loadout.character !== 'ranger') {
+    const extra = loadout.character === 'roan' ? ['swordScabbard', 'swordRhythm'] as const : ['swarm', 'bloodPrice'] as const;
+    pool.push(...extra.filter((id) => !owned.has(id)));
+  }
   const choices: UpgradeChoice[] = [];
   while (pool.length && choices.length < 3) {
     const id = pool.splice(rng.int(pool.length), 1)[0];
@@ -73,7 +78,7 @@ export class RelicEffects {
   private get now(): number { return this.sim.elapsed; }
 
   acquire(id: RelicId): void {
-    if (this.owned.has(id)) return;
+    if (this.owned.has(id) || !relicAllowed(id, this.sim.loadout)) return;
     const before = this.maxHp;
     this.owned.add(id);
     const p = this.sim.player;

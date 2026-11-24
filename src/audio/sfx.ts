@@ -17,6 +17,7 @@ interface ToneSpec {
 
 const SOUNDS: Partial<Record<SimEventType, ToneSpec[]>> = {
   shoot: [{ f0: 900, f1: 600, dur: 0.05, wave: 'square', gain: 0.025 }],
+  swing: [{ f0: 420, f1: 150, dur: 0.12, wave: 'triangle', gain: 0.057 }],
   hit: [{ f0: 260, f1: 180, dur: 0.035, wave: 'triangle', gain: 0.05 }],
   kill: [{ f0: 520, f1: 240, dur: 0.08, wave: 'sine', gain: 0.07 }],
   hurt: [{ f0: 220, f1: 70, dur: 0.22, wave: 'sawtooth', gain: 0.12 }],

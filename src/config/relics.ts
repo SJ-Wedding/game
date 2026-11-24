@@ -1,8 +1,13 @@
+import type { Loadout } from './characters';
 import { FUSION_RELIC_DAMAGE_BONUS, isFusionIngredient, type FusionId } from './weapons';
 
 export const TRIPLE_CHOICE_COUNT = 3;
 
 export const RELICS = {
+  swordScabbard: { source: 'level', symbol: '⛨', character: 'roan', name: '화살막이 검집', effect: '검 궤적에 닿은 적 투사체를 베기 한 번에 최대 3개 지웁니다.' },
+  swordCircle: { source: 'elite', symbol: '◉', character: 'roan', name: '원형 검무의 인장', effect: '매 세 번째 베기가 360° 회전 베기로 바뀝니다. 회전 베기의 피해는 일반 베기의 80%입니다.' },
+  swordRhythm: { source: 'level', symbol: 'ϟ', character: 'roan', name: '부러진 칼등', effect: '한 번에 적 4마리 이상을 베면 다음 베기 대기시간이 35% 줄어듭니다.' },
+  swordDuel: { source: 'elite', symbol: '⚔', character: 'roan', name: '결투자의 장갑', effect: '베기에 맞은 적이 한 마리면 해당 베기의 피해가 50% 증가합니다.' },
   tripleChoice: { source: 'elite', symbol: 'Ⅲ', name: '삼중 선택의 인장', effect: '판마다 처음 장착할 때 보너스 강화 선택이 3회 열립니다. 각 화면에서 강화 하나를 고릅니다.' },
   awl: { source: 'level', symbol: '↠', name: '철심 탄환', effect: '기본탄 한 발이 일반 적을 한 마리 더 관통합니다. 후반 관통과 중첩됩니다.' },
   anvil: { source: 'level', symbol: '▲', name: '무쇠 공이', effect: '기본 사격 속도 −25%, 기본탄 한 발 피해 +55%.' },
@@ -112,6 +117,21 @@ export function relicDescription(id: RelicId, fusions: Iterable<FusionId> = []):
   const bonus = `융합 무기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.`;
   if (isFusionIngredient(fusions, relic.weapon)) return `${FUSION_EFFECTS[id as WeaponRelicId]} ${bonus}`;
   return `${relic.effect} 무기가 없으면 모든 공격 피해 +5%. 융합 후 전용 효과 적용 및 ${bonus}`;
+}
+
+// 탄환 전용 유물과 무기를 새로 발동시키는 유물은 전용 공격 빌드에서 제외한다.
+const RANGED_RELICS = new Set<RelicId>([
+  'awl', 'anvil', 'scatterSeal', 'hawkLens', 'chainOrb', 'slayerSeal', 'twinBlade', 'splitHead',
+  'focusRing', 'executioner', 'sniperGlove', 'pulseBarrel', 'fifthBell', 'stormCore', 'compass', 'whetstone',
+]);
+
+export function relicAllowed(id: RelicId, loadout: Loadout): boolean {
+  const relic = RELICS[id];
+  if ('character' in relic) return loadout.character === relic.character;
+  if (loadout.character === 'ranger') return true;
+  if ('weapon' in relic) return loadout.character === 'lumen' && loadout.weapon === relic.weapon;
+  if (loadout.character === 'roan' && (id === 'heart' || id === 'catalyst' || id === 'unstableCore' || id === 'hourglass')) return false;
+  return !RANGED_RELICS.has(id);
 }
 
 export function validRelicIds(value: unknown): RelicId[] {

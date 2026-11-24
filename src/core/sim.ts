@@ -1,3 +1,4 @@
+import { DEFAULT_LOADOUT, LUMEN, SWORD, characterUpgradeValue, type CharacterUpgradeId, type Loadout } from '../config/characters';
 import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
 import { OPENING_RELIC_LEVEL, validCarry, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
@@ -9,11 +10,11 @@ import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { ASSAULT_CONFIG, SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
 import { DROPS, DROP_CONFIG, type DropKind } from '../config/drops';
-import { ALL_UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeId } from '../config/upgrades';
+import { ALL_UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeDef, type UpgradeId } from '../config/upgrades';
 import { metaBonus, type MetaBonus, type MetaPurchases } from './meta';
 import { bossInvulnerable, createBoss, updateBoss } from './boss';
 import { createEnemy, updateEnemies } from './enemies';
-import { clamp, compact, dist, dist2, lerp } from './math';
+import { clamp, compact, dist, dist2, distToSegment, lerp } from './math';
 import { xpToNext } from './progression';
 import { deriveSeed, Rng } from './rng';
 import { computeStats, emptyStacks, healOnPick, picksFromCounts, type Stacks, type UpgradePick } from './stats';
@@ -26,7 +27,7 @@ import { WeaponSystem } from './weapons';
 function shotAttack(source: string): AttackId | undefined {
   return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' ? 'relic' : undefined;
 }
-import { applyUpgrade, luckFor, rollChoices, rollGrade, rollRunChoices } from './upgrades';
+import { applyUpgrade, luckFor, rollChoices, rollGrade, rollMasteryChoices, rollRunChoices, upgradeAvailable } from './upgrades';
 
 export interface SimOptions {
   seed: number;
@@ -40,6 +41,7 @@ export interface SimOptions {
   /** 영구 강화 구매 내역 (토큰 상점). 없으면 영구 강화 0 */
   meta?: MetaPurchases;
   carryRelics?: readonly RelicId[];
+  loadout?: Loadout;
 }
 
 export type SimPhase = 'combat' | 'levelup' | 'ended';
@@ -88,6 +90,11 @@ export class GameSim {
   armoryOpen = false;
   bonusOpen = false;
   readonly options: SimOptions;
+  readonly loadout: Loadout;
+  private readonly masteryValues: Partial<Record<CharacterUpgradeId, number>> = {};
+  private masteryPower = 0;
+  swordSwings = 0;
+  swordSweep: { x: number; y: number; angle: number; width: number; range: number; at: number; blocked: { x: number; y: number }[] } | null = null;
 
   /** 경과 틱. elapsed = tick / tickRate */
   tick: number;
@@ -149,6 +156,7 @@ export class GameSim {
 
   constructor(options: SimOptions) {
     this.options = options;
+    this.loadout = options.loadout ?? DEFAULT_LOADOUT;
     this.seed = options.seed >>> 0;
     this.rngSpawn = new Rng(deriveSeed(this.seed, 'spawn'));
     this.rngUpgrade = new Rng(deriveSeed(this.seed, 'upgrade'));
@@ -161,15 +169,14 @@ export class GameSim {
     this.rngRelic = new Rng(deriveSeed(this.seed, 'relic'));
     this.rngRelicFx = new Rng(deriveSeed(this.seed, 'relicFx'));
 
+    if (options.presetLevel) this.level = options.presetLevel;
     if (options.presetUpgrades) {
       for (const pick of picksFromCounts(options.presetUpgrades)) {
-        if (applyUpgrade(this.stacks, pick.id)) {
-          this.picks.push(pick);
-          this.pickOrder.push(pick.id);
-        }
+        const def = UPGRADE_BY_ID[pick.id];
+        if (def && upgradeAvailable(this.loadout, def, this.level)) this.addUpgrade(def, pick.grade);
       }
     }
-    if (options.presetLevel) this.level = options.presetLevel;
+    if (this.loadout.character === 'lumen') this.stacks[this.loadout.weapon] = Math.max(1, this.stacks[this.loadout.weapon]);
     this.stats = computeStats(this.picks, this.meta);
 
     this.player = {
@@ -185,6 +192,7 @@ export class GameSim {
       fireCd: 0,
       aim: -Math.PI / 2,
       facingLeft: false,
+      facing: 'south',
       hurtFlash: 0,
     };
 
@@ -312,8 +320,16 @@ export class GameSim {
 
     // 조준: 자동 전투면 가장 가까운 적, 아니면 마우스 위치
     let fire = input.fire;
-    if (AUTO_COMBAT.enabled) {
-      this.target = this.findTarget(AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus);
+    if (this.loadout.character === 'lumen') {
+      fire = false;
+      this.target = null;
+      if (len > 0.01) p.aim = Math.atan2(my, mx);
+    } else if (AUTO_COMBAT.enabled) {
+      const range = this.loadout.character === 'roan' ? this.swordRange : AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus;
+      this.target = this.findTarget(range);
+      if (!this.target && this.loadout.character === 'roan' && this.relics.has('swordScabbard')) {
+        this.target = this.enemyShots.find((shot) => shot.life > 0 && dist(p.x, p.y, shot.x, shot.y) <= range + shot.r) ?? null;
+      }
       fire = this.target !== null;
       if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
       else if (len > 0.01) p.aim = Math.atan2(my, mx);
@@ -342,6 +358,8 @@ export class GameSim {
 
     const horizontal = p.dodgeTime > 0 ? p.dodgeDx : mx;
     if (Math.abs(horizontal) > 0.08) p.facingLeft = horizontal < 0;
+    const vertical = p.dodgeTime > 0 ? p.dodgeDy : my;
+    if (Math.hypot(horizontal, vertical) > 0.08) this.facePlayer(horizontal, vertical);
 
     const moving = len > 0.01 || p.dodgeTime > 0;
     const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(moving);
@@ -362,8 +380,13 @@ export class GameSim {
 
     p.fireCd -= dt;
     if (fire && p.fireCd <= 0) {
-      this.firePlayer();
-      p.fireCd += 1 / this.relics.fireRate;
+      if (this.loadout.character === 'roan') {
+        const hits = this.swingSword();
+        p.fireCd += this.swordInterval * (hits >= 4 && this.relics.has('swordRhythm') ? 0.65 : 1);
+      } else {
+        this.firePlayer();
+        p.fireCd += 1 / this.relics.fireRate;
+      }
       if (p.fireCd < 0) p.fireCd = 0;
     } else if (!fire && p.fireCd < 0) {
       p.fireCd = 0;
@@ -397,6 +420,72 @@ export class GameSim {
       if (d < bestD) best = b;
     }
     return best;
+  }
+
+  private facePlayer(dx: number, dy: number): void {
+    this.player.facing = Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'west' : 'east') : (dy < 0 ? 'north' : 'south');
+  }
+
+  mastery(id: CharacterUpgradeId): number {
+    return this.masteryValues[id] ?? 0;
+  }
+
+  get starterDamageMultiplier(): number {
+    return LUMEN.baseDamage * (1 + this.masteryPower * LUMEN.damagePerPoint);
+  }
+
+  get swordRange(): number {
+    return SWORD.range * (1 + 0.12 * this.mastery('swordRange'));
+  }
+
+  get swordAngle(): number {
+    return Math.min(360, SWORD.angle + 20 * this.mastery('swordArc'));
+  }
+
+  get swordInterval(): number {
+    return Math.max(0.12, SWORD.interval / this.relics.fireRate * 0.9 ** this.mastery('swordSpeed') * (1 + 0.08 * this.mastery('swordDamage')));
+  }
+
+  get swordDamage(): number {
+    return this.stats.damage * SWORD.damage * (1 + 0.25 * this.mastery('swordDamage'));
+  }
+
+  private swingSword(): number {
+    const { player: p } = this;
+    if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
+    this.facePlayer(Math.cos(p.aim), Math.sin(p.aim));
+    this.swordSwings++;
+    const spin = this.relics.has('swordCircle') && this.swordSwings % 3 === 0;
+    const width = spin ? Math.PI * 2 : this.swordAngle * Math.PI / 180;
+    const range = this.swordRange;
+    const intersects = (target: { x: number; y: number; r: number }) => {
+      const dx = target.x - p.x;
+      const dy = target.y - p.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > range + target.r) return false;
+      const delta = Math.atan2(Math.sin(Math.atan2(dy, dx) - p.aim), Math.cos(Math.atan2(dy, dx) - p.aim));
+      if (Math.abs(delta) <= width / 2) return true;
+      const edge = p.aim + Math.sign(delta) * width / 2;
+      return distToSegment(target.x, target.y, p.x, p.y, p.x + Math.cos(edge) * range, p.y + Math.sin(edge) * range) <= target.r;
+    };
+    const targets = this.enemies.filter((enemy) => !enemy.dead && intersects(enemy));
+    const boss = this.boss && !this.boss.dead && !bossInvulnerable(this.boss) && intersects(this.boss) ? this.boss : null;
+    const hits = targets.length + Number(Boolean(boss));
+    const damage = this.swordDamage * (spin ? 0.8 : 1) * (hits === 1 && this.relics.has('swordDuel') ? 1.5 : 1);
+    for (const enemy of targets) this.damageEnemy(enemy, damage, 'sword');
+    if (boss) this.damageBoss(damage, 'sword');
+    const blocked: { x: number; y: number }[] = [];
+    if (this.relics.has('swordScabbard')) {
+      for (const shot of this.enemyShots) {
+        if (blocked.length === 3) break;
+        if (shot.life <= 0 || !intersects(shot)) continue;
+        shot.life = 0;
+        blocked.push({ x: shot.x, y: shot.y });
+      }
+    }
+    this.swordSweep = { x: p.x, y: p.y, angle: p.aim, width, range, at: this.elapsed, blocked };
+    this.emit('swing', p.x, p.y);
+    return hits;
   }
 
   private firePlayer(): void {
@@ -710,8 +799,10 @@ export class GameSim {
     const finalMinutes = Math.max(0, t - finalAt) / 60;
     const resistance = t < resistanceAt ? 0 : Math.min(maxResistance,
       initialResistance + regularMinutes * resistancePerMinute + finalMinutes * finalResistancePerMinute);
-    const effectiveResistance = source && Object.hasOwn(WEAPON_FUSIONS, source) ? resistance * (1 - FUSION_ARMOR_PIERCE) : resistance;
-    let damage = amount * this.relics.damageMultiplier(e, basic) * (1 - effectiveResistance) * (basic ? 1 - e.basicResistance : 1);
+    const resistanceMultiplier = source === 'sword' ? 0.85 ** this.mastery('swordPierce')
+      : source && Object.hasOwn(WEAPON_FUSIONS, source) ? 1 - FUSION_ARMOR_PIERCE : 1;
+    const armor = basic || source === 'sword' ? e.basicResistance * resistanceMultiplier : 0;
+    let damage = amount * this.relics.damageMultiplier(e, basic) * (1 - resistance * resistanceMultiplier) * (1 - armor);
     if (e.kind === 'elite') damage /= eliteDurability;
     if (basic && this.relics.executes(e)) damage = Math.max(damage, e.hp);
     e.hp -= damage;
@@ -740,7 +831,9 @@ export class GameSim {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
     const basic = source === 'basic';
-    const damage = amount * this.relics.damageMultiplier(b, basic) * (basic ? 1 - BOSS_CONFIG.basicResistance : 1);
+    const armor = basic ? BOSS_CONFIG.basicResistance
+      : source === 'sword' ? BOSS_CONFIG.basicResistance * 0.85 ** this.mastery('swordPierce') : 0;
+    const damage = amount * this.relics.damageMultiplier(b, basic) * (1 - armor);
     b.hp = Math.max(0, b.hp - damage);
     this.recordAttackDamage(source, damage);
     b.flash = 0.06;
@@ -819,7 +912,9 @@ export class GameSim {
     const luck = luckFor(this.pendingLevel, this.meta.luck + this.stats.luck + this.relics.luckBonus);
     // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
     const level = this.startPickOpen ? 0 : this.pendingLevel;
-    const choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
+    const choices = this.loadout.character === 'ranger'
+      ? rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude)
+      : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.pendingLevel, luck, exclude);
     let out = [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
     // 점술가의 카드: 후보 2개. 무기 후보(마지막 칸)는 남긴다.
     if (out.length > this.relics.choiceCount) out = [out[0], ...out.slice(out.length - this.relics.choiceCount + 1)];
@@ -843,11 +938,13 @@ export class GameSim {
   }
 
   private fusionChoices(): UpgradeChoice[] {
+    if (this.loadout.character !== 'ranger') return [];
     return FUSION_IDS.filter((id) => this.weapons.canFuse(id))
       .map((id) => ({ kind: 'fusion', id }));
   }
 
   private rollArmoryChoices(): UpgradeChoice[] {
+    if (this.loadout.character !== 'ranger') return rollMasteryChoices(this.rngWeapon, this.stacks, this.loadout, this.level, this.luck, [], true);
     const choices = this.fusionChoices().slice(0, PROGRESSION_CONFIG.choiceCount);
     const available = WEAPON_UPGRADES.filter((def) => this.stacks[def.id] < def.maxStacks);
     const featured = new Set<UpgradeId>();
@@ -886,14 +983,16 @@ export class GameSim {
         this.choices = this.rollArmoryChoices();
         this.armoryOpen = this.choices.length > 0;
       } else if (source === 'bonus') {
-        this.choices = [...this.fusionChoices(), ...rollChoices(this.rngUpgrade, this.stacks, this.luck)].slice(0, PROGRESSION_CONFIG.choiceCount);
+        this.choices = this.loadout.character === 'ranger'
+          ? [...this.fusionChoices(), ...rollChoices(this.rngUpgrade, this.stacks, this.luck)].slice(0, PROGRESSION_CONFIG.choiceCount)
+          : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.level, this.luck);
         this.applyGradeRelics(this.choices, this.luck, false);
         this.bonusOpen = true;
       } else if (source === 'coin') {
         // 다음에 열릴 엘리트 유물 선택이 남아 있을 때만 동전을 던질 수 있다
         if (this.pendingRewards.includes('elite')) this.choices = [{ kind: 'coin', id: 'flip' }, { kind: 'coin', id: 'pass' }];
       } else {
-        this.choices = rollRelics(source, this.rngRelic, this.relics.owned);
+        this.choices = rollRelics(source, this.rngRelic, this.relics.owned, this.loadout);
       }
     }
     if (!this.choices.length && this.pendingLevels) {
@@ -925,11 +1024,9 @@ export class GameSim {
         this.pickOrder.push(c.id);
       } else if (c.kind === 'upgrade') {
         if (c.def.weapon && isFusionIngredient(this.weapons.fusions, c.def.weapon)) return false;
-        if (!applyUpgrade(this.stacks, c.def.id)) return false;
-        this.picks.push({ id: c.def.id, grade: c.grade });
+        if (!upgradeAvailable(this.loadout, c.def, this.level) || !this.addUpgrade(c.def, c.grade)) return false;
         this.stats = computeStats(this.picks, this.meta);
         this.relics.heal(healOnPick(c.def.id, c.grade));
-        this.pickOrder.push(c.def.id);
       } else {
         this.relics.heal(c.heal);
         this.pickOrder.push(c.id);
@@ -945,6 +1042,18 @@ export class GameSim {
     }
     this.openLevelUp();
     this.acc = 0;
+    return true;
+  }
+
+  private addUpgrade(def: UpgradeDef, grade: UpgradePick['grade']): boolean {
+    if (!applyUpgrade(this.stacks, def.id)) return false;
+    this.picks.push({ id: def.id, grade });
+    this.pickOrder.push(def.id);
+    if (def.mastery) {
+      const value = characterUpgradeValue(def.mastery, grade);
+      this.masteryValues[def.mastery] = this.mastery(def.mastery) + value;
+      this.masteryPower += value;
+    }
     return true;
   }
 
@@ -1065,6 +1174,7 @@ export class GameSim {
     this.phase = 'ended';
     this.choices = [];
     this.result = {
+      loadout: this.loadout,
       outcome,
       cause,
       killedBy: cause === 'death' ? this.lastDamageSource : null,

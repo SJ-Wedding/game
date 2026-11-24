@@ -10,7 +10,7 @@ import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
-import { ARENA_TEXTURE, ACTOR_TEXTURES, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
+import { ARENA_TEXTURE, ACTOR_TEXTURES, CHARACTER_SHEETS, characterTexture, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import {
   drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
@@ -59,6 +59,7 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     this.load.image('arena-slate', ARENA_TEXTURE);
     for (const [key, url] of Object.entries(ACTOR_TEXTURES)) this.load.image(key, url);
+    for (const [key, url] of Object.entries(CHARACTER_SHEETS)) this.load.spritesheet(key, url, { frameWidth: 32, frameHeight: 32 });
     this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
     for (const [key, url] of Object.entries(WEAPON_SPRITES)) this.load.image(`weapon-${key}`, url);
   }
@@ -402,15 +403,19 @@ export class GameScene extends Phaser.Scene {
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
+    const texture = characterTexture(sim.loadout);
+    if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture);
+    if (texture !== 'player') this.playerImage.setFrame(p.facing === 'south' ? 1 : p.facing === 'north' ? 2 : 0);
     this.playerImage.setPosition(p.x, p.y)
       .setScale(2)
-      .setFlipX(p.facingLeft)
+      .setFlipX(texture === 'player' ? p.facingLeft : p.facing === 'west')
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
+    if (sim.swordSweep) this.drawSwordSweep(sim.swordSweep, t);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
-    g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
+    if (sim.loadout.character !== 'lumen') g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
       p.x + ax * (p.r + 18), p.y + ay * (p.r + 18),
       p.x + ax * (p.r + 9) - ay * 4, p.y + ay * (p.r + 9) + ax * 4,
       p.x + ax * (p.r + 9) + ay * 4, p.y + ay * (p.r + 9) - ax * 4,
@@ -434,6 +439,30 @@ export class GameScene extends Phaser.Scene {
     // 9) 파티클
     for (const q of this.particles) {
       g.fillStyle(q.color, Math.max(0, q.life / q.max)).fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
+    }
+  }
+
+  private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
+    const progress = (now - sweep.at) / 0.27;
+    if (progress >= 1) return;
+    const g = this.weaponEffects;
+    const { x, y, angle, width, range } = sweep;
+    const fade = (1 - progress) ** 1.6;
+    const start = angle - width / 2;
+    const point = (a: number, r: number) => ({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+    const steps = Math.max(8, Math.ceil(width * 9));
+    const edge = Array.from({ length: steps + 1 }, (_, i) => point(start + i * width / steps, range));
+    const inside = edge.map((_, i) => point(start + i * width / steps, range - 18 - 16 * Math.sin(Math.PI * i / steps)));
+    g.fillStyle(0xff9676, fade * 0.45).fillPoints([...edge, ...inside.reverse()], true);
+    g.lineStyle(10, 0xff826b, fade * 0.24).strokePoints(edge);
+    g.lineStyle(3, 0xfff2d5, fade * 0.98).strokePoints(edge);
+    const tip = point(start + width * Math.min(1, 0.18 + progress * 2), range - 5);
+    g.lineStyle(4, 0xffffff, fade).lineBetween(tip.x - 4, tip.y - 4, tip.x + 4, tip.y + 4);
+    for (const burst of sweep.blocked) {
+      const radius = 5 + 16 * progress;
+      g.lineStyle(2, 0xffdfab, fade);
+      g.lineBetween(burst.x - radius, burst.y, burst.x + radius, burst.y);
+      g.lineBetween(burst.x, burst.y - radius, burst.x, burst.y + radius);
     }
   }
 
@@ -490,7 +519,16 @@ export class GameScene extends Phaser.Scene {
           continue;
         }
         if (fx.kind === 'turret') {
-          drawFrostShot(g, fx);
+          if (fx.variant === 'frostBurst') {
+            const { x, y } = fx.points[0];
+            const alpha = fx.life / fx.duration;
+            ground.fillStyle(0x84d9ff, alpha * 0.16).fillCircle(x, y, fx.radius);
+            g.lineStyle(2, 0xb5eeff, alpha * 0.75).strokeCircle(x, y, fx.radius * (1 - alpha * 0.36));
+            for (let i = 0; i < 6; i++) {
+              const angle = i * Math.PI / 3;
+              g.lineBetween(x, y, x + Math.cos(angle) * fx.radius * 0.55, y + Math.sin(angle) * fx.radius * 0.55);
+            }
+          } else drawFrostShot(g, fx);
           continue;
         }
         if (fx.kind === 'spear') {

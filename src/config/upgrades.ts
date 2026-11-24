@@ -1,3 +1,4 @@
+import { CHARACTER_UPGRADE_IDS, CHARACTER_UPGRADES, type CharacterUpgradeId } from './characters';
 import { WEAPONS, WEAPON_IDS, WEAPON_MAX_RANK, type WeaponId } from './weapons';
 import type { StatKey } from './player';
 
@@ -15,7 +16,7 @@ export type UpgradeId =
   | 'rapid' | 'split' | 'power'
   | 'vitality' | 'regen' | 'guard'
   | 'swift' | 'evasion' | 'magnet' | 'wisdom' | 'fortune'
-  | WeaponId;
+  | WeaponId | CharacterUpgradeId;
 
 export interface UpgradeEffect {
   stat: StatKey;
@@ -36,6 +37,7 @@ export interface UpgradeDef {
   /** 선택 즉시 회복량 (등급 배율 적용) */
   healOnPick?: number;
   weapon?: WeaponId;
+  mastery?: CharacterUpgradeId;
 }
 
 export const CATEGORY_LABEL: Record<UpgradeCategory, string> = {
@@ -77,7 +79,12 @@ export const WEAPON_UPGRADES: (UpgradeDef & { maxStacks: number })[] = WEAPON_ID
   category: 'attack', maxStacks: WEAPON_MAX_RANK, effects: [],
 }));
 
-export const ALL_UPGRADES = [...UPGRADES, ...WEAPON_UPGRADES];
+export const MASTERY_UPGRADES: UpgradeDef[] = CHARACTER_UPGRADE_IDS.map((id) => ({
+  id, mastery: id, name: CHARACTER_UPGRADES[id].name, description: CHARACTER_UPGRADES[id].text(1),
+  category: 'attack', effects: [],
+}));
+
+export const ALL_UPGRADES = [...UPGRADES, ...WEAPON_UPGRADES, ...MASTERY_UPGRADES];
 
 export const UPGRADE_BY_ID: Record<UpgradeId, UpgradeDef> = Object.fromEntries(
   ALL_UPGRADES.map((u) => [u.id, u]),

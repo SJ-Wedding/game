@@ -1,4 +1,5 @@
-import { OPENING_RELIC_LEVEL, carryable, validCarry, type RelicId } from '../config/relics';
+import { DEFAULT_LOADOUT, LUMEN, SWORD, type Loadout } from '../config/characters';
+import { OPENING_RELIC_LEVEL, carryable, relicAllowed, validCarry, type RelicId } from '../config/relics';
 import type { Sfx } from '../audio/sfx';
 import { randomSeed } from '../core/rng';
 import { GameSim } from '../core/sim';
@@ -11,7 +12,7 @@ import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'status' | 'shop';
+export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop';
 
 /** 렌더러(Phaser 씬)가 App 에 제공하는 기능 */
 export interface SceneLink {
@@ -103,15 +104,40 @@ export class App {
 
   startRun(retry = false): void {
     this.sfx.unlock();
+    if (retry) {
+      this.prepareRun(this.sim?.loadout ?? DEFAULT_LOADOUT, () => this.showTitle(), true);
+      return;
+    }
+    const back = this.screen === 'result' ? () => this.showResultView() : () => this.showTitle();
+    this.showCharacterSelection(back);
+  }
+
+  private showCharacterSelection(back: () => void): void {
+    this.screen = 'characters';
+    this.hud.hide();
+    this.screens.showCharacters((character) => {
+      if (character === 'lumen') {
+        this.screen = 'lumen-weapon';
+        this.screens.showLumenWeapons(
+          (weapon) => this.prepareRun({ character, weapon }, back),
+          () => this.showCharacterSelection(back),
+        );
+      } else {
+        this.prepareRun({ character }, back);
+      }
+    }, back);
+  }
+
+  private prepareRun(loadout: Loadout, back: () => void, retry = false): void {
     const seed = this.dev.enabled && this.dev.seed !== null ? this.dev.seed : randomSeed();
     const options = simOptionsFor(this.dev, seed);
     const assisted = Boolean(options.god || options.startTime || options.presetUpgrades);
     const draft = assisted ? this.assistedRelicDraft : this.save.pendingRelicDraft;
     if (!retry && draft) {
-      const back = this.screen === 'result' ? () => this.showResultView() : () => this.showTitle();
+      const compatible = draft.filter((id) => relicAllowed(id, loadout));
       this.screen = 'carry';
-      this.screens.showCarry(draft, (selection) => {
-        const carry = validCarry(selection.filter((id) => draft.includes(id)));
+      this.screens.showCarry(compatible, (selection) => {
+        const carry = validCarry(selection.filter((id) => compatible.includes(id)));
         if (assisted) {
           this.assistedRelicDraft = undefined;
           this.assistedCarry = carry;
@@ -119,13 +145,13 @@ export class App {
           this.save = { ...this.save, relicCarry: carry, pendingRelicDraft: undefined };
           writeSave(this.storage, this.save);
         }
-        this.startRun();
+        this.prepareRun(loadout, back);
       }, back);
       return;
     }
     const carryRelics = retry ? this.sim?.options.carryRelics
       : assisted ? this.assistedCarry : this.save.relicCarry;
-    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics });
+    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, loadout });
     if (!retry && assisted) this.assistedCarry = [];
     else if (!retry && this.save.relicCarry?.length) {
       this.save = { ...this.save, relicCarry: [] };
@@ -173,7 +199,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
+    const title = reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
@@ -183,6 +209,8 @@ export class App {
       fusions: sim.weapons.fusions,
       rerollsLeft: sim.rerollsLeft,
       armory: sim.armoryOpen,
+      specialist: sim.loadout.character !== 'ranger',
+      masteryValue: (id) => sim.mastery(id),
       bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
       notice: sim.coinNotice,
       onChoose: (i) => this.choose(i),
@@ -215,8 +243,26 @@ export class App {
       projectileRange: sim.stats.projectileRange + sim.reachBonus + sim.relics.basicReachBonus,
       projectileCount: sim.relics.projectileCount,
     };
+    const loadout = sim.loadout;
+    if (loadout.character === 'lumen') {
+      layers.base.damage *= LUMEN.baseDamage;
+      layers.meta.damage *= LUMEN.baseDamage;
+      layers.final.damage *= sim.starterDamageMultiplier;
+    } else if (loadout.character === 'roan') {
+      for (const stats of [layers.base, layers.meta]) {
+        stats.damage *= SWORD.damage;
+        stats.fireRate /= SWORD.interval;
+        stats.projectileRange = SWORD.range;
+      }
+      layers.final.damage = sim.swordDamage;
+      layers.final.fireRate = 1 / sim.swordInterval;
+      layers.final.projectileRange = sim.swordRange;
+    }
     this.screens.showStatus({
       level: sim.level,
+      loadout,
+      starterRank: loadout.character === 'lumen' ? sim.stacks[loadout.weapon] : undefined,
+      swordAngle: loadout.character === 'roan' ? sim.swordAngle : undefined,
       layers,
       picks: sim.picks,
       fusions: [...sim.weapons.fusions],
@@ -328,7 +374,7 @@ export class App {
         // 주의: 여기서 Space·방향키에 preventDefault 를 하면 Phaser 가 그 입력을 무시한다.
         // 스크롤 방지는 GameScene 의 키 캡처가 맡는다.
         if (e.code === 'Escape') this.pause('esc');
-        if (e.code === 'KeyC' && !e.repeat) this.openStatus('recipes');
+        if (e.code === 'KeyC' && !e.repeat && this.sim?.loadout.character === 'ranger') this.openStatus('recipes');
         if (e.code === 'Tab') {
           e.preventDefault();
           if (!e.repeat) this.openStatus();
@@ -363,6 +409,14 @@ export class App {
         if (e.code === 'Space') e.preventDefault();
         break;
       }
+      case 'characters':
+      case 'lumen-weapon':
+        if (e.code === 'Escape' && !e.repeat) this.screens.cancelCharacterSelection();
+        if (e.code === 'Space' && target instanceof HTMLButtonElement) {
+          e.preventDefault();
+          if (!e.repeat) target.click();
+        }
+        break;
       case 'carry':
         if (e.code === 'Escape' && !e.repeat) this.screens.cancelCarry();
         if (e.code === 'Enter' || e.code === 'Space') {
