@@ -1,4 +1,4 @@
-import { validCarry, type RelicId } from '../config/relics';
+import { OPENING_RELIC_LEVEL, validCarry, type RelicId } from '../config/relics';
 import type { Sfx } from '../audio/sfx';
 import { randomSeed } from '../core/rng';
 import { GameSim } from '../core/sim';
@@ -173,7 +173,7 @@ export class App {
     this.screen = 'levelup';
     const reward = sim.choices[0];
     const title = sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
-      ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${sim.pendingLevel - 1} 유물`)
+      ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
       title,
@@ -208,7 +208,8 @@ export class App {
       xpGain: sim.stats.xpGain * sim.relics.xpMultiplier,
       damageTaken: sim.relics.damageTaken,
       luck: sim.luck,
-      projectileRange: sim.stats.projectileRange + sim.reachBonus,
+      projectileRange: sim.stats.projectileRange + sim.reachBonus + sim.relics.basicReachBonus,
+      projectileCount: sim.relics.projectileCount,
     };
     this.screens.showStatus({
       level: sim.level,

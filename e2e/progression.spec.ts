@@ -38,6 +38,8 @@ test.describe('성장 시스템', () => {
     await page.waitForTimeout(500);
     expect((await snap(page)).elapsed).toBe(t);
     await page.keyboard.press('Digit1');
+    await expect(page.getByRole('heading', { name: '레벨 3 유물' })).toBeVisible();
+    await page.getByTestId('choice-0').click();
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   });
 

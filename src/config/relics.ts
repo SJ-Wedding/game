@@ -1,4 +1,10 @@
 export const RELICS = {
+  awl: { source: 'level', symbol: '↠', name: '철심 탄환', effect: '기본탄 한 발이 일반 적을 한 마리 더 관통합니다. 후반 관통과 중첩됩니다.' },
+  anvil: { source: 'level', symbol: '▲', name: '무쇠 공이', effect: '기본 사격 속도 −25%, 기본탄 한 발 피해 +55%.' },
+  catalyst: { source: 'level', symbol: '◈', name: '균열 가속기', effect: '기본탄 피해 −25%. 주기형 특수 무기의 발동 및 연속 타격 간격 −25%.' },
+  scatterSeal: { source: 'level', symbol: '⋰', name: '산탄 인장', effect: '기본 사격마다 탄환 +1발. 기본탄 한 발 피해 −18%.' },
+  bountyKnot: { source: 'level', symbol: '✚', name: '현상금의 매듭', effect: '획득 후 적 12마리를 처치할 때마다 체력 4를 회복합니다.' },
+  hawkLens: { source: 'level', symbol: '⊙', name: '매의 렌즈', effect: '기본탄 사거리와 자동 조준 범위 +120px, 기본탄 속도 +20%.' },
   swarm: { source: 'level', symbol: '⋇', name: '군집의 북', effect: '일반 몬스터 생성 빈도와 동시 등장 한도 +30%. 경험치 획득량 +25%.' },
   bloodPrice: { source: 'level', symbol: '◆', name: '피의 계약서', effect: '받는 피해 +25%. 경험치 획득량 +35%.' },
   elitePact: { source: 'elite', symbol: '♜', name: '쌍둥이 수호자의 인장', effect: '이후 균열 수호자 등장마다 한 마리가 더 등장합니다. 경험치 획득량 +30%.' },
@@ -21,7 +27,9 @@ export const RELICS = {
 } as const;
 
 export type RelicId = keyof typeof RELICS;
-export type RelicSource = (typeof RELICS)[RelicId]['source'];
+export type RelicSource = (typeof RELICS)[RelicId]['source'] | 'opening';
+export const OPENING_RELIC_LEVEL = 3;
+export const OPENING_RELICS = ['awl', 'anvil', 'catalyst', 'scatterSeal', 'bountyKnot', 'hawkLens'] as const satisfies readonly RelicId[];
 export const RELIC_IDS = Object.keys(RELICS) as RelicId[];
 export const CARRY_LIMIT = 3;
 

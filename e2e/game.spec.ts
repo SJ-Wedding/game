@@ -61,6 +61,10 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.getByTestId('choice-0')).toBeVisible();
     const choice = (await snap(page)).choices![0];
     await page.getByTestId('choice-0').click();
+    await expect(page.getByRole('heading', { name: '레벨 3 유물' })).toBeVisible();
+    await expect(page.locator('.relic-card')).toHaveCount(3);
+    await page.getByTestId('choice-0').click();
+    await expect(page.getByTestId('hud-relics').locator('[data-relic]')).toHaveCount(1);
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
     expect((await snap(page)).stacks![choice]).toBeGreaterThanOrEqual(1);
   });

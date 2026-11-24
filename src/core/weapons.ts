@@ -250,7 +250,7 @@ export class WeaponSystem {
         if ((this.orbitHits.get(target) ?? 0) > elapsed
           || dist(blade.x, blade.y, target.x, target.y) >= target.r + 13) continue;
         this.damage('orbit', target, 0.8);
-        if (!target.dead) this.orbitHits.set(target, elapsed + 0.42);
+        if (!target.dead) this.orbitHits.set(target, elapsed + 0.42 * this.sim.relics.periodicHitMultiplier);
       }
     }
   }
@@ -306,7 +306,7 @@ export class WeaponSystem {
         if (finished || d.age < d.next) break;
         const target = this.nearest(d, d.r);
         if (!target) break;
-        d.next = d.age + 0.48;
+        d.next = d.age + 0.48 * this.sim.relics.periodicHitMultiplier;
         this.trace(d.kind, [d, target], 0, 0.16);
         if ('id' in target) target.slowUntil = this.sim.elapsed + 0.9;
         this.damage(d.kind, target, 0.86);
@@ -315,7 +315,7 @@ export class WeaponSystem {
       case 'flame':
         if (!finished && this.sim.relics.has('laces')) this.trackFlame(d, dt);
         if (!finished && d.age >= d.next) {
-          d.next = d.age + 0.45;
+          d.next = d.age + 0.45 * this.sim.relics.periodicHitMultiplier;
           for (const target of this.targets()) {
             if (dist(d.x, d.y, target.x, target.y) < d.r + target.r) this.damage(d.kind, target, 0.34);
           }

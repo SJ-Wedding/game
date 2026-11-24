@@ -1,27 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { RELICS, validCarry } from '../src/config/relics';
+import { OPENING_RELICS, RELICS, validCarry } from '../src/config/relics';
 import { IDLE_INPUT } from '../src/core/types';
 import { parseSave, defaultSave } from '../src/storage/save';
 import { makeSim, runUntil } from './helpers';
 
 describe('유물 보상 및 계승', () => {
-  it('누적 경험치로 5·10레벨을 넘겨도 각각 일반 강화와 유물 보상을 하나씩 받는다', () => {
+  it('누적 경험치로 3·5·10레벨을 넘겨도 각각 유물 보상을 받는다', () => {
     const sim = makeSim();
     while (sim.level < 10) sim.gainXp(sim.xpNeeded);
     sim.step(IDLE_INPUT);
     let upgrades = 0;
-    let rewards = 0;
+    const rewards: string[] = [];
     while (sim.phase === 'levelup') {
       const choice = sim.choices[0];
       if (choice.kind === 'relic') {
-        expect(choice.source).toBe('level');
+        if (choice.source === 'opening') expect(OPENING_RELICS).toContain(choice.id);
         expect(sim.relics.has(choice.id)).toBe(false);
-        rewards++;
+        rewards.push(choice.source);
       } else upgrades++;
       expect(sim.choose(0)).toBe(true);
     }
     expect(upgrades).toBe(9);
-    expect(rewards).toBe(2);
+    expect(rewards).toEqual(['opening', 'level', 'level']);
   });
 
   it('중간 보스 보상은 전투를 멈추고 중복 없는 별도 후보를 보여준다', () => {
@@ -236,4 +236,56 @@ it('승리 후 미선택 유물은 선택 가능 목록 전체를 저장한다',
   const data = parseSave(JSON.stringify({ ...defaultSave(), pendingRelicDraft: [...draft, 'bogus', 'oath'] })).data;
   expect(data.pendingRelicDraft).toEqual(draft);
   expect(data.relicCarry).toBeUndefined();
+});
+
+describe('초반 전투 유물', () => {
+  it('철심 탄환은 시작부터 앞뒤 적 둘을 같은 기본탄으로 맞힌다', () => {
+    const sim = makeSim({ carryRelics: ['awl'] });
+    const enemies = [55, 100, 145].map((offset) => {
+      const e = sim.spawnEnemy('chaser', sim.player.x + offset, sim.player.y);
+      e.speed = 0;
+      e.hp = e.maxHp = 100;
+      return e;
+    });
+    sim.step(IDLE_INPUT);
+    expect(sim.playerShots[0].pierceLeft).toBe(1);
+    sim.player.fireCd = 999;
+    runUntil(sim, 0.3);
+    expect(enemies.map((e) => e.maxHp - e.hp)).toEqual([sim.stats.damage, sim.stats.damage, 0]);
+  });
+
+  it('무쇠 공이와 산탄 인장의 피해 보너스는 기본탄에만 적용된다', () => {
+    const sim = makeSim({ carryRelics: ['anvil', 'scatterSeal'], presetUpgrades: { chain: 1 } });
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 150, sim.player.y);
+    enemy.hp = enemy.maxHp = 1000;
+    sim.step(IDLE_INPUT);
+    expect(sim.playerShots).toHaveLength(2);
+    expect(sim.playerShots[0].damage).toBeCloseTo(sim.stats.damage * 1.55 * 0.82);
+    expect(sim.relics.fireRate).toBeCloseTo(sim.stats.fireRate * 0.75);
+    expect(enemy.maxHp - enemy.hp).toBeCloseTo(sim.stats.damage * 1.85);
+  });
+
+  it('균열 가속기는 지뢰 설치 주기를 앞당기며 일반 회복량은 줄이지 않는다', () => {
+    const sim = makeSim({ carryRelics: ['catalyst'], presetUpgrades: { mine: 1 } });
+    sim.player.hp = 30;
+    sim.relics.heal(4);
+    expect(sim.player.hp).toBe(34);
+    expect(sim.relics.shotDamage()).toBeCloseTo(sim.stats.damage * 0.75);
+    runUntil(sim, 2);
+    expect(sim.weapons.devices.filter((d) => d.kind === 'mine')).toHaveLength(2);
+  });
+
+  it('현상금의 매듭은 보유 이후 처치로 회복하고 매의 렌즈는 먼 적을 조준한다', () => {
+    const sim = makeSim({ carryRelics: ['bountyKnot', 'hawkLens'] });
+    sim.player.hp = 30;
+    for (let i = 0; i < 12; i++) {
+      const e = sim.spawnEnemy('chaser', sim.player.x + 250, sim.player.y);
+      sim.damageEnemy(e, e.hp);
+    }
+    expect(sim.player.hp).toBe(34);
+    const distant = sim.spawnEnemy('chaser', sim.player.x + 630, sim.player.y);
+    sim.step(IDLE_INPUT);
+    expect(sim.target).toBe(distant);
+    expect(sim.playerShots[0].vx).toBeCloseTo(sim.stats.projectileSpeed * 1.2);
+  });
 });

@@ -1,11 +1,12 @@
-import { RELICS, RELIC_IDS, type RelicId, type RelicSource } from '../config/relics';
+import { OPENING_RELICS, RELICS, RELIC_IDS, type RelicId, type RelicSource } from '../config/relics';
 import { dist } from './math';
 import type { Rng } from './rng';
 import type { GameSim } from './sim';
 import type { Boss, Enemy, UpgradeChoice } from './types';
 
 export function rollRelics(source: RelicSource, rng: Rng, owned: ReadonlySet<RelicId>): UpgradeChoice[] {
-  const pool = RELIC_IDS.filter((id) => RELICS[id].source === source && !owned.has(id));
+  const offered: readonly RelicId[] = source === 'opening' ? OPENING_RELICS : RELIC_IDS.filter((id) => RELICS[id].source === source);
+  const pool = offered.filter((id) => !owned.has(id));
   const choices: UpgradeChoice[] = [];
   while (pool.length && choices.length < 3) {
     const id = pool.splice(rng.int(pool.length), 1)[0];
@@ -17,6 +18,7 @@ export function rollRelics(source: RelicSource, rng: Rng, owned: ReadonlySet<Rel
 export class RelicEffects {
   readonly owned = new Set<RelicId>();
   private oathKills = 0;
+  private bountyKills = 0;
   private flintUntil: number | null = null;
   private flintBonus = 0;
   private guardUntil = -Infinity;
@@ -64,7 +66,25 @@ export class RelicEffects {
   }
 
   get fireRate(): number {
-    return this.sim.stats.fireRate * (this.has('oath') ? 0.85 : 1);
+    return this.sim.stats.fireRate * (this.has('oath') ? 0.85 : 1) * (this.has('anvil') ? 0.75 : 1);
+  }
+
+  get projectileCount(): number {
+    return this.sim.stats.projectileCount + Number(this.has('scatterSeal'));
+  }
+
+  get basicReachBonus(): number {
+    return this.has('hawkLens') ? 120 : 0;
+  }
+
+  get projectileSpeed(): number {
+    return this.sim.stats.projectileSpeed * (this.has('hawkLens') ? 1.2 : 1);
+  }
+
+  onEnemyKilled(): void {
+    if (!this.has('bountyKnot') || this.sim.player.hp <= 0) return;
+    this.bountyKills++;
+    if (this.bountyKills % 12 === 0) this.heal(4);
   }
 
   get dodgeCooldown(): number {
@@ -72,12 +92,20 @@ export class RelicEffects {
   }
 
   get cooldownMultiplier(): number {
-    return this.has('heart') && this.sim.player.hp < this.maxHp * 0.3 ? 0.75 : 1;
+    return (this.heartActive ? 0.75 : 1) * this.periodicHitMultiplier;
+  }
+
+  get periodicHitMultiplier(): number {
+    return this.has('catalyst') ? 0.75 : 1;
+  }
+
+  private get heartActive(): boolean {
+    return this.has('heart') && this.sim.player.hp < this.maxHp * 0.3;
   }
 
   heal(amount: number): void {
     const p = this.sim.player;
-    p.hp = Math.min(this.maxHp, p.hp + amount * (this.cooldownMultiplier < 1 ? 0.5 : 1));
+    p.hp = Math.min(this.maxHp, p.hp + amount * (this.heartActive ? 0.5 : 1));
   }
 
   update(): void {
@@ -111,6 +139,9 @@ export class RelicEffects {
       this.scarCharges--;
       multiplier *= 1.3;
     }
+    if (this.has('anvil')) multiplier *= 1.55;
+    if (this.has('catalyst')) multiplier *= 0.75;
+    if (this.has('scatterSeal')) multiplier *= 0.82;
     return this.sim.stats.damage * multiplier;
   }
 

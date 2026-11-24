@@ -1,5 +1,5 @@
 import { FUSION_IDS, WEAPON_FUSIONS, WEAPON_MAX_RANK } from '../config/weapons';
-import { validCarry, type RelicId, type RelicSource } from '../config/relics';
+import { OPENING_RELIC_LEVEL, validCarry, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
@@ -277,7 +277,7 @@ export class GameSim {
     // 조준: 자동 전투면 가장 가까운 적, 아니면 마우스 위치
     let fire = input.fire;
     if (AUTO_COMBAT.enabled) {
-      this.target = this.findTarget(AUTO_COMBAT.range + this.reachBonus);
+      this.target = this.findTarget(AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus);
       fire = this.target !== null;
       if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
       else if (len > 0.01) p.aim = Math.atan2(my, mx);
@@ -361,9 +361,11 @@ export class GameSim {
   private firePlayer(): void {
     const p = this.player;
     const s = this.stats;
-    const n = Math.max(1, s.projectileCount);
+    const n = Math.max(1, this.relics.projectileCount);
     const spread = (s.spreadDeg * Math.PI) / 180;
-    const life = (s.projectileRange + this.reachBonus) / s.projectileSpeed;
+    const speed = this.relics.projectileSpeed;
+    const life = (s.projectileRange + this.reachBonus + this.relics.basicReachBonus) / speed;
+    const pierceLeft = (this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl'));
     const damage = this.relics.shotDamage();
     for (let i = 0; i < n; i++) {
       const a = p.aim + (i - (n - 1) / 2) * spread;
@@ -372,13 +374,13 @@ export class GameSim {
       this.playerShots.push({
         x: p.x + c * (p.r + 4),
         y: p.y + si * (p.r + 4),
-        vx: c * s.projectileSpeed,
-        vy: si * s.projectileSpeed,
+        vx: c * speed,
+        vy: si * speed,
         r: s.projectileRadius,
         damage,
         life,
         source: 'player',
-        ...(this.elapsed >= COMBAT_REACH.pierceAt ? { pierceLeft: 2, hitIds: new Set<number>() } : {}),
+        ...(pierceLeft ? { pierceLeft, hitIds: new Set<number>() } : {}),
       });
     }
     this.weapons.onShot();
@@ -596,6 +598,7 @@ export class GameSim {
     if (e.hp <= 0) {
       e.dead = true;
       this.kills++;
+      this.relics.onEnemyKilled();
       if (e.kind === 'elite') this.pendingRewards.push('elite', 'armory');
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
@@ -735,7 +738,7 @@ export class GameSim {
     if (c.kind === 'relic') {
       this.relics.acquire(c.id);
     } else {
-      const rewardRelic = !this.armoryOpen && !this.startPickOpen && this.pendingLevel % 5 === 0;
+      const rewardLevel = !this.armoryOpen && !this.startPickOpen ? this.pendingLevel : 0;
       if (c.kind === 'fusion') {
         this.weapons.fusions.add(c.id);
         this.pickOrder.push(c.id);
@@ -753,7 +756,8 @@ export class GameSim {
         this.pendingLevels--;
         this.startPickOpen = false;
       }
-      if (rewardRelic) this.pendingRewards.push('level');
+      if (rewardLevel === OPENING_RELIC_LEVEL) this.pendingRewards.push('opening');
+      else if (rewardLevel > 0 && rewardLevel % 5 === 0) this.pendingRewards.push('level');
     }
     this.openLevelUp();
     this.acc = 0;
