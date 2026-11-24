@@ -24,6 +24,60 @@ export const RELICS = {
   fuse: { source: 'elite', symbol: '⁕', weapon: 'mine', name: '두 번째 도화선', effect: '균열 지뢰가 터지면 지뢰 폭발 범위만큼의 장판이 2초간 남아 피해를 줍니다. 장판의 초당 피해는 지뢰 폭발 피해의 10%.' },
   laces: { source: 'elite', symbol: '≈', weapon: 'flame', name: '용광로의 신발끈', effect: '불길 위의 적은 20% 느려집니다. 같은 불길에 1초 이상 머문 적은 2초간 화상 피해를 받습니다. 화상 피해는 불길 피해의 20%.' },
   nail: { source: 'elite', symbol: '†', weapon: 'barrier', name: '문지기의 못', effect: '균열 장벽에 닿은 일반 적은 0.8초간 이동이 멈춥니다. 보스와 돌진 중인 적에게는 추가 피해를 줍니다.' },
+  // ── 문서 1장: 공격 및 연쇄 처치 ──
+  whetstone: { source: 'level', symbol: '⚒', name: '피에 굶주린 숫돌', effect: '적 처치 시 3초간 기본 사격 속도 +10%. 최대 5중첩.' },
+  chainOrb: { source: 'level', symbol: '☄', name: '연쇄 번개 구슬', effect: '기본탄이 명중할 때 15% 확률로 주변 적 최대 3마리에게 공격력의 40% 전격 피해를 튕깁니다.' },
+  slayerSeal: { source: 'level', symbol: '☠', name: '학살자의 인장', effect: '2초 이내에 적을 5마리 이상 처치하면 다음 기본 사격의 피해 +100%.' },
+  ruptureCog: { source: 'level', symbol: '✺', name: '파열의 톱니바퀴', effect: '처치한 일반 적이 폭발하며 반경 90px 안의 적에게 처치한 적 최대 체력의 15% 피해를 줍니다.' },
+  twinBlade: { source: 'level', symbol: '⫽', name: '쌍둥이 그림자 검', effect: '기본 사격 시 20% 확률로 같은 방향으로 잔상 탄 1발을 추가로 쏩니다.' },
+  giantHunter: { source: 'level', symbol: '➶', name: '거인 사냥꾼의 화살촉', effect: '보스와 균열 수호자에게 주는 모든 피해 +30%.' },
+  splitHead: { source: 'level', symbol: '⋔', name: '갈라지는 화살촉', effect: '적을 처치하면 그 자리에서 작은 탄이 현재 탄 수 ×2만큼 좌우로 갈라집니다. 작은 탄 피해는 기본탄의 10%. 기본·특수 공격 처치 모두 적용.' },
+  focusRing: { source: 'level', symbol: '◎', name: '집중의 고리', effect: '기본탄을 맞힐 때마다 기본탄 피해 +1%, 최대 +30%. 피해를 받으면 초기화됩니다.' },
+  executioner: { source: 'level', symbol: '⚖', name: '처형인의 저울', effect: '체력이 10% 이하인 일반 적은 기본탄 한 발에 처치합니다. 기본 사격 속도 −30%.' },
+  sniperGlove: { source: 'level', symbol: '⌖', name: '저격수의 장갑', effect: '320px보다 먼 적에게 기본탄 피해 +25%, 150px 안의 적에게는 −20%.' },
+  pulseBarrel: { source: 'level', symbol: '♒', name: '맥동 총열', effect: '10초마다 3초간 기본 사격 속도 +60%. 그 외 시간에는 −10%.' },
+  fifthBell: { source: 'level', symbol: '❺', name: '다섯째 종', effect: '기본 사격 다섯 번째마다 큰 탄을 쏩니다(피해 3배, 관통 +2). 기본 사격 속도 −15%.' },
+  // ── 문서 2장: 생존, 흡수 및 방어 ──
+  chalice: { source: 'level', symbol: '♆', name: '흡혈귀의 깨진 성배', effect: '둔화·감염·화상 상태인 적에게 피해를 줄 때마다 최대 체력의 1.5%를 회복합니다. 재사용 0.5초.' },
+  thornMail: { source: 'level', symbol: '❈', name: '가시 돋친 철갑', effect: '피격 시 받은 피해의 150%를 반경 150px 안의 모든 적에게 반사합니다. 피격 후 무적 시간 +0.4초.' },
+  angelFeather: { source: 'level', symbol: '☥', name: '수호천사의 깃털', effect: '체력이 0이 되면 판마다 한 번 최대 체력의 50%로 부활하고 반경 200px 안의 적을 밀쳐냅니다. 상점의 부활과 별도입니다.' },
+  steelHeart: { source: 'level', symbol: '❤', name: '강철 심장', effect: '최대 체력 +35%. 피격 범위 +10%, 이동 속도 −20%.' },
+  battleJoy: { source: 'level', symbol: '☼', name: '전투의 환희', effect: '반경 150px 안에 적이 4마리 이상 있으면 받는 피해 −25%.' },
+  calmShield: { source: 'level', symbol: '⛉', name: '고요한 방패', effect: '8초 동안 피해를 받지 않으면 다음 피격 1회를 막는 보호막이 생깁니다. 최대 체력 −10%.' },
+  mossCharm: { source: 'level', symbol: '☘', name: '이끼 낀 부적', effect: '멈춰 있는 동안 초당 체력 2를 회복합니다.' },
+  herbalist: { source: 'level', symbol: '⚗', name: '약초꾼의 병', effect: '회복 물약 회복량 2배. 초당 체력 회복 효과 −50%.' },
+  lightningRod: { source: 'level', symbol: 'ϟ', name: '피뢰침', effect: '적 탄에 받는 피해 −30%. 적과 부딪혀 받는 피해 +20%.' },
+  // ── 문서 3장: 기동성 및 특수 무기 순환 ──
+  windBoots: { source: 'level', symbol: '⇶', name: '바람의 장화', effect: '회피 최대 충전 +1회. 회피 직후 1.5초간 이동 속도 +25%.' },
+  hourglass: { source: 'level', symbol: '⧗', name: '시간 왜곡의 모래시계', effect: '적을 처치할 때마다 모든 특수 무기의 남은 재사용 대기시간 −0.1초. 균열 수호자를 처치하면 −2초.' },
+  cloak: { source: 'level', symbol: '♤', name: '잔상 망토', effect: '회피로 적을 통과하면 1.5초간 적 탄에 맞지 않으며, 그동안 첫 기본 사격의 피해 +100%.' },
+  stormCore: { source: 'level', symbol: '⊛', name: '폭풍의 핵', effect: '1,500px 이동할 때마다 전하가 차고, 다음 기본 사격이 반경 160px 충격파(공격력의 200%)를 방출합니다.' },
+  lightHands: { source: 'level', symbol: '✋', name: '가벼운 손놀림', effect: '기본 사격 속도 +15%, 특수 무기 재사용 대기시간 −10%.' },
+  grazeFeather: { source: 'level', symbol: '〻', name: '스침의 깃', effect: '회피로 적 탄을 통과하면 회피 재사용 대기시간 −1초. 초당 최대 1회.' },
+  // ── 문서 4장: 리스크-리턴 및 유틸리티 ──
+  berserker: { source: 'level', symbol: '◐', name: '광전사의 피 묻은 안대', effect: '잃은 체력 1%당 모든 피해 +0.8%.' },
+  greedDice: { source: 'level', symbol: '⚄', name: '탐욕의 황금 주사위', effect: '판 종료 시 받는 토큰 +40%. 적에게 받는 피해 +20%. 다음 판으로 가져갈 수 없습니다.', carry: false },
+  glassCannon: { source: 'level', symbol: '◇', name: '유리 대포', effect: '모든 공격 피해 +80%. 최대 체력이 1로 고정됩니다.' },
+  unstableCore: { source: 'level', symbol: '⚛', name: '불안정한 마력 코어', effect: '특수 무기 발동 시 25% 확률로 재사용 대기시간이 즉시 초기화되고, 10% 확률로 최대 체력의 5% 피해를 입습니다(이 피해로 쓰러지지 않음).' },
+  collectorPack: { source: 'level', symbol: '⛁', name: '수집가의 배낭', effect: '보유한 유물 1개당 모든 피해 +4%, 최대 체력 +10.' },
+  gamblerCoin: { source: 'level', symbol: '⊜', name: '도박꾼의 동전', effect: '균열 수호자를 처치하면 동전을 던질지 고릅니다. 앞면이면 유물 선택 1회 추가, 뒷면이면 현재 체력 15%와 이번 유물 선택을 잃습니다.' },
+  magnetCore: { source: 'level', symbol: '⋒', name: '자석 핵', effect: '경험치 흡수 범위 +60%, 자석이 떨어질 확률 2배. 자석을 주우면 5초간 공격력·기본 사격 속도·이동 속도 +50%.' },
+  fortuneCard: { source: 'level', symbol: '✪', name: '점술가의 카드', effect: '레벨업 새로고침 +2회. 레벨업 후보가 3개에서 2개로 줄어듭니다. 다음 판으로 가져갈 수 없습니다.', carry: false },
+  clover: { source: 'level', symbol: '♣', name: '네잎 클로버 브로치', effect: '행운 +4. 최대 체력 −10. 다음 판으로 가져갈 수 없습니다.', carry: false },
+  rottingGem: { source: 'level', symbol: '◍', name: '썩어 가는 보석', effect: '경험치 획득량 +100%. 경험치 보석이 바닥에 떨어진 지 10초가 지나면 사라집니다.' },
+  namelessContract: { source: 'level', symbol: '✎', name: '이름 없는 계약', effect: '레벨업 보상에 일반 등급이 나오지 않습니다. 레벨업에 필요한 경험치 +40%.' },
+  hastyInvite: { source: 'level', symbol: '✉', name: '서두른 초대장', effect: '보스가 지금 바로 등장합니다. 보스를 처치하면 받는 토큰 +50%. 다음 판으로 가져갈 수 없습니다.', carry: false },
+  // ── 문서 5장: 드랍 아이템 및 엘리트 연동 ──
+  alchemistFlask: { source: 'level', symbol: '⚱', name: '연금술사의 병', effect: '체력이 가득 찬 상태에서 회복 물약을 주우면 8초간 모든 피해 +30%.' },
+  powderBox: { source: 'level', symbol: '✠', name: '화약 상자', effect: '균열 폭탄이 떨어질 확률 3배. 폭탄이 보스에게도 최대 체력의 3% 피해를 줍니다.' },
+  migrantFeather: { source: 'level', symbol: '➹', name: '철새의 깃털', effect: '아이템을 주울 때마다 5초간 이동 속도 +25%.' },
+  riftCrystal: { source: 'level', symbol: '❖', name: '균열 결정', effect: '균열 수호자를 처치하면 다음 레벨업 후보 중 1장이 희귀 등급 이상으로 나옵니다.' },
+  // ── 문서 6장: 특수 무기 전용 ──
+  returnRing: { source: 'elite', symbol: '↺', weapon: 'axe', name: '귀환의 고리', effect: '부메랑 도끼가 돌아올 때 타격 범위가 +50%에서 +100%까지 점점 커집니다. 투척 간격 +20%.' },
+  winterLantern: { source: 'elite', symbol: '❄', weapon: 'turret', name: '겨울 등불', effect: '서리 포탑 지속시간 −30%. 포탑을 한 번에 2대 설치합니다.' },
+  constellation: { source: 'elite', symbol: '✧', weapon: 'spear', name: '별자리 창끝', effect: '관통 창이 적 3마리 이상을 꿰뚫으면 끝 지점에서 창 2개가 좌우로 발사됩니다(피해 50%). 조준 시간 +0.3초.' },
+  secondBell: { source: 'elite', symbol: '♫', weapon: 'mark', name: '두 번째 종소리', effect: '낙뢰 표식이 기본탄 3회 대신 2회 명중으로 발동합니다. 낙뢰 범위 −25%.' },
+  plagueJar: { source: 'elite', symbol: '⚘', weapon: 'infection', name: '역병 항아리', effect: '감염이 번질 때 감염되는 적 +2마리. 감염 피해 −20%.' },
 } as const;
 
 export type RelicId = keyof typeof RELICS;
@@ -43,6 +97,12 @@ export function validRelicIds(value: unknown): RelicId[] {
   return [...new Set(value.filter((id): id is RelicId => typeof id === 'string' && Object.hasOwn(RELICS, id)))];
 }
 
+/** 판 밖 성장에 영향을 주는 유물은 다음 판으로 가져갈 수 없다 (문서 7장). */
+export function carryable(id: RelicId): boolean {
+  const relic = RELICS[id];
+  return !('carry' in relic) || relic.carry !== false;
+}
+
 export function validCarry(value: unknown): RelicId[] {
-  return validRelicIds(value).slice(0, CARRY_LIMIT);
+  return validRelicIds(value).filter(carryable).slice(0, CARRY_LIMIT);
 }

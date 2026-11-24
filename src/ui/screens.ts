@@ -197,14 +197,16 @@ export class Screens {
     rerollsLeft: number;
     armory: boolean;
     bonusChoices: number;
+    notice?: string | null;
     onChoose: (i: number) => void;
     onReroll: () => void;
   }): void {
-    const reward = opts.choices[0]?.kind === 'relic';
+    const coin = opts.choices[0]?.kind === 'coin';
+    const reward = opts.choices[0]?.kind === 'relic' || coin;
     const cards = opts.choices.map((c, i) => {
       const grade = c.kind === 'upgrade' ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
-        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
+        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : c.kind === 'coin' ? 'relic-card coin-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
         'data-grade': grade?.id ?? '',
       });
@@ -240,6 +242,14 @@ export class Screens {
           el('strong', { class: 'name', text: relic.name }),
           el('span', { class: 'desc', text: relicDescription(c.id) }),
         );
+      } else if (c.kind === 'coin') {
+        btn.append(
+          el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: c.id === 'flip' ? '⊜' : '✋' }),
+          el('strong', { class: 'name', text: c.id === 'flip' ? '동전 던지기' : '던지지 않기' }),
+          el('span', { class: 'desc', text: c.id === 'flip'
+            ? '50%: 유물 선택 1회 추가 · 50%: 현재 체력 15%와 이번 유물 선택을 잃음'
+            : '그대로 유물 하나를 고릅니다.' }),
+        );
       } else {
         btn.append(el('span', { class: 'cat', text: '회복' }), el('strong', { class: 'name', text: c.name }), el('span', { class: 'desc', text: c.description }));
       }
@@ -254,7 +264,8 @@ export class Screens {
       'levelup',
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
-        el('p', { class: 'muted', text: opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요' : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
+        el('p', { class: 'muted', text: coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요' : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: 'cards' }, cards),
         ...(reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
@@ -411,7 +422,7 @@ export class Screens {
         tokens
           ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
               el('strong', { class: 'token', text: `획득 토큰 ◆ ${tokens.total}` }),
-              el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}) — 타이틀의 강화 상점에서 사용` }),
+              el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}) — 타이틀의 강화 상점에서 사용` }),
             ])
           : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
         this.damageBreakdown(result),
@@ -435,7 +446,7 @@ export class Screens {
     }
     const duration = result.combatTime ?? result.survivalTime;
     const rows = [...sources].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0)).map((source) => {
-      const name = source === 'basic' ? '기본 사격' : source === 'bomb' ? '균열 폭탄'
+      const name = source === 'basic' ? '기본 사격' : source === 'bomb' ? '균열 폭탄' : source === 'relic' ? '유물 효과'
         : source in WEAPON_FUSIONS ? WEAPON_FUSIONS[source as FusionId].name : WEAPONS[source as keyof typeof WEAPONS].name;
       const damage = totals[source] ?? 0;
       return el('tr', { 'data-attack': source }, [

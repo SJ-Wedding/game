@@ -170,7 +170,7 @@ export function updateBoss(sim: GameSim, dt: number): void {
   b.y = clamp(b.y, pad, ARENA_CONFIG.height - pad);
 
   if (b.state !== 'enter' && dist(b.x, b.y, p.x, p.y) < b.r + p.r) {
-    sim.hurtPlayer(contactDamage, contactSource);
+    sim.hurtPlayer(contactDamage, contactSource, 'contact');
   }
 }
 

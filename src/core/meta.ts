@@ -57,16 +57,20 @@ export interface TokenReward {
   kills: number;
   elites: number;
   victory: number;
+  /** 유물로 늘어난 토큰 (탐욕의 황금 주사위, 서두른 초대장) */
+  relics: number;
   total: number;
 }
 
 /** 한 판 결과 → 토큰 */
-export function tokenReward(result: Pick<RunResult, 'survivalTime' | 'killsByKind' | 'outcome'>): TokenReward {
+export function tokenReward(result: Pick<RunResult, 'survivalTime' | 'killsByKind' | 'outcome' | 'tokenMultiplier'>): TokenReward {
   const k = result.killsByKind;
   const normalKills = (k.chaser ?? 0) + (k.charger ?? 0) + (k.spitter ?? 0);
   const survival = Math.floor(result.survivalTime / 60) * TOKEN_REWARDS.perMinute;
   const kills = Math.floor(normalKills / TOKEN_REWARDS.killsPerToken);
   const elites = (k.elite ?? 0) * TOKEN_REWARDS.perElite;
   const victory = result.outcome === 'victory' ? TOKEN_REWARDS.victory : 0;
-  return { survival, kills, elites, victory, total: survival + kills + elites + victory };
+  const base = survival + kills + elites + victory;
+  const relics = Math.round(base * Math.max(1, result.tokenMultiplier ?? 1)) - base;
+  return { survival, kills, elites, victory, relics, total: base + relics };
 }

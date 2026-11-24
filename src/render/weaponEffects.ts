@@ -318,8 +318,9 @@ export function drawPlayerShot(g: Graphics, shot: Projectile): void {
   const dy = speed ? vy / speed : 0;
   const echo = shot.source === 'echo';
   const piercing = shot.pierceLeft !== undefined;
-  const color = echo ? 0x7ff3cc : piercing ? 0xffc071 : PALETTE.player;
-  const core = echo ? 0xb8ffdd : piercing ? 0xfff1c4 : PALETTE.playerShot;
+  const relic = shot.source === 'relic';
+  const color = echo ? 0x7ff3cc : relic ? 0xd9a8ff : piercing ? 0xffc071 : PALETTE.player;
+  const core = echo ? 0xb8ffdd : relic ? 0xf3e2ff : piercing ? 0xfff1c4 : PALETTE.playerShot;
   const trail = echo ? 26 : piercing ? 35 : 17;
   const width = r * (piercing ? 0.95 : 0.71);
   const tailX = x - dx * trail;
