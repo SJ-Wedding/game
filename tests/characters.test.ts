@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { type Loadout } from '../src/config/characters';
+import { SWORD, type Loadout, type SwordFormId } from '../src/config/characters';
 import { UPGRADE_BY_ID, type UpgradeId } from '../src/config/upgrades';
 import { rollRelics } from '../src/core/relics';
 import { Rng } from '../src/core/rng';
 import { GameSim } from '../src/core/sim';
 import { IDLE_INPUT, type Projectile } from '../src/core/types';
+import { upgradeAvailable } from '../src/core/upgrades';
 
 const roan: Loadout = { character: 'roan' };
 const chain: Loadout = { character: 'lumen', weapon: 'chain' };
@@ -73,7 +74,8 @@ describe('캐릭터와 중첩 강화', () => {
       expect(sim.choose(0)).toBe(true);
     }
     expect(sim.stacks[id]).toBe(4);
-    expect(sim.swordRange).toBeCloseTo(baseRange * (1 + 0.12 * (1 + 1 + 1.5 + 3)));
+    expect(sim.mastery(id)).toBe(6.5);
+    expect(sim.swordRange).toBe(Math.min(SWORD.maxRange, baseRange * (1 + 0.12 * 6.5)));
     expect(sim.picks.map((pick) => pick.grade)).toEqual(['common', 'common', 'rare', 'legendary']);
   });
 
@@ -126,6 +128,73 @@ describe('캐릭터와 중첩 강화', () => {
     expect(behind.hp).toBeLessThan(1000);
     expect(sim.enemyShots).not.toContain(rearShot);
     expect(sim.playerShots).toHaveLength(0);
+  });
+
+  it('로안은 6·12·18레벨에 남은 형태만 고르고 획득한 순서대로 계속 공격한다', () => {
+    const sim = new GameSim({ seed: 21, god: true, loadout: roan });
+    makeTarget(sim, 65);
+    const used: (SwordFormId | undefined)[] = [];
+    const swing = () => {
+      sim.player.fireCd = 0;
+      sim.step(IDLE_INPUT);
+      used.push(sim.swordSweep?.form);
+    };
+    const learn = (level: number, form: SwordFormId, available: SwordFormId[]) => {
+      sim.player.fireCd = Infinity;
+      while (sim.level < level) {
+        sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
+        sim.step(IDLE_INPUT);
+        while (sim.level < level && sim.phase === 'levelup') expect(sim.choose(0)).toBe(true);
+      }
+      expect(sim.pendingLevel).toBe(level);
+      expect(sim.choices).toEqual(available.map((id) => ({ kind: 'swordForm', id })));
+      expect(sim.reroll()).toBe(false);
+      expect(sim.choose(available.indexOf(form))).toBe(true);
+    };
+
+    swing();
+    learn(6, 'swordCrush', ['swordCrescent', 'swordCrush', 'swordGuard']);
+    swing();
+    learn(12, 'swordGuard', ['swordCrescent', 'swordGuard']);
+    swing();
+    learn(18, 'swordCrescent', ['swordCrescent']);
+    swing();
+    sim.player.fireCd = Infinity;
+    for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
+    expect(sim.swordSweep?.followup).toBe(true);
+    swing();
+    swing();
+    expect(sim.swordForms).toEqual(['swordCrush', 'swordGuard', 'swordCrescent']);
+    expect(used).toEqual([undefined, 'swordCrush', 'swordGuard', 'swordCrescent', 'swordCrush', 'swordGuard']);
+    expect(sim.nextSwordForm).toBe('swordCrescent');
+    expect(sim.playerShots).toHaveLength(0);
+  });
+
+  it('반월 연격의 두 번째 베기는 이동한 로안의 위치에서만 적중하며 순서를 넘기지 않는다', () => {
+    const sim = new GameSim({ seed: 22, god: true, loadout: roan, presetLevel: 6 });
+    const first = makeTarget(sim, 72);
+    sim.step(IDLE_INPUT);
+    const hp = first.hp;
+    expect(hp).toBeLessThan(first.maxHp);
+    sim.player.x += 280;
+    const second = makeTarget(sim, 76);
+    for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
+    expect(sim.swordSweep?.x).toBe(sim.player.x);
+    expect(sim.swordSweep?.followup).toBe(true);
+    expect(first.hp).toBe(hp);
+    expect(second.maxHp - second.hp).toBeCloseTo(sim.swordDamage * 0.60);
+    expect(sim.swordSwings).toBe(1);
+  });
+
+  it('형태와 근접 거리 상한이 공격을 제한하고 배운 형태만 전용 강화를 고를 수 있다', () => {
+    const sim = new GameSim({ seed: 23, god: true, loadout: roan, presetLevel: 6, presetUpgrades: { swordRange: 30 } });
+    expect(sim.swordRange).toBe(SWORD.maxRange);
+    const far = makeTarget(sim, SWORD.maxRange + 35);
+    sim.step(IDLE_INPUT);
+    expect(far.hp).toBe(far.maxHp);
+    expect(sim.swordSwings).toBe(0);
+    expect(upgradeAvailable(roan, UPGRADE_BY_ID.swordCrescentEdge, sim.level, sim.swordForms)).toBe(true);
+    expect(upgradeAvailable(roan, UPGRADE_BY_ID.swordGuardWidth, sim.level, sim.swordForms)).toBe(false);
   });
 
   it('캐릭터와 무기에 맞는 유물만 등장하고 이전 판에서 계승된다', () => {

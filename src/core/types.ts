@@ -1,4 +1,4 @@
-import type { Loadout } from '../config/characters';
+import type { Loadout, SwordFormId } from '../config/characters';
 import type { FusionId, WeaponId } from '../config/weapons';
 import type { RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
@@ -194,6 +194,7 @@ export interface SimEvent {
 export type UpgradeChoice =
   | { kind: 'upgrade'; def: UpgradeDef; grade: GradeId; nextStack: number }
   | { kind: 'fusion'; id: FusionId }
+  | { kind: 'swordForm'; id: SwordFormId }
   | { kind: 'relic'; id: RelicId; source: RelicSource }
   | { kind: 'coin'; id: 'flip' | 'pass' }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };

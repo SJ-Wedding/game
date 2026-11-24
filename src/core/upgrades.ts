@@ -1,4 +1,4 @@
-import { CHARACTER_UPGRADES, characterUpgradeValue, type Loadout } from '../config/characters';
+import { CHARACTER_UPGRADES, characterUpgradeValue, type Loadout, type SwordFormId } from '../config/characters';
 import { GRADE_CONFIG, GRADES, type GradeId } from '../config/grades';
 import type { StatKey } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
@@ -107,25 +107,27 @@ export function rollRunChoices(
   return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }
 
-function masteryAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
+function masteryAvailable(loadout: Loadout, def: UpgradeDef, level: number, forms: readonly SwordFormId[]): boolean {
   if (!def.mastery || loadout.character === 'ranger') return false;
   const mastery = CHARACTER_UPGRADES[def.mastery];
   return mastery.path === (loadout.character === 'lumen' ? loadout.weapon : 'roan')
-    && (!('minLevel' in mastery) || level >= mastery.minLevel);
+    && (!('minLevel' in mastery) || level >= mastery.minLevel)
+    && (!('form' in mastery) || forms.includes(mastery.form));
 }
 
-export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
-  if (def.mastery) return masteryAvailable(loadout, def, level);
+export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: number, forms: readonly SwordFormId[] = []): boolean {
+  if (def.mastery) return masteryAvailable(loadout, def, level, forms);
   if (loadout.character === 'ranger') return true;
   if (def.weapon) return loadout.character === 'lumen' && loadout.weapon === def.weapon;
   return def.category !== 'attack';
 }
 
 export function rollMasteryChoices(
-  rng: Rng, stacks: Stacks, loadout: Loadout, level: number, luck: number, exclude: UpgradeId[] = [], armory = false,
+  rng: Rng, stacks: Stacks, loadout: Loadout, level: number, luck: number,
+  { exclude = [], armory = false, forms = [] }: { exclude?: UpgradeId[]; armory?: boolean; forms?: readonly SwordFormId[] } = {},
 ): UpgradeChoice[] {
   const weapon = loadout.character === 'lumen' ? UPGRADE_BY_ID[loadout.weapon] : undefined;
-  const mastery = MASTERY_UPGRADES.filter((def) => masteryAvailable(loadout, def, level));
+  const mastery = MASTERY_UPGRADES.filter((def) => masteryAvailable(loadout, def, level, forms));
   if (weapon?.maxStacks !== undefined && stacks[weapon.id] < weapon.maxStacks) mastery.push(weapon);
   if (armory) return rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount, mastery);
   const dedicated = rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount - 1, mastery);

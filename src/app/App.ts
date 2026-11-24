@@ -199,7 +199,8 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'relic'
+    const title = reward?.kind === 'swordForm' ? `로안 공격 형태 · Lv ${sim.pendingLevel}`
+      : reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
@@ -209,6 +210,7 @@ export class App {
       fusions: sim.weapons.fusions,
       rerollsLeft: sim.rerollsLeft,
       armory: sim.armoryOpen,
+      swordForms: sim.swordForms,
       specialist: sim.loadout.character !== 'ranger',
       masteryValue: (id) => sim.mastery(id),
       bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
@@ -263,6 +265,8 @@ export class App {
       loadout,
       starterRank: loadout.character === 'lumen' ? sim.stacks[loadout.weapon] : undefined,
       swordAngle: loadout.character === 'roan' ? sim.swordAngle : undefined,
+      swordForms: sim.swordForms,
+      nextSwordForm: sim.nextSwordForm,
       echo: sim.stacks.echo > 0 ? { growth: sim.weapons.echoStats, luck: sim.luck } : undefined,
       layers,
       picks: sim.picks,

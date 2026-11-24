@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ARENA_CONFIG, VIEW_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
+import { SWORD, SWORD_FORMS } from '../config/characters';
 import { DROP_CONFIG } from '../config/drops';
 import { ENEMY_CONFIG } from '../config/enemies';
 import { ASSAULT_CONFIG } from '../config/spawns';
@@ -412,7 +413,7 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
-    if (sim.swordSweep) this.drawSwordSweep(sim.swordSweep, t);
+    for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     if (sim.loadout.character !== 'lumen') g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
@@ -443,20 +444,24 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
-    const progress = (now - sweep.at) / 0.27;
+    const progress = (now - sweep.at) / SWORD.sweepDuration;
     if (progress >= 1) return;
     const g = this.weaponEffects;
-    const { x, y, angle, width, range } = sweep;
+    const { x, y, angle, width, range, form, followup } = sweep;
+    const color = followup ? 0xe9fff3 : form ? SWORD_FORMS[form].color : 0xff9676;
     const fade = (1 - progress) ** 1.6;
     const start = angle - width / 2;
     const point = (a: number, r: number) => ({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
     const steps = Math.max(8, Math.ceil(width * 9));
     const edge = Array.from({ length: steps + 1 }, (_, i) => point(start + i * width / steps, range));
-    const inside = edge.map((_, i) => point(start + i * width / steps, range - 18 - 16 * Math.sin(Math.PI * i / steps)));
-    g.fillStyle(0xff9676, fade * 0.45).fillPoints([...edge, ...inside.reverse()], true);
-    g.lineStyle(10, 0xff826b, fade * 0.24).strokePoints(edge);
+    const heavy = form === 'swordCrush';
+    const inside = edge.map((_, i) => point(start + i * width / steps, range - (heavy ? 40 : 18) - 16 * Math.sin(Math.PI * i / steps)));
+    if (form) this.groundEffects.fillStyle(color, fade * (heavy ? 0.21 : 0.10)).fillPoints([{ x, y }, ...edge], true);
+    g.fillStyle(color, fade * 0.45).fillPoints([...edge, ...inside.reverse()], true);
+    g.lineStyle(heavy ? 17 : 10, color, fade * 0.24).strokePoints(edge);
     g.lineStyle(3, 0xfff2d5, fade * 0.98).strokePoints(edge);
-    const tip = point(start + width * Math.min(1, 0.18 + progress * 2), range - 5);
+    const sweepFront = Math.min(1, 0.18 + progress * 2);
+    const tip = point(start + width * (followup ? 1 - sweepFront : sweepFront), range - 5);
     g.lineStyle(4, 0xffffff, fade).lineBetween(tip.x - 4, tip.y - 4, tip.x + 4, tip.y + 4);
     for (const burst of sweep.blocked) {
       const radius = 5 + 16 * progress;
