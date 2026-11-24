@@ -28,6 +28,7 @@ export const WEAPON_TEXTURES = {
   chain, mine, orbit, axe, turret, flame, barrier, spear, mark, echo, gravity, infection,
 } satisfies Record<WeaponId, string>;
 
-export const WEAPON_FRAMES = { mine: 0, orbit: 1, axe: 2, turret: 3, flame: 4, barrier: 5, echo: 6, gravity: 7 } as const;
-export type WeaponSprite = keyof typeof WEAPON_FRAMES;
+export const WEAPON_FRAMES = { mine: 0, gravity: 7 } as const;
+export const WEAPON_SPRITES = { orbit, axe, turret, echo };
+export type WeaponSprite = keyof typeof WEAPON_FRAMES | keyof typeof WEAPON_SPRITES;
 export { weaponEffects };

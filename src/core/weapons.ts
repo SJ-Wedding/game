@@ -19,14 +19,28 @@ interface Device extends Point {
   secondary?: boolean;
   exposures?: Map<Target, number>;
 }
-export interface WeaponEffect {
-  kind: WeaponId;
-  variant?: 'resonance' | 'markCharge';
+interface EffectTiming {
   points: Point[];
   radius: number;
   life: number;
   duration: number;
 }
+
+export interface WeaponEffect extends EffectTiming {
+  kind: WeaponId;
+  variant?: 'markCharge' | 'echoCharge';
+}
+
+export interface ResonanceEffect extends EffectTiming {
+  kind: FusionId;
+  variant: 'resonance';
+  angle: number;
+}
+
+const RESONANCE_DURATION: Record<FusionId, number> = {
+  storm: 0.56, bastion: 0.68, tempest: 0.55, inferno: 0.8, volley: 0.52, eclipse: 0.76,
+};
+const ECHO_DELAY = 0.36;
 
 export class WeaponSystem {
   private qualityPickCount = -1;
@@ -34,7 +48,7 @@ export class WeaponSystem {
   readonly fusions = new Set<FusionId>();
   private readonly fusionHits = new WeakMap<Target, Partial<Record<FusionId, { weapon: WeaponId; at: number }>>>();
   readonly devices: Device[] = [];
-  readonly effects: WeaponEffect[] = [];
+  readonly effects: (WeaponEffect | ResonanceEffect)[] = [];
   readonly blades: Point[] = [];
   private readonly ready = new Map<WeaponId, number>();
   private readonly marks = new Map<Target, number>();
@@ -102,9 +116,15 @@ export class WeaponSystem {
       const hit = recent[id];
       if (hit && now - hit.at <= FUSION_HIT_WINDOW && hit.weapon !== kind) {
         delete recent[id];
-        this.trace(kind, [target], recipe.radius, 0.36, 'resonance');
+        const { x, y } = target;
+        const player = this.sim.player;
+        const angle = x === player.x && y === player.y ? player.aim : Math.atan2(y - player.y, x - player.x);
+        const points = [{ x, y }];
+        const duration = RESONANCE_DURATION[id];
+        this.effects.push({ kind: id, variant: 'resonance', angle, points, radius: recipe.radius, life: duration, duration });
         for (const nearby of this.targets()) {
           if (dist(target.x, target.y, nearby.x, nearby.y) > recipe.radius + nearby.r) continue;
+          if (id === 'storm' && nearby !== target && points.length < 6) points.push({ x: nearby.x, y: nearby.y });
           const damage = this.sim.stats.damage * recipe.damage;
           if ('id' in nearby) this.sim.damageEnemy(nearby, damage, id);
           else this.sim.damageBoss(damage, id);
@@ -201,19 +221,22 @@ export class WeaponSystem {
     if (this.echo && this.echo.at <= now) {
       const { x, y, angle } = this.echo;
       const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
+      const points = [{ x, y }];
       for (const direction of angles) {
         const dx = Math.cos(direction);
         const dy = Math.sin(direction);
-        this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
+        points.push({ x: x + dx * 45, y: y + dy * 45 });
         sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
           damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo' });
       }
+      this.trace('echo', points);
       this.echo = null;
     }
     // 기본탄의 발사 프레임을 기다리지 않아야 잔영의 짧아진 주기가 그대로 적용된다.
     const shot = this.previousShot;
     if (!this.echo && shot && now - shot.at <= 1 / sim.relics.fireRate + 0.2 && this.available('echo', this.rankEffect('echo'))) {
-      this.echo = { ...shot, at: now + 0.36 };
+      this.echo = { ...shot, at: now + ECHO_DELAY };
+      this.trace('echo', [shot, { x: shot.x + Math.cos(shot.angle) * 45, y: shot.y + Math.sin(shot.angle) * 45 }], 0, ECHO_DELAY, 'echoCharge');
     }
     if (sim.stacks.orbit) this.orbit();
     if (sim.stacks.infection) this.spread(now);
@@ -311,7 +334,8 @@ export class WeaponSystem {
         const target = this.nearest(d, d.r);
         if (!target) break;
         d.next = d.age + 0.48 * this.sim.relics.periodicHitMultiplier;
-        this.trace(d.kind, [d, target], 0, 0.16);
+        d.angle = Math.atan2(target.y - d.y, target.x - d.x);
+        this.trace(d.kind, [d, target], 0, 0.26);
         if ('id' in target) target.slowUntil = this.sim.elapsed + 0.9;
         this.damage(d.kind, target, 0.86);
         break;
