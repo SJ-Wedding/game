@@ -59,10 +59,35 @@ export function drawLightning(g: Graphics, fx: WeaponEffect): void {
     return;
   }
   for (let i = 1; i < fx.points.length; i++) {
+    const repeats = fx.reboundCounts?.[i] ?? 0;
+    if (repeats > 0) {
+      drawChainRebound(g, fx.points[i - 1], fx.points[i], repeats, progress, alpha, seed + i * 17);
+      continue;
+    }
     drawBolt(g, fx.points[i - 1], fx.points[i], 0x61dfff, alpha, seed + i * 17);
     const { x, y } = fx.points[i];
     g.fillStyle(0xd7faff, alpha * 0.88).fillCircle(x, y, 4 * alpha);
   }
+}
+
+function drawChainRebound(g: Graphics, from: Point, to: Point, repeats: number, progress: number, alpha: number, seed: number): void {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const offset = (repeats % 2 ? 1 : -1) * Math.min(30, length * 0.24);
+  const bend = { x: (from.x + to.x) / 2 - dy / length * offset, y: (from.y + to.y) / 2 + dx / length * offset };
+  const violet = 0xb799ff;
+  drawBolt(g, from, bend, violet, alpha * 0.9, seed, 0.72);
+  drawBolt(g, bend, to, violet, alpha, seed + 13, 0.72);
+
+  const travel = Math.min(1, progress * 2.8);
+  const a = travel < 0.5 ? from : bend;
+  const b = travel < 0.5 ? bend : to;
+  const along = travel < 0.5 ? travel * 2 : travel * 2 - 1;
+  g.fillStyle(0xe7d6ff, alpha).fillCircle(a.x + (b.x - a.x) * along, a.y + (b.y - a.y) * along, 4);
+  const radius = 10 + progress * 23;
+  g.lineStyle(2, violet, alpha * 0.8).strokeCircle(to.x, to.y, radius);
+  g.lineStyle(1.5, 0xf3ddff, alpha * 0.68).strokeCircle(to.x, to.y, radius * 0.66);
 }
 
 export function drawInfectionSmoke(g: Graphics, fx: WeaponEffect): void {

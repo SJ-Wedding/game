@@ -156,7 +156,7 @@ export class Screens {
   showLumenWeapons(onChoose: (id: LumenWeapon) => void, onBack: () => void): void {
     const cards = LUMEN_WEAPONS.map((weapon, index) =>
       this.characterCard({ character: 'lumen', weapon }, WEAPONS[weapon].name,
-        weapon === 'chain' ? '멀리서 번개를 튕깁니다. 연쇄 횟수와 첫 타격 화력을 키웁니다.'
+        weapon === 'chain' ? '가까운 적에서 시작해 먼 적으로 번개를 튕깁니다. 이미 맞힌 적에게 돌아오면 피해가 줄어듭니다.'
           : '포탑을 설치해 적을 둔화시킵니다. 설치 대수와 포격 효과를 키웁니다.',
         `lumen-${weapon}`, () => onChoose(weapon), index === 0));
     this.showCharacterCards('lumen-weapon', '루멘의 시작 무기', cards, onBack);

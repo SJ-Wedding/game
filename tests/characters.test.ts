@@ -90,6 +90,49 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.damageByAttack.basic).toBeUndefined();
   });
 
+  it('루멘 번개는 첫 대상에게는 짧게 닿고 다음 대상까지 두 배 거리로 튄다', () => {
+    const sim = new GameSim({ seed: 13, god: true, loadout: chain });
+    const first = makeTarget(sim, 215);
+    sim.step(IDLE_INPUT);
+    expect(sim.damageByAttack.chain).toBeUndefined();
+
+    first.x = sim.player.x + 200;
+    const far = makeTarget(sim, 455);
+    sim.step(IDLE_INPUT);
+    expect(first.hp).toBeLessThan(1000);
+    expect(far.hp).toBeLessThan(1000);
+    expect(sim.hitsByAttack.chain).toBe(4);
+  });
+
+  it('루멘 번개는 같은 대상에게 돌아올 때 이전 적중 횟수만큼 피해를 줄이고 재연쇄 이펙트를 기록한다', () => {
+    const sim = new GameSim({ seed: 13, god: true, loadout: chain, presetUpgrades: { chainLinks: 6 } });
+    const first = makeTarget(sim, 90);
+    const second = makeTarget(sim, 190);
+    sim.step(IDLE_INPUT);
+    const base = sim.stats.damage * 1.85 * sim.starterDamageMultiplier;
+    const repeatDamage = [1, 0.3, 0.25, 0.2, 0.2];
+    const expected = (offset: number) => base * repeatDamage.reduce((sum, factor, i) => sum + factor * Math.max(0.4, 0.76 ** (i * 2 + offset)), 0);
+    expect(1000 - first.hp).toBeCloseTo(expected(0));
+    expect(1000 - second.hp).toBeCloseTo(expected(1));
+    expect(sim.hitsByAttack.chain).toBe(10);
+    const effect = sim.weapons.effects.find((fx) => fx.kind === 'chain');
+    expect(effect?.variant !== 'resonance' && effect?.reboundCounts).toEqual([0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
+  });
+
+  it('루멘 번개는 처음 맞히는 적을 우선하고, 대상 하나만 있으면 한 번 타격한다', () => {
+    const sim = new GameSim({ seed: 13, god: true, loadout: chain });
+    const ordered = [80, 125, 340, 560].map((x) => makeTarget(sim, x));
+    sim.step(IDLE_INPUT);
+    expect(ordered.every((enemy) => enemy.hp < 1000)).toBe(true);
+    const effect = sim.weapons.effects.find((fx) => fx.kind === 'chain');
+    expect(effect?.variant !== 'resonance' && effect?.reboundCounts).toEqual([0, 0, 0, 0, 0]);
+
+    const isolated = new GameSim({ seed: 13, god: true, loadout: chain });
+    makeTarget(isolated, 80);
+    isolated.step(IDLE_INPUT);
+    expect(isolated.hitsByAttack.chain).toBe(1);
+  });
+
   it('루멘 포탑은 거치대가 늘어나고 관통과 빙결이 함께 발동한다', () => {
     const deploy = new GameSim({ seed: 14, god: true, loadout: turret, presetUpgrades: { turretMount: 2 } });
     deploy.step(IDLE_INPUT);

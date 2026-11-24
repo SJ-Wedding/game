@@ -12,6 +12,7 @@ export type Loadout = { character: 'ranger' } | { character: 'lumen'; weapon: Lu
 export const DEFAULT_LOADOUT: Loadout = { character: 'ranger' };
 export const LUMEN_WEAPONS = ['chain', 'turret'] as const;
 export const LUMEN = { baseDamage: 1.5, damagePerPoint: 0.06 } as const;
+export const LUMEN_CHAIN = { firstRange: 0.5, jumpRange: 2, repeatDamage: [0.30, 0.25, 0.20] } as const;
 export const SWORD = {
   damage: 2.8, interval: 1.45, range: 125, maxRange: 185, angle: 130,
   damagePerMastery: 0.30, intervalPerDamageMastery: 0.03, sweepDuration: 0.27,
@@ -41,7 +42,7 @@ const pct = (n: number) => Math.round(n * 1000) / 10;
 export const crescentFollowupDelay = (n: number) => Math.max(0.06, SWORD_FORMS.swordCrescent.followupDelay - 0.02 * n);
 export const crushArmorPierce = (n: number) => 1 - (1 - SWORD_FORMS.swordCrush.armorPierce) * (0.4 + 0.6 * (8 / 9) ** n);
 export const CHARACTER_UPGRADES = {
-  chainLinks: { path: 'chain', name: '도전선 증설', count: true, text: (n: number) => `최대 연쇄 대상 +${n}마리` },
+  chainLinks: { path: 'chain', name: '도전선 증설', count: true, text: (n: number) => `최대 연쇄 타격 +${n}회` },
   chainVoltage: { path: 'chain', name: '고전압 축전지', text: (n: number) => `첫 대상 피해 +${pct(0.45 * n)}% · 후속 피해 −${pct(1 - 0.85 ** n)}%` },
   chainSpeed: { path: 'chain', name: '급속 방전', text: (n: number) => `연쇄 발동 간격 −${pct(1 - chainDelay(n))}%` },
   chainFork: { path: 'chain', name: '분기 회로', count: true, minLevel: 8, text: (n: number) => `세 번째 적중에서 분기 +${n * 2}갈래 · 갈래당 원래 피해의 50%` },

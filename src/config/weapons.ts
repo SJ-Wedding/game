@@ -70,7 +70,7 @@ export function echoGrowth(stacks: number) {
 
 /** 첫 값은 획득 직후, 이후 값은 Lv 2와 Lv 3 효과다. */
 export const WEAPON_RANK_EFFECTS = {
-  chain: { label: '최대 연쇄 대상', unit: '마리', values: [4, 5, 6] },
+  chain: { label: '최대 연쇄 타격', unit: '회', values: [4, 5, 6] },
   mine: { label: '설치 주기', unit: '초', values: [2.4, 2.1, 1.8] },
   orbit: { label: '칼날 수', unit: '개', values: [2, 3, 4] },
   axe: { label: '도끼 타격 반경', unit: 'px', values: [13, 17, 21] },

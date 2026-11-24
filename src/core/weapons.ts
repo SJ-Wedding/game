@@ -1,4 +1,4 @@
-import { chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
+import { LUMEN_CHAIN, chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
 import { ECHO_GROWTH, echoCloneDamage, echoGrowth, WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
@@ -34,6 +34,8 @@ interface EffectTiming {
 export interface WeaponEffect extends EffectTiming {
   kind: WeaponId;
   variant?: 'markCharge' | 'echoCharge' | 'frostBurst';
+  /** 도착 지점별 재연쇄 횟수. 첫 타격과 출발 지점은 0. */
+  reboundCounts?: number[];
 }
 
 export interface ResonanceEffect extends EffectTiming {
@@ -361,8 +363,10 @@ export class WeaponSystem {
     }
   }
 
-  trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24, variant?: WeaponEffect['variant']): void {
-    this.effects.push({ kind, variant, points: points.map(({ x, y }) => ({ x, y })), radius, life: duration, duration });
+  trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24, variant?: WeaponEffect['variant']): WeaponEffect {
+    const effect = { kind, variant, points: points.map(({ x, y }) => ({ x, y })), radius, life: duration, duration };
+    this.effects.push(effect);
+    return effect;
   }
 
   private area(kind: WeaponId, point: Point, radius: number, factor: number): void {
@@ -582,7 +586,8 @@ export class WeaponSystem {
   private chain(): void {
     const { player, relics, reachBonus } = this.sim;
     const specialist = this.sim.loadout.character === 'lumen';
-    let target = this.nearest(player, 390 + (specialist ? reachBonus * 0.65 : 0));
+    const firstRange = specialist ? (390 + reachBonus * 0.65) * LUMEN_CHAIN.firstRange : 390;
+    let target = this.nearest(player, firstRange);
     if (!target) return;
     const crown = relics.has('crown');
     const voltage = this.sim.mastery('chainVoltage');
@@ -591,32 +596,63 @@ export class WeaponSystem {
     const interval = specialist ? 1.7 * speed : 2.15;
     this.ready.set('chain', this.sim.elapsed + Math.max(0.12, interval * relics.cooldownMultiplier));
     if (relics.onWeaponActivated()) this.ready.set('chain', this.sim.elapsed);
-    const hit = new Set<Target>();
+    const visits = new Map<Target, number>();
     const points: Point[] = [player];
+    const reboundCounts = [0];
     const maxLinks = this.rankEffect('chain') + (crown ? 2 : 0) + this.sim.mastery('chainLinks');
-    const range = 125 + (specialist ? reachBonus * 0.12 : 0);
-    let firstBranch: Point | null = null;
+    const range = specialist ? (125 + reachBonus * 0.12) * LUMEN_CHAIN.jumpRange : 125;
+    const hit = (enemy: Target, at: Point, factor: number) => {
+      const repeats = visits.get(enemy) ?? 0;
+      visits.set(enemy, repeats + 1);
+      const repeatDamage = repeats > 0 ? LUMEN_CHAIN.repeatDamage[Math.min(repeats, LUMEN_CHAIN.repeatDamage.length) - 1] : 1;
+      this.damage('chain', enemy, factor * repeatDamage * (crown ? 0.75 : 1));
+      if (crown) this.area('chain', at, 54, 0.75 * repeatDamage);
+      return repeats;
+    };
+    let firstBranch: { target: Target; point: Point } | undefined;
     for (let link = 0; target && link < maxLinks; link++) {
-      hit.add(target);
-      points.push(target);
       const at = { x: target.x, y: target.y };
+      points.push(at);
       const voltageFactor = link === 0 ? 1 + 0.45 * voltage : 0.85 ** voltage;
       const falloff = specialist ? Math.max(0.4, 0.76 ** link) : 0.76 ** link;
-      this.damage('chain', target, 1.85 * falloff * voltageFactor * (crown ? 0.75 : 1));
-      if (crown) this.area('chain', at, 54, 0.75);
-      if (link === 2) firstBranch = at;
-      target = this.nearest(at, range, hit);
+      reboundCounts.push(hit(target, at, 1.85 * falloff * voltageFactor));
+      if (link === 2) firstBranch = { target, point: at };
+      target = this.nextChainTarget(at, target, range, visits, specialist);
     }
-    this.trace('chain', points, 0, 0.32);
-    if (!firstBranch) return;
+    this.trace('chain', points, 0, specialist ? 0.38 : 0.32).reboundCounts = reboundCounts;
+    if (!firstBranch || !branches) return;
+    const branched = new Set<Target>();
     for (let branch = 0; branch < branches; branch++) {
-      const extra = this.nearest(firstBranch, range, hit);
+      const extra = this.nextChainTarget(firstBranch.point, firstBranch.target, range, visits, specialist, branched);
       if (!extra) break;
-      hit.add(extra);
-      this.trace('chain', [firstBranch, extra], 0, 0.32);
-      this.damage('chain', extra, 1.85 * 0.5 * (crown ? 0.75 : 1));
-      if (crown) this.area('chain', extra, 54, 0.75);
+      branched.add(extra);
+      const at = { x: extra.x, y: extra.y };
+      const repeats = hit(extra, at, 1.85 * 0.5);
+      this.trace('chain', [firstBranch.point, at], 0, 0.38).reboundCounts = [0, repeats];
     }
+  }
+
+  private nextChainTarget(
+    from: Point, previous: Target, range: number, visits: ReadonlyMap<Target, number>, allowRepeat: boolean, skip?: ReadonlySet<Target>,
+  ): Target | null {
+    let nearestFresh: Target | null = null;
+    let nearestRepeat: Target | null = null;
+    let freshRange = range;
+    let repeatRange = range;
+    for (const candidate of this.targets()) {
+      if (candidate === previous || skip?.has(candidate)) continue;
+      const repeat = visits.has(candidate);
+      if (repeat && !allowRepeat) continue;
+      const distance = dist(from.x, from.y, candidate.x, candidate.y) - candidate.r;
+      if (repeat && distance < repeatRange) {
+        repeatRange = distance;
+        nearestRepeat = candidate;
+      } else if (!repeat && distance < freshRange) {
+        freshRange = distance;
+        nearestFresh = candidate;
+      }
+    }
+    return nearestFresh ?? nearestRepeat;
   }
 
   private deployTurrets(): void {
