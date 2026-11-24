@@ -3,7 +3,7 @@ import {
   crescentFollowupDelay, crushArmorPierce, type CharacterUpgradeId, type Loadout, type SwordFormId,
 } from '../config/characters';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
-import { OPENING_RELIC_LEVEL, validCarry, type RelicId, type RelicSource } from '../config/relics';
+import { OPENING_RELIC_LEVEL, validCarry, validRelicIds, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
@@ -44,6 +44,8 @@ export interface SimOptions {
   /** 영구 강화 구매 내역 (토큰 상점). 없으면 영구 강화 0 */
   meta?: MetaPurchases;
   carryRelics?: readonly RelicId[];
+  /** 전판에 얻은 유물. 이번 판 시작 유물(레벨 3) 선택지에서 뺀다 */
+  previousRelics?: readonly RelicId[];
   loadout?: Loadout;
 }
 
@@ -109,6 +111,7 @@ export class GameSim {
   readonly weapons = new WeaponSystem(this);
   readonly relics = new RelicEffects(this);
   private readonly rngRelic: Rng;
+  private readonly previousRelics: ReadonlySet<RelicId>;
   /** 유물 효과 판정 전용 난수 (다른 난수 흐름을 바꾸지 않는다) */
   readonly rngRelicFx: Rng;
   private readonly pendingRewards: (RelicSource | 'armory' | 'bonus' | 'coin')[] = [];
@@ -201,6 +204,7 @@ export class GameSim {
     this.rerollsLeft = PROGRESSION_CONFIG.baseRerolls + this.meta.rerolls;
     this.revivesLeft = this.meta.revives;
     this.rngRelic = new Rng(deriveSeed(this.seed, 'relic'));
+    this.previousRelics = new Set(validRelicIds(options.previousRelics));
     this.rngRelicFx = new Rng(deriveSeed(this.seed, 'relicFx'));
 
     if (options.presetLevel) this.level = options.presetLevel;
@@ -1121,7 +1125,7 @@ export class GameSim {
         // 다음에 열릴 엘리트 유물 선택이 남아 있을 때만 동전을 던질 수 있다
         if (this.pendingRewards.includes('elite')) this.choices = [{ kind: 'coin', id: 'flip' }, { kind: 'coin', id: 'pass' }];
       } else {
-        this.choices = rollRelics(source, this.rngRelic, this.relics.owned, this.loadout);
+        this.choices = rollRelics(source, this.rngRelic, this.relics.owned, this.loadout, this.previousRelics);
       }
     }
     if (!this.choices.length && this.pendingLevels) {

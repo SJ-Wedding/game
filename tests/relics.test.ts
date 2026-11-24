@@ -353,3 +353,40 @@ it('삼중 선택의 인장은 판마다 한 번 보너스 3회를 열고 일반
   expect(sim.tick).toBe(tick);
   expect(sim.picks).toHaveLength(3);
 });
+
+describe('전판 유물 제외', () => {
+  it('전판에 얻은 유물은 다음 판 시작 유물(레벨 3) 선택지에 나오지 않는다', () => {
+    const previous = ['awl', 'anvil', 'catalyst'] as const;
+    for (let seed = 1; seed <= 20; seed++) {
+      const sim = makeSim({ seed, previousRelics: [...previous] });
+      while (sim.level < 3) sim.gainXp(sim.xpNeeded);
+      sim.step(IDLE_INPUT);
+      let opening: string[] = [];
+      while (sim.phase === 'levelup') {
+        const c = sim.choices[0];
+        if (c.kind === 'relic' && c.source === 'opening') opening = sim.choices.map((x) => (x.kind === 'relic' ? x.id : ''));
+        sim.choose(0);
+      }
+      expect(opening).toHaveLength(3);
+      for (const id of previous) expect(opening).not.toContain(id);
+    }
+  });
+
+  it('제외하면 후보가 없을 때는 제외 없이 뽑는다', () => {
+    const sim = makeSim({ previousRelics: [...OPENING_RELICS] });
+    while (sim.level < 3) sim.gainXp(sim.xpNeeded);
+    sim.step(IDLE_INPUT);
+    let count = 0;
+    while (sim.phase === 'levelup') {
+      const c = sim.choices[0];
+      if (c.kind === 'relic' && c.source === 'opening') count = sim.choices.length;
+      sim.choose(0);
+    }
+    expect(count).toBeGreaterThan(0);
+  });
+
+  it('전판 유물 목록은 저장되고, 알 수 없는 유물은 빠진다', () => {
+    const raw = JSON.stringify({ ...defaultSave(), previousRelics: ['awl', 'scars', 'oath'] });
+    expect(parseSave(raw).data.previousRelics).toEqual(['awl', 'oath']);
+  });
+});
