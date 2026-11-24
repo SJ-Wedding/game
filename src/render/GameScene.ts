@@ -15,7 +15,7 @@ import {
   drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
 } from './weaponEffects';
-import { drawResonance, drawResonanceDirection } from './fusionEffects';
+import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
 
 interface Particle {
   x: number;
@@ -271,7 +271,14 @@ export class GameScene extends Phaser.Scene {
       drawResonance(ground, this.weaponEffects, effect);
       drawResonanceDirection(g, effect, view);
     }
+    for (const flight of sim.weapons.tempestFlights) drawTempestFlight(this.weaponEffects, flight);
     const t = sim.elapsed;
+    for (const field of sim.weapons.mineFields) {
+      if (!field.fusion) continue;
+      const fade = Math.min(1, (field.until - t) * 2);
+      ground.fillStyle(0x7fcafa, fade * 0.14).fillCircle(field.x, field.y, field.r);
+      ground.lineStyle(2, 0xc2efff, fade * 0.65).strokeCircle(field.x, field.y, field.r);
+    }
 
     const assault = sim.assaultWarning;
     if (assault) {

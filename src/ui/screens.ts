@@ -1,6 +1,6 @@
 import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
-import { relicInventory } from './relics';
+import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { weaponPreview } from './weaponPreview';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
@@ -168,7 +168,7 @@ export class Screens {
     ]);
   }
 
-  showPause(reason: 'esc' | 'hidden', volume: number, h: PauseHandlers, relics: RelicId[]): void {
+  showPause(reason: 'esc' | 'hidden', volume: number, h: PauseHandlers, relics: RelicId[], fusions: Iterable<FusionId>): void {
     const resume = el('button', { class: 'primary', 'data-testid': 'resume', 'data-autofocus': '' }, ['계속하기 ', el('kbd', { text: 'Esc' })]);
     resume.addEventListener('click', h.onResume);
     const restart = el('button', { 'data-testid': 'pause-restart', text: '처음부터 다시' });
@@ -187,7 +187,8 @@ export class Screens {
         this.volumeControl(volume, h.onVolume),
         ...(relics.length ? [
           el('h3', { text: '보유 유물' }),
-          el('div', { class: 'relic-slots' }, relicInventory(relics, 'pause')),
+          el('div', { class: 'relic-slots' }, relicInventory(relics.slice(-COMPACT_RELIC_LIMIT), 'pause', { fusions })),
+          ...(relics.length > COMPACT_RELIC_LIMIT ? [el('small', { class: 'muted', text: `전체 유물 ${relics.length}개 · 상태 보기에서 확인` })] : []),
         ] : []),
         el('div', { class: 'row buttons' }, [restart, title]),
         el('small', { class: 'muted', text: '처음부터 다시 / 타이틀로 이동하면 이번 판은 기록되지 않습니다.' }),
@@ -201,6 +202,7 @@ export class Screens {
     choices: UpgradeChoice[];
     rerollsLeft: number;
     armory: boolean;
+    fusions: Iterable<FusionId>;
     bonusChoices: number;
     notice?: string | null;
     onChoose: (i: number) => void;
@@ -246,7 +248,7 @@ export class Screens {
         btn.append(
           el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: relic.symbol }),
           el('strong', { class: 'name', text: relic.name }),
-          el('span', { class: 'desc', text: relicDescription(c.id) }),
+          el('span', { class: 'desc', text: relicDescription(c.id, opts.fusions) }),
         );
       } else if (c.kind === 'coin') {
         btn.append(
@@ -285,6 +287,7 @@ export class Screens {
     picks: UpgradePick[];
     fusions: FusionId[];
     recipesOpen: boolean;
+    relicsOpen: boolean;
     relics: RelicId[];
     rerollsLeft: number;
     revivesLeft: number;
@@ -301,16 +304,27 @@ export class Screens {
     );
     const grouped = new Map<UpgradePick['id'], UpgradePick[]>();
     for (const p of opts.picks) {
-      if (!isFusionIngredient(opts.fusions, p.id)) grouped.set(p.id, [...(grouped.get(p.id) ?? []), p]);
+      const list = grouped.get(p.id);
+      if (list) list.push(p);
+      else grouped.set(p.id, [p]);
     }
     const preview = weaponPreview();
-    const picks = [...grouped.entries()].map(([id, list]) => {
+    const stackDetails = (list: UpgradePick[]) => {
+      const grades = GRADES.map((grade) => {
+        const count = list.filter((pick) => pick.grade === grade.id).length;
+        return count ? el('span', { class: 'status-stack-grade', title: `${grade.name} ${count}회` }, [
+          el('span', { class: 'gdot', style: `background:${grade.color}` }), String(count),
+        ]) : null;
+      });
+      return [
+        el('strong', { class: 'status-stack-count', text: `${list.length}스택` }),
+        ...grades.filter((grade): grade is HTMLSpanElement => grade !== null),
+      ];
+    };
+    const picks = [...grouped.entries()].filter(([id]) => !isFusionIngredient(opts.fusions, id)).map(([id, list]) => {
       const def = UPGRADE_BY_ID[id];
       const item = def.weapon ? preview.trigger(def.weapon, `${def.name} Lv ${list.length}`) : el('span', { text: def.name });
-      return el('li', {}, [
-        item,
-        ...list.map((p) => el('span', { class: 'gdot', title: GRADES[GRADE_INDEX[p.grade]].name, style: `background:${GRADES[GRADE_INDEX[p.grade]].color}` })),
-      ]);
+      return el('li', { 'data-upgrade-id': id }, [item, ...stackDetails(list)]);
     });
     picks.unshift(...opts.fusions.map((id) => el('li', {}, [preview.trigger(id, `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`, 'fusion-chip')])));
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
@@ -320,35 +334,60 @@ export class Screens {
           el('ul', {}, FUSION_IDS.map((id) => {
             const recipe = WEAPON_FUSIONS[id];
             const ingredients = recipe.pair.map((weapon) => {
-              const level = grouped.get(weapon)?.length ?? (opts.fusions.includes(id) ? WEAPON_MAX_RANK : 0);
-              return preview.trigger(weapon, `${WEAPONS[weapon].name} Lv ${level}`);
+              const list = grouped.get(weapon);
+              const fused = opts.fusions.includes(id);
+              const level = list?.length ?? (fused ? WEAPON_MAX_RANK : 0);
+              const trigger = preview.trigger(weapon, `${WEAPONS[weapon].name} Lv ${level}`);
+              return fused && list ? el('span', {}, [trigger, ...stackDetails(list)]) : trigger;
             });
             return el('li', {}, [preview.trigger(id, recipe.name), el('small', {}, [ingredients[0], ' + ', ingredients[1]])]);
           })),
           el('small', { class: 'muted', text: `두 재료가 모두 Lv ${WEAPON_MAX_RANK}이면 합체를 선택할 수 있습니다. 합체하면 재료 공격을 대체합니다.` }),
         ]);
-    this.mount(
-      'status',
-      el('div', { class: 'panel status' }, [
-        el('h2', { text: `상태 · Lv ${opts.level}` }),
-        el('p', { class: 'muted', text: '상태창을 보는 동안 전투 시간이 멈춥니다.' }),
+    const statsTab = el('button', { type: 'button', role: 'tab', id: 'status-stats-tab', 'aria-controls': 'status-stats-pane', text: '능력치·강화' });
+    const relicsTab = el('button', { type: 'button', role: 'tab', id: 'status-relics-tab', 'aria-controls': 'status-relics-pane', text: `보유 유물 ${opts.relics.length}개` });
+    const statsPane = el('section', { class: 'status-pane', id: 'status-stats-pane', role: 'tabpanel', 'aria-labelledby': statsTab.id }, [
         ...(opts.recipesOpen ? [recipes] : []),
         el('table', { class: 'stat-table' }, [
           el('thead', {}, [el('tr', {}, [el('th', { text: '능력치' }), el('th', { text: '시작' }), el('th', { text: '영구 강화' }), el('th', { text: '현재' })])]),
           el('tbody', {}, rows),
         ]),
-        el('h3', { text: '이번 판 강화 (점 색 = 등급)' }),
+        el('h3', { text: '이번 판 강화 스택 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
         ...(opts.recipesOpen ? [] : [recipes]),
-        el('h3', { text: '보유 유물' }),
-        opts.relics.length
-          ? el('div', { class: 'relic-slots', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status'))
-          : el('p', { class: 'muted', text: '아직 없음' }),
         el('p', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` }),
+    ]);
+    const relicName = el('strong');
+    const relicEffect = el('p');
+    const relicDetail = el('div', { id: 'status-relic-detail', class: 'status-relic-detail', 'aria-live': 'polite' }, [relicName, relicEffect]);
+    const inspect = (id: RelicId) => {
+      relicName.textContent = RELICS[id].name;
+      relicEffect.textContent = relicDescription(id, opts.fusions);
+    };
+    const relicsPane = el('section', { class: 'status-pane', id: 'status-relics-pane', role: 'tabpanel', 'aria-labelledby': relicsTab.id },
+      opts.relics.length ? [
+        el('div', { class: 'relic-slots status-relic-scroll', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status', { inspect })),
+        relicDetail,
+      ] : [el('p', { class: 'muted', text: '이번 판에 획득한 유물이 없습니다.' })]);
+    if (opts.relics.length) inspect(opts.relics[0]);
+    const select = (showRelics: boolean) => {
+      statsTab.setAttribute('aria-selected', String(!showRelics));
+      relicsTab.setAttribute('aria-selected', String(showRelics));
+      statsPane.classList.toggle('hidden', showRelics);
+      relicsPane.classList.toggle('hidden', !showRelics);
+    };
+    statsTab.addEventListener('click', () => select(false));
+    relicsTab.addEventListener('click', () => select(true));
+    select(opts.relicsOpen);
+    this.mount('status', el('div', { class: 'panel status' }, [
+        el('h2', { text: `상태 · Lv ${opts.level}` }),
+        el('p', { class: 'muted', text: '상태창을 보는 동안 전투 시간이 멈춥니다.' }),
+        el('div', { class: 'status-tabs', role: 'tablist', 'aria-label': '상태창 분류' }, [statsTab, relicsTab]),
+        statsPane,
+        relicsPane,
         close,
         preview.tooltip,
-      ]),
-    );
+    ]));
   }
 
   /** 강화 상점: 토큰으로 영구 강화 구매 */
@@ -460,10 +499,13 @@ export class Screens {
       const name = source === 'basic' ? '기본 사격' : source === 'bomb' ? '균열 폭탄' : source === 'relic' ? '유물 효과'
         : source in WEAPON_FUSIONS ? WEAPON_FUSIONS[source as FusionId].name : WEAPONS[source as keyof typeof WEAPONS].name;
       const damage = totals[source] ?? 0;
+      const dps = duration > 0 ? damage / duration : 0;
+      const hits = result.hitsByAttack?.[source] ?? 0;
       return el('tr', { 'data-attack': source }, [
         el('th', { scope: 'row', text: name }),
         el('td', { text: n1(damage) }),
-        el('td', { text: n1(duration > 0 ? damage / duration : 0) }),
+        el('td', { text: result.hitsByAttack ? String(hits) : '–' }),
+        el('td', { text: dps > 0 && dps < 0.1 ? '<0.1' : n1(dps) }),
       ]);
     });
     return el('details', { class: 'result-damage', open: '', 'data-testid': 'damage-breakdown' }, [
@@ -471,7 +513,7 @@ export class Screens {
       el('small', { class: 'muted', text: '초과 피해를 포함한 총 피해량 ÷ 전체 전투 시간.' }),
       el('div', { class: 'result-damage-scroll' }, [
         el('table', { class: 'stat-table' }, [
-          el('thead', {}, [el('tr', {}, [el('th', { text: '공격' }), el('th', { text: '총 피해량' }), el('th', { text: '평균 DPS' })])]),
+          el('thead', {}, [el('tr', {}, [el('th', { text: '공격' }), el('th', { text: '총 피해량' }), el('th', { text: '적중 횟수' }), el('th', { text: '평균 DPS' })])]),
           el('tbody', {}, rows),
         ]),
       ]),

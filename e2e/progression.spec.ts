@@ -87,7 +87,7 @@ test.describe('성장 시스템', () => {
     const mine = overlay.getByRole('button', { name: '균열 지뢰 Lv 1' });
     await mine.hover();
     await checkImage('균열 지뢰');
-    await overlay.getByRole('heading', { name: '이번 판 강화 (점 색 = 등급)' }).hover();
+    await overlay.getByRole('heading', { name: '이번 판 강화 스택 (점 색 = 등급)' }).hover();
     await expect(tooltip).toBeHidden();
     const storm = overlay.getByRole('button', { name: '뇌광 연쇄 Lv 3' });
     await storm.focus();
@@ -101,6 +101,39 @@ test.describe('성장 시스템', () => {
     await page.keyboard.press('Escape');
     await expect(overlay).toBeHidden();
     await expect(tooltip).toBeHidden();
+  });
+
+  test('상태창에서 획득한 강화 스택을 확인하고 보유 유물 탭을 따로 열 수 있다', async ({ page }) => {
+    await startRun(page, '&seed=43&god=1');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      for (const id of ['awl', 'anvil', 'catalyst', 'scatterSeal', 'bountyKnot', 'hawkLens', 'swarm', 'bloodPrice', 'duel', 'cog']) sim.relics.acquire(id);
+      sim.picks.push({ id: 'power', grade: 'common' }, { id: 'power', grade: 'rare' }, { id: 'power', grade: 'rare' });
+      for (let i = 0; i < 3; i++) sim.picks.push({ id: 'orbit', grade: 'rare' });
+      Object.assign(sim.stacks, { orbit: 3, axe: 3 });
+      if (!sim.weapons.fuse('tempest')) throw new Error('쌍날 폭풍을 준비하지 못했습니다.');
+    });
+    const more = page.getByTestId('hud-more-relics');
+    await expect(page.getByTestId('hud-relics').locator('[data-relic]')).toHaveCount(6);
+    await expect(more).toHaveText('+4 · 전체 보기');
+    await page.keyboard.press('Tab');
+    const stats = page.getByRole('tabpanel', { name: '능력치·강화' });
+    const power = stats.locator('[data-upgrade-id="power"]');
+    await expect(power).toContainText('3스택');
+    await expect(power.getByTitle('희귀 2회')).toHaveText('2');
+    await stats.locator('.fusion-recipes summary').click();
+    await expect(stats.locator('.fusion-recipes li').filter({ hasText: '쌍날 폭풍' })).toContainText('3스택');
+    await page.getByRole('tab', { name: '보유 유물 10개' }).click();
+    await expect(stats).toBeHidden();
+    const relics = page.getByTestId('status-relics');
+    await expect(relics.locator('[data-relic]')).toHaveCount(10);
+    await relics.locator('[data-relic="cog"]').hover();
+    await expect(page.locator('#status-relic-detail')).toContainText('쌍날 폭풍 칼날 +1개');
+    await page.getByRole('tab', { name: '능력치·강화' }).click();
+    await expect(power).toBeVisible();
+    await page.keyboard.press('Escape');
+    await more.click();
+    await expect(relics).toBeVisible();
   });
 
   test('드랍 아이템을 밟으면 효과가 적용된다 (회복 물약)', async ({ page }) => {
@@ -241,6 +274,7 @@ test.describe('성장 시스템', () => {
       const row = summary.locator(`[data-attack="${id}"]`);
       await expect(row).toContainText(name);
       await expect(row.locator('td').first()).toHaveText(String(damage));
+      await expect(row.locator('td').nth(1)).toHaveText('1');
       await expect(row.locator('td').last()).toHaveText(String(Number((damage / combatTime).toFixed(1))));
     }
   });

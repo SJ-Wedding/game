@@ -50,7 +50,7 @@ export function weaponRankEffect(id: WeaponId, rank: number): number {
 export const WEAPON_FUSIONS = {
   storm: { name: '뇌광 연쇄', pair: ['chain', 'mark'], radius: 155, damage: 5.6, interval: 1.4, range: 620, effect: '가장 가까운 적에게 낙뢰를 내리고 주변 적을 감전시킵니다.' },
   bastion: { name: '빙결 지뢰진', pair: ['mine', 'turret'], radius: 168, damage: 6.3, interval: 1.4, range: 460, effect: '적의 발밑에 서리 폭발을 일으켜 몬스터의 이동을 늦춥니다.' },
-  tempest: { name: '쌍날 폭풍', pair: ['orbit', 'axe'], radius: 170, damage: 6.5, interval: 1.1, range: 0, effect: '플레이어 주위를 두 칼날이 휩씁니다.' },
+  tempest: { name: '쌍날 폭풍', pair: ['orbit', 'axe'], radius: 58, damage: 6.5, interval: 1.1, range: 540, effect: '회전하는 쌍날을 적에게 던집니다. 날아갈 때와 플레이어에게 돌아올 때 각각 피해를 줍니다.' },
   inferno: { name: '잿불 균열', pair: ['flame', 'barrier'], radius: 166, damage: 5.9, interval: 1.3, range: 530, effect: '적의 발밑을 불꽃 균열로 갈라 주변을 태우고 이동을 늦춥니다.' },
   volley: { name: '잔영 관통포', pair: ['spear', 'echo'], radius: 103, damage: 7.4, interval: 1.2, range: 760, effect: '잔영 포격이 조준 대상까지 관통하고 적중 지점 주변을 타격합니다.' },
   eclipse: { name: '검은 역병', pair: ['gravity', 'infection'], radius: 184, damage: 6.0, interval: 1.55, range: 610, effect: '몬스터를 독성 핵으로 끌어당긴 뒤 폭발시킵니다.' },

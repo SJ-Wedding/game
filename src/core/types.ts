@@ -220,6 +220,7 @@ export interface RunResult {
   fusions?: FusionId[];
   /** 적중 시 보정된 피해량의 합. 남은 체력을 초과한 피해도 포함한다. */
   damageByAttack?: Partial<Record<AttackId, number>>;
+  hitsByAttack?: Partial<Record<AttackId, number>>;
   combatTime?: number;
   seed: number;
   bossHpRatio: number | null;

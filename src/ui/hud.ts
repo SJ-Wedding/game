@@ -1,5 +1,5 @@
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
-import { relicInventory } from './relics';
+import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
@@ -8,6 +8,7 @@ import { formatTime } from '../core/math';
 import type { GameSim } from '../core/sim';
 import type { SimEvent } from '../core/types';
 import { Cached, el, josa } from './dom';
+
 
 /**
  * 전투 중 HUD: 체력, 경험치, 남은 시간, 회피 재사용 대기시간, 처치 수, 보스 체력, 안내 문구.
@@ -37,7 +38,9 @@ export class Hud {
   private xpHideAt = 0;
   private relicBox: HTMLElement;
   private relicSlots: HTMLElement;
+  private moreRelics: HTMLButtonElement;
   private lastRelics = -1;
+  private lastRelicFusions = -1;
   private bannerUntil = 0;
   private lastPhaseLabel: string | null = null;
   private lastPicks = -1;
@@ -68,8 +71,9 @@ export class Hud {
     ]);
     this.xpGainText = el('span', { class: 'xp-recent', 'data-testid': 'xp-recent' });
     this.relicSlots = el('div', { class: 'relic-slots' });
+    this.moreRelics = el('button', { class: 'relic-overflow hidden', type: 'button', 'data-testid': 'hud-more-relics' });
     this.relicBox = el('section', { class: 'hud-relics hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
-      el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots,
+      el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots, this.moreRelics,
     ]);
 
     root.append(
@@ -91,6 +95,10 @@ export class Hud {
     this.recipes.addEventListener('click', handler);
   }
 
+  onRelics(handler: () => void): void {
+    this.moreRelics.addEventListener('click', handler);
+  }
+
   show(): void {
     this.root.classList.remove('hidden');
   }
@@ -108,6 +116,7 @@ export class Hud {
     this.xpBatch = this.xpBatchAt = this.xpHideAt = 0;
     this.xpGainText.textContent = '';
     this.lastRelics = -1;
+    this.lastRelicFusions = -1;
     this.banner.textContent = '';
     this.banner.classList.remove('show');
   }
@@ -122,9 +131,14 @@ export class Hud {
     const c = this.c;
     const p = sim.player;
     const maxHp = sim.relics.maxHp;
-    if (this.lastRelics !== sim.relics.owned.size) {
+    if (this.lastRelics !== sim.relics.owned.size || this.lastRelicFusions !== sim.weapons.fusions.size) {
       this.lastRelics = sim.relics.owned.size;
-      this.relicSlots.replaceChildren(...relicInventory(sim.relics.owned, 'hud'));
+      this.lastRelicFusions = sim.weapons.fusions.size;
+      const shown = [...sim.relics.owned].slice(-COMPACT_RELIC_LIMIT);
+      this.relicSlots.replaceChildren(...relicInventory(shown, 'hud', { fusions: sim.weapons.fusions }));
+      const overflow = this.lastRelics - shown.length;
+      this.moreRelics.classList.toggle('hidden', overflow === 0);
+      this.moreRelics.textContent = `+${overflow} · 전체 보기`;
       this.relicBox.classList.toggle('hidden', this.lastRelics === 0);
     }
 

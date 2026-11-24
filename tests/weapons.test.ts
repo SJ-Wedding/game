@@ -238,7 +238,7 @@ describe('특수 무기 합체', () => {
     expect(sim.choices.some((c) => c.kind === 'upgrade' && (c.def.id === 'chain' || c.def.id === 'mark'))).toBe(false);
   });
 
-  it.each(FUSION_IDS)('%s 합체는 재료 공격을 제거하고 주기적으로 합체 피해를 준다', (id) => {
+  it.each(FUSION_IDS.filter((id) => id !== 'tempest'))('%s 합체는 재료 공격을 제거하고 주기적으로 합체 피해를 준다', (id) => {
     const recipe = WEAPON_FUSIONS[id];
     const [a, b] = recipe.pair;
     const sim = makeSim({ presetUpgrades: { [a]: 3, [b]: 3 } });
@@ -273,6 +273,43 @@ describe('특수 무기 합체', () => {
     expect(sim.weapons.effects.every((effect) => effect.kind === id)).toBe(true);
   });
 
+  it('쌍날 폭풍이 300px 밖 표적을 왕복 타격하고 이동한 플레이어에게 돌아온다', () => {
+    const sim = makeSim({ presetUpgrades: { orbit: 3, axe: 3 } });
+    sim.player.fireCd = Infinity;
+    const { x, y } = sim.player;
+    const target = sim.spawnEnemy('chaser', x + 300, y);
+    target.hp = 3000;
+    target.speed = 0;
+    expect(sim.weapons.fuse('tempest')).toBe(true);
+    for (let i = 0; i < 35; i++) sim.step(IDLE_INPUT);
+    const flight = sim.weapons.tempestFlights[0];
+    expect(flight.returning).toBe(true);
+    expect(sim.hitsByAttack.tempest).toBe(2);
+    sim.player.y += 130;
+    for (let i = 0; i < 29; i++) sim.step(IDLE_INPUT);
+    expect(flight.y).toBeGreaterThan(y);
+    expect(sim.weapons.tempestFlights).toHaveLength(0);
+    expect(sim.damageByAttack.tempest).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.tempest.damage * 1.75);
+    expect(sim.damageByAttack.orbit).toBeUndefined();
+    expect(sim.damageByAttack.axe).toBeUndefined();
+  });
+
+  it('쌍날 폭풍이 쌍월 톱니의 칼날과 귀환의 고리의 확대 효과를 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { orbit: 3, axe: 3 }, carryRelics: ['cog', 'returnRing'] });
+    sim.player.fireCd = Infinity;
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 180, sim.player.y);
+    enemy.hp = 2500;
+    enemy.speed = 0;
+    sim.weapons.fuse('tempest');
+    sim.step(IDLE_INPUT);
+    const flight = sim.weapons.tempestFlights[0];
+    expect(flight.bladeCount).toBe(3);
+    expect(flight.baseRadius).toBeCloseTo(WEAPON_FUSIONS.tempest.radius * 1.2);
+    for (let i = 0; i < 24; i++) sim.step(IDLE_INPUT);
+    expect(flight.returning).toBe(true);
+    expect(flight.radius).toBeGreaterThan(flight.baseRadius * 1.5);
+  });
+
   it('잔영 관통포가 예약된 잔영과 이미 발사한 잔영탄을 교체하고 먼 적을 관통한다', () => {
     const sim = makeSim({ presetUpgrades: { echo: 3, spear: 3 } });
     const { x, y } = sim.player;
@@ -299,7 +336,78 @@ describe('특수 무기 합체', () => {
     target.hp = 1000;
     expect(sim.weapons.fuse('storm')).toBe(true);
     sim.weapons.update(1 / 60);
-    expect(sim.damageByAttack.storm).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.storm.damage * 1.12 * 1.15);
+    expect(sim.damageByAttack.storm).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.storm.damage * 1.12 * 1.15 * 0.75);
+  });
+
+  it('뇌광 연쇄가 종의 빠른 주기와 왕관의 추가 연쇄를 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 }, carryRelics: ['secondBell', 'crown'] });
+    const { x, y } = sim.player;
+    sim.spawnEnemy('chaser', x + 100, y).hp = 1000;
+    const extra = sim.spawnEnemy('chaser', x + 300, y);
+    extra.hp = 1000;
+    sim.weapons.fuse('storm');
+    sim.weapons.update(1 / 60);
+    expect(extra.hp).toBeLessThan(1000);
+    expect(sim.weapons.effects[0].radius).toBeCloseTo(WEAPON_FUSIONS.storm.radius * 0.75);
+    sim.tick += 58;
+    sim.weapons.update(1 / 60);
+    expect(sim.hitsByAttack.storm).toBe(4);
+  });
+
+  it('빙결 지뢰진이 겨울 등불의 이중 폭발과 도화선의 장판을 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { mine: 3, turret: 3 }, carryRelics: ['winterLantern', 'fuse'] });
+    const { x, y } = sim.player;
+    const targets = [120, 410].map((offset) => sim.spawnEnemy('chaser', x + offset, y));
+    targets.forEach((enemy) => { enemy.hp = 1000; });
+    sim.weapons.fuse('bastion');
+    sim.weapons.update(1 / 60);
+    expect(targets.every((enemy) => enemy.hp < 1000)).toBe(true);
+    expect(sim.weapons.mineFields.filter((field) => field.fusion === 'bastion')).toHaveLength(2);
+    const hits = sim.hitsByAttack.bastion!;
+    sim.tick += 31;
+    sim.weapons.update(1 / 60);
+    expect(sim.hitsByAttack.bastion).toBe(hits + 2);
+    expect(sim.hitsByAttack.mine).toBeUndefined();
+  });
+
+  it('잿불 균열이 신발끈의 화상과 못의 이동 봉쇄를 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { flame: 3, barrier: 3 }, carryRelics: ['laces', 'nail'] });
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 130, sim.player.y);
+    enemy.hp = 1000;
+    sim.weapons.fuse('inferno');
+    sim.weapons.update(1 / 60);
+    expect(enemy.rootedUntil).toBe(0.8);
+    expect(sim.weapons.afflicted(enemy)).toBe(true);
+    sim.tick += 28;
+    sim.weapons.update(1 / 60);
+    expect(sim.hitsByAttack.inferno).toBe(2);
+    expect(sim.hitsByAttack.flame).toBeUndefined();
+  });
+
+  it('잔영 관통포가 조준 지연과 양방향 포격, 분기 포격을 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { spear: 3, echo: 3 }, carryRelics: ['constellation', 'mirror'] });
+    const { x, y } = sim.player;
+    const targets = [[100, 0], [-140, 0], [210, 0], [300, 0], [420, 64]].map(([dx, dy]) => sim.spawnEnemy('chaser', x + dx, y + dy));
+    targets.forEach((enemy) => { enemy.hp = 1000; });
+    sim.weapons.fuse('volley');
+    sim.weapons.update(1 / 60);
+    expect(sim.hitsByAttack.volley).toBeUndefined();
+    sim.tick += 18;
+    sim.weapons.update(1 / 60);
+    expect(targets.every((enemy) => enemy.hp < 1000)).toBe(true);
+    expect(sim.weapons.effects.filter((effect) => effect.kind === 'volley')).toHaveLength(4);
+  });
+
+  it('검은 역병이 닻의 넓은 흡인과 항아리의 추가 전염을 계승한다', () => {
+    const sim = makeSim({ presetUpgrades: { gravity: 3, infection: 3 }, carryRelics: ['anchor', 'plagueJar'] });
+    const { x, y } = sim.player;
+    const targets = [100, 350, 460, 520].map((offset) => sim.spawnEnemy('chaser', x + offset, y));
+    targets.forEach((enemy) => { enemy.hp = 1000; });
+    sim.weapons.fuse('eclipse');
+    sim.weapons.update(1 / 60);
+    expect(sim.weapons.effects[0].radius).toBe(WEAPON_FUSIONS.eclipse.radius * 1.5);
+    expect(targets[1].x).toBeCloseTo(x + 237.5);
+    expect(sim.hitsByAttack.eclipse).toBe(4);
   });
 
   it('빙결 지뢰진으로 합체하면 남은 지뢰 장판을 지우고 나침반 회피도 합체기로 발동한다', () => {

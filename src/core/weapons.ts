@@ -7,6 +7,7 @@ import type { Boss, Enemy } from './types';
 
 interface Point { x: number; y: number }
 type Target = Boss | Enemy;
+type FusionBurst = Exclude<FusionId, 'tempest'>;
 interface Device extends Point {
   kind: WeaponId;
   age: number;
@@ -34,15 +35,30 @@ export interface WeaponEffect extends EffectTiming {
 }
 
 export interface ResonanceEffect extends EffectTiming {
-  kind: FusionId;
+  kind: FusionBurst;
   variant: 'resonance';
   angle: number;
 }
 
-const RESONANCE_DURATION: Record<FusionId, number> = {
-  storm: 0.85, bastion: 0.95, tempest: 0.86, inferno: 1.02, volley: 0.84, eclipse: 1.04,
+export interface TempestFlight extends Point {
+  angle: number;
+  age: number;
+  returnAge: number;
+  returning: boolean;
+  radius: number;
+  baseRadius: number;
+  distanceLeft: number;
+  damage: number;
+  bladeCount: number;
+  hit: Set<Target>;
+}
+
+const RESONANCE_DURATION: Record<FusionBurst, number> = {
+  storm: 0.85, bastion: 0.95, inferno: 1.02, volley: 0.84, eclipse: 1.04,
 };
 const ECHO_DELAY = 0.36;
+const TEMPEST_RETURN_SPEED = 750;
+const TEMPEST_OUT_SPEED = 630;
 
 export class WeaponSystem {
   private qualityPickCount = -1;
@@ -53,6 +69,8 @@ export class WeaponSystem {
   readonly devices: Device[] = [];
   readonly effects: (WeaponEffect | ResonanceEffect)[] = [];
   readonly blades: Point[] = [];
+  readonly tempestFlights: TempestFlight[] = [];
+  private readonly aimingVolleys: { at: number; center: Point; origin: Point; radius: number }[] = [];
   private readonly ready = new Map<WeaponId | FusionId, number>();
   private readonly marks = new Map<Target, number>();
   readonly infected = new Map<Enemy, number>();
@@ -65,9 +83,9 @@ export class WeaponSystem {
   /** 쌍월 톱니: 회전 칼날 처치 수 */
   private cogKills = 0;
   /** 두 번째 도화선: 지뢰 폭발 뒤 남는 장판 */
-  readonly mineFields: (Point & { r: number; until: number; next: number; damage: number })[] = [];
+  readonly mineFields: (Point & { r: number; until: number; next: number; damage: number; fusion?: 'bastion' })[] = [];
   /** 용광로의 신발끈: 화상 (대상 → 끝나는 시각, 다음 피해 시각) */
-  private readonly burns = new Map<Target, { until: number; next: number }>();
+  private readonly burns = new Map<Target, { until: number; next: number; fusionDamage?: number }>();
 
   constructor(private readonly sim: GameSim) {}
 
@@ -153,52 +171,185 @@ export class WeaponSystem {
     return true;
   }
 
-  private updateFusions(): void {
-    const { player, elapsed, reachBonus } = this.sim;
+  private fusionDamage(id: FusionId): number {
+    const recipe = WEAPON_FUSIONS[id];
+    const grade = (this.gradeBonus(recipe.pair[0]) + this.gradeBonus(recipe.pair[1])) / 2;
+    return this.sim.stats.damage * recipe.damage * (1 + grade) * this.sim.relics.fusionMultiplier(id);
+  }
+
+  private hitFusion(id: FusionId, target: Target, damage: number): void {
+    if ('id' in target) this.sim.damageEnemy(target, damage, id);
+    else this.sim.damageBoss(damage, id);
+  }
+
+  private updateFusions(dt: number): void {
+    const { player, elapsed, reachBonus, relics } = this.sim;
+    compact(this.aimingVolleys, (queued) => {
+      if (queued.at > elapsed + 1e-6) return true;
+      this.castVolley(queued.origin, queued.center, queued.radius);
+      return false;
+    });
     for (const id of this.fusions) {
       if (elapsed < (this.ready.get(id) ?? 0)) continue;
       const recipe = WEAPON_FUSIONS[id];
-      const radius = recipe.radius + reachBonus * 0.08;
-      const range = id === 'tempest' ? radius : recipe.range + reachBonus * 0.85;
+      let radius = recipe.radius + reachBonus * 0.08;
+      let interval: number = recipe.interval;
+      if (id === 'storm' && relics.has('secondBell')) { radius *= 0.75; interval *= 2 / 3; }
+      if (id === 'tempest' && relics.has('returnRing')) interval *= 1.2;
+      if (id === 'eclipse' && relics.has('anchor')) radius *= 1.5;
+      const range = recipe.range + reachBonus * 0.85;
       const target = this.nearest(player, range);
       if (!target) continue;
-      this.ready.set(id, elapsed + recipe.interval * this.sim.relics.cooldownMultiplier);
-      if (this.sim.relics.onWeaponActivated()) this.ready.set(id, elapsed);
-      this.castFusion(id, id === 'tempest' ? player : target, radius);
+      this.ready.set(id, elapsed + interval * relics.cooldownMultiplier);
+      if (relics.onWeaponActivated()) this.ready.set(id, elapsed);
+      if (id === 'tempest') {
+        this.throwTempest(target, range, radius);
+      } else if (id === 'volley' && relics.has('constellation')) {
+        this.aimingVolleys.push({ at: elapsed + 0.3, origin: { x: player.x, y: player.y }, center: { x: target.x, y: target.y }, radius });
+      } else if (id === 'bastion' && relics.has('winterLantern')) {
+        const next = this.nearest(player, range, new Set([target]));
+        this.castFusion(id, target, radius, 0.7, 0.7);
+        this.castFusion(id, next ?? { x: target.x + 35, y: target.y }, radius, 0.7, 0.7);
+      } else {
+        this.castFusion(id, target, radius);
+      }
     }
+    compact(this.tempestFlights, (flight) => this.updateTempest(flight, dt));
   }
 
-  private castFusion(id: FusionId, center: Point, radius: number): void {
+  private throwTempest(target: Target, range: number, radius: number): void {
+    const { player, relics } = this.sim;
+    const cog = relics.has('cog');
+    const baseRadius = radius * (cog ? 1.2 : 1);
+    const dx = target.x - player.x;
+    const dy = target.y - player.y;
+    const distance = Math.hypot(dx, dy);
+    this.tempestFlights.push({
+      x: player.x, y: player.y, angle: distance ? Math.atan2(dy, dx) : player.aim,
+      age: 0, returning: false, returnAge: 0, radius: baseRadius, baseRadius,
+      distanceLeft: clamp(distance + 42, 140, range + target.r),
+      damage: this.fusionDamage('tempest'), bladeCount: cog ? 3 : 2, hit: new Set(),
+    });
+  }
+
+  private updateTempest(flight: TempestFlight, dt: number): boolean {
+    const { player, relics, reachBonus } = this.sim;
+    const { x, y } = flight;
+    flight.age += dt;
+    let step = Math.min(flight.distanceLeft, (TEMPEST_OUT_SPEED + reachBonus * 0.45) * dt);
+    if (flight.returning) {
+      flight.returnAge += dt;
+      flight.angle = Math.atan2(player.y - y, player.x - x);
+      step = Math.min(TEMPEST_RETURN_SPEED * dt, dist(x, y, player.x, player.y));
+      if (relics.has('returnRing')) flight.radius = flight.baseRadius * (1.5 + Math.min(0.5, flight.returnAge * 0.8));
+    }
+    this.move(flight, step);
+    const cogBonus = relics.has('cog') ? 1 + Math.min(0.15, this.cogKills * 0.005) : 1;
+    const damage = flight.damage * cogBonus * (flight.returning ? 0.75 : 1);
+    for (const target of this.targets()) {
+      if (flight.hit.has(target) || distToSegment(target.x, target.y, x, y, flight.x, flight.y) > flight.radius + target.r) continue;
+      flight.hit.add(target);
+      this.hitFusion('tempest', target, damage);
+      if (target.dead && relics.has('cog')) this.cogKills++;
+    }
+    if (flight.returning) return flight.age < 2.6 && dist(flight.x, flight.y, player.x, player.y) > 9;
+    flight.distanceLeft = Math.max(0, flight.distanceLeft - step);
+    if (flight.distanceLeft === 0 || dist(x, y, flight.x, flight.y) < step * 0.15) {
+      flight.returning = true;
+      flight.hit.clear();
+    }
+    return true;
+  }
+
+  private castFusion(id: FusionBurst, center: Point, radius: number, power = 1, durationScale = 1): void {
     const { sim } = this;
-    const { player: p, elapsed } = sim;
+    const { player: p, elapsed, relics } = sim;
+    if (id === 'volley') { this.castVolley(p, center, radius); return; }
     const { x, y } = center;
     const angle = x === p.x && y === p.y ? p.aim : Math.atan2(y - p.y, x - p.x);
     const points = [{ x, y }];
-    const recipe = WEAPON_FUSIONS[id];
-    const beamRange = recipe.range + sim.reachBonus * 0.85;
-    const beamEnd = id === 'volley' ? { x: p.x + Math.cos(angle) * beamRange, y: p.y + Math.sin(angle) * beamRange } : null;
-    if (beamEnd) points.push({ x: p.x, y: p.y }, beamEnd);
-    const grade = (this.gradeBonus(recipe.pair[0]) + this.gradeBonus(recipe.pair[1])) / 2;
-    const damage = sim.stats.damage * recipe.damage * (1 + grade) * sim.relics.fusionMultiplier(id);
-    const duration = RESONANCE_DURATION[id];
+    const crown = id === 'storm' && relics.has('crown');
+    const jar = id === 'eclipse' && relics.has('plagueJar');
+    const anchor = id === 'eclipse' && relics.has('anchor');
+    const nail = id === 'inferno' && relics.has('nail');
+    const laces = id === 'inferno' && relics.has('laces');
+    const damage = this.fusionDamage(id) * power * (crown ? 0.75 : 1) * (jar ? 0.8 : 1);
+    const duration = RESONANCE_DURATION[id] * durationScale;
     this.effects.push({ kind: id, variant: 'resonance', angle, points, radius, life: duration, duration });
-    for (const target of this.targets()) {
-      const inBurst = dist(x, y, target.x, target.y) <= radius + target.r;
-      const inBeam = beamEnd && distToSegment(target.x, target.y, p.x, p.y, beamEnd.x, beamEnd.y) <= 26 + target.r;
-      if (!inBurst && !inBeam) continue;
-      if (id === 'storm' && target !== center && points.length < 6) points.push({ x: target.x, y: target.y });
+    const targets = new Set([...this.targets()].filter((target) => dist(x, y, target.x, target.y) <= radius + target.r));
+    for (let i = 0; (crown || jar) && i < 2; i++) {
+      const extra = this.nearest(center, radius * 2, targets);
+      if (extra) targets.add(extra);
+    }
+    for (const target of targets) {
+      if (id === 'storm' && target !== center && points.length < (crown ? 8 : 6)) points.push({ x: target.x, y: target.y });
+      const canRoot = 'id' in target && target.state !== 'dash';
       if ('id' in target) {
-        if (id === 'bastion') target.slowUntil = Math.max(target.slowUntil, elapsed + 1.15);
-        if (id === 'inferno') target.fireSlowUntil = Math.max(target.fireSlowUntil, elapsed + 1.0);
+        if (id === 'bastion') target.slowUntil = Math.max(target.slowUntil, elapsed + 1.15 * durationScale);
+        if (id === 'inferno') target.fireSlowUntil = Math.max(target.fireSlowUntil, elapsed + (laces ? 2 : 1));
+        if (nail && canRoot) target.rootedUntil = Math.max(target.rootedUntil, elapsed + 0.8);
         if (id === 'eclipse' && target.kind !== 'elite' && target.state !== 'dash') {
           const pad = ARENA_CONFIG.wallPadding + target.r;
-          target.x = clamp(target.x + (x - target.x) * 0.3, pad, ARENA_CONFIG.width - pad);
-          target.y = clamp(target.y + (y - target.y) * 0.3, pad, ARENA_CONFIG.height - pad);
+          const pull = anchor ? 0.45 : 0.3;
+          target.x = clamp(target.x + (x - target.x) * pull, pad, ARENA_CONFIG.width - pad);
+          target.y = clamp(target.y + (y - target.y) * pull, pad, ARENA_CONFIG.height - pad);
         }
-        sim.damageEnemy(target, damage, id);
-      } else {
-        sim.damageBoss(damage, id);
       }
+      this.hitFusion(id, target, damage * (nail && !canRoot ? 1.4 : 1));
+      if (laces && !target.dead) this.burns.set(target, { until: elapsed + 2, next: this.burns.get(target)?.next ?? elapsed + 0.45, fusionDamage: damage * 0.2 });
+    }
+    if (crown) {
+      // 한 번의 연쇄에서 폭발의 중첩 피해는 대상당 한 번만 계산한다.
+      const centers = [...targets];
+      for (const target of this.targets()) if (centers.some((at) => at !== target && dist(at.x, at.y, target.x, target.y) <= 54 + target.r)) {
+        this.hitFusion('storm', target, damage * 0.45);
+      }
+    }
+    if (id === 'bastion' && relics.has('fuse')) {
+      this.mineFields.push({ x, y, r: radius, until: elapsed + 2.05, next: elapsed + 0.5, damage: damage * 0.05, fusion: 'bastion' });
+    }
+  }
+
+  private castVolley(origin: Point, center: Point, radius: number): void {
+    const mirror = this.sim.relics.has('mirror');
+    const angle = origin.x === center.x && origin.y === center.y ? this.sim.player.aim : Math.atan2(center.y - origin.y, center.x - origin.x);
+    const damage = this.fusionDamage('volley') * (mirror ? 0.7 : 1);
+    const range = WEAPON_FUSIONS.volley.range + this.sim.reachBonus * 0.85;
+    const hits = new Set<Target>();
+    this.volleyRay(origin, angle, range, center, radius, damage, hits);
+    if (mirror) {
+      const opposite = angle + Math.PI;
+      const anchor = { x: origin.x + Math.cos(opposite) * radius, y: origin.y + Math.sin(opposite) * radius };
+      this.volleyRay(origin, opposite, range, anchor, radius, damage, hits);
+      const killed = [...hits].find((target) => 'id' in target && target.dead);
+      if (killed) {
+        const echoHits = new Set<Target>();
+        this.volleyRay(killed, angle, range, killed, radius, damage, echoHits);
+        this.volleyRay(killed, opposite, range, killed, radius, damage, echoHits);
+      }
+    }
+    if (hits.size >= 3 && this.sim.relics.has('constellation')) {
+      let last = center;
+      let distance = 0;
+      for (const target of hits) {
+        const along = (target.x - origin.x) * Math.cos(angle) + (target.y - origin.y) * Math.sin(angle);
+        if (along > distance) { last = target; distance = along; }
+      }
+      const branchHits = new Set<Target>(hits);
+      for (const spread of [-0.48, 0.48]) this.volleyRay(last, angle + spread, Math.min(range * 0.45, 330), last, radius * 0.42, damage * 0.5, branchHits);
+    }
+  }
+
+  private volleyRay(origin: Point, angle: number, range: number, center: Point, radius: number, damage: number, hit: Set<Target>): void {
+    const end = { x: origin.x + Math.cos(angle) * range, y: origin.y + Math.sin(angle) * range };
+    const duration = RESONANCE_DURATION.volley;
+    this.effects.push({ kind: 'volley', variant: 'resonance', angle, points: [{ x: center.x, y: center.y }, { x: origin.x, y: origin.y }, end], radius, life: duration, duration });
+    for (const target of this.targets()) {
+      if (hit.has(target)) continue;
+      if (dist(target.x, target.y, center.x, center.y) > radius + target.r
+        && distToSegment(target.x, target.y, origin.x, origin.y, end.x, end.y) > 26 + target.r) continue;
+      hit.add(target);
+      this.hitFusion('volley', target, damage);
     }
   }
 
@@ -323,7 +474,7 @@ export class WeaponSystem {
     }
     if (this.enabled('orbit')) this.orbit();
     if (this.enabled('infection')) this.spread(now);
-    this.updateFusions();
+    this.updateFusions(dt);
 
     for (const device of this.devices) this.updateDevice(device, dt);
     compact(this.devices, (device) => device.age < device.duration);
@@ -359,7 +510,9 @@ export class WeaponSystem {
       if (now > f.until || now + 1e-6 < f.next) continue; // 틱 시각과 프레임 시각의 부동소수 오차 허용
       f.next += 0.5;
       for (const target of this.targets()) {
-        if (dist(f.x, f.y, target.x, target.y) < f.r + target.r) this.damage('mine', target, f.damage);
+        if (dist(f.x, f.y, target.x, target.y) >= f.r + target.r) continue;
+        if (f.fusion) this.hitFusion(f.fusion, target, f.damage);
+        else this.damage('mine', target, f.damage);
       }
     }
     compact(this.mineFields, (f) => now <= f.until);
@@ -374,7 +527,8 @@ export class WeaponSystem {
       if (now + 1e-6 < burn.next) continue;
       burn.next += 0.45;
       // 화상 피해 = 불길 한 번 피해(0.34)의 20%
-      this.damage('flame', target, 0.34 * 0.2);
+      if (burn.fusionDamage !== undefined) this.hitFusion('inferno', target, burn.fusionDamage);
+      else this.damage('flame', target, 0.34 * 0.2);
     }
   }
 
@@ -580,7 +734,7 @@ export class WeaponSystem {
     }
   }
 
-  private move(d: Device, distance: number): void {
+  private move(d: Point & { angle: number }, distance: number): void {
     const pad = ARENA_CONFIG.wallPadding;
     d.x = clamp(d.x + Math.cos(d.angle) * distance, pad, ARENA_CONFIG.width - pad);
     d.y = clamp(d.y + Math.sin(d.angle) * distance, pad, ARENA_CONFIG.height - pad);

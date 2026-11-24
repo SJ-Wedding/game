@@ -1,14 +1,13 @@
 import type { GameObjects } from 'phaser';
-import type { FusionId } from '../config/weapons';
-import type { ResonanceEffect } from '../core/weapons';
+import type { ResonanceEffect, TempestFlight } from '../core/weapons';
 import { drawBolt, drawFlame } from './weaponEffects';
 
 type Graphics = GameObjects.Graphics;
 type Point = { x: number; y: number };
 type Frame = { ground: Graphics; g: Graphics; center: Point; r: number; t: number; alpha: number; angle: number };
 const TAU = 2 * Math.PI;
-const RESONANCE_COLORS: Record<FusionId, number> = {
-  storm: 0x8fa7ff, bastion: 0x94eaff, tempest: 0xffd491, inferno: 0xff984f, volley: 0x82ffd7, eclipse: 0xc6a3ff,
+const RESONANCE_COLORS: Record<ResonanceEffect['kind'], number> = {
+  storm: 0x8fa7ff, bastion: 0x94eaff, inferno: 0xff984f, volley: 0x82ffd7, eclipse: 0xc6a3ff,
 };
 
 function polar(origin: Point, angle: number, distance: number): Point {
@@ -61,27 +60,25 @@ function bastion({ ground, g, center, r, t, alpha }: Frame): void {
   }
 }
 
-function tempest({ ground, g, center, r, t, alpha, angle }: Frame): void {
-  const sweep = t * 4.25;
-  for (let i = 0; i < 2; i++) {
-    const sign = i === 0 ? 1 : -1;
-    const head = angle + i * Math.PI + sign * sweep;
-    const color = i === 0 ? 0x80dfff : 0xffae61;
-    const reach = r * (0.71 + i * 0.18);
-    const [a, b] = i === 0 ? [head - 1.85, head] : [head, head + 1.85];
-    arc(ground, center, reach, a - 0.23, b + 0.23, 22, color, alpha * 0.18);
-    arc(g, center, reach, a, b, 11, color, alpha * 0.55);
-    arc(g, center, reach + 3, a + 0.15, b - 0.15, 2.6, 0xfff6df, alpha);
-    arc(g, center, reach * 0.68, a - 0.3, b - 0.22, 3, color, alpha * 0.68);
-    const tip = polar(center, head + sign * 0.18, reach);
-    const spine = polar(center, head - sign * 0.37, reach);
-    const edge = polar(center, head - sign * 0.08, reach + 8);
-    const inside = polar(center, head - sign * 0.1, reach - 9);
-    g.fillStyle(0xfff6df, alpha).fillPoints([edge, tip, inside, spine], true);
-    for (let j = 0; j < 6; j++) {
-      const spark = polar(center, head - sign * (0.35 + j * 0.23), reach + (j % 3 - 1) * r * 0.12);
-      g.fillStyle(color, alpha * (0.9 - j * 0.09)).fillRect(spark.x, spark.y, 3, 2);
-    }
+export function drawTempestFlight(g: Graphics, flight: TempestFlight): void {
+  const trail = polar(flight, flight.angle, flight.returning ? -64 : -86);
+  g.lineStyle(15, 0xeeb271, 0.21).lineBetween(trail.x, trail.y, flight.x, flight.y);
+  g.lineStyle(3, 0xffe9b5, 0.65).lineBetween(trail.x, trail.y, flight.x, flight.y);
+  const spin = (flight.age - flight.returnAge) * 13 - flight.returnAge * 14;
+  const colors = [0x80dfff, 0xffae61, 0xd5a4ff];
+  const reach = flight.radius * 0.76;
+  for (let i = 0; i < flight.bladeCount; i++) {
+    const head = spin + i * TAU / flight.bladeCount;
+    const a = flight.returning ? head : head - 1.05;
+    const b = flight.returning ? head + 1.05 : head;
+    arc(g, flight, reach, a, b, 13, 0x19233a, 0.82);
+    arc(g, flight, reach, a, b, 8, colors[i], 0.78);
+    arc(g, flight, reach + 4, a, b, 2, 0xfff6df, 0.97);
+    const tip = polar(flight, head + (flight.returning ? -0.26 : 0.26), reach);
+    const edge = polar(flight, head, reach + 9);
+    const inside = polar(flight, head, reach - 9);
+    const back = polar(flight, head + (flight.returning ? 0.45 : -0.45), reach - 4);
+    g.fillStyle(0xfff6df, 1).fillPoints([tip, edge, back, inside], true);
   }
 }
 
@@ -169,7 +166,6 @@ export function drawResonance(ground: Graphics, g: Graphics, fx: ResonanceEffect
   switch (fx.kind) {
     case 'storm': storm(frame, fx.points); break;
     case 'bastion': bastion(frame); break;
-    case 'tempest': tempest(frame); break;
     case 'inferno': inferno(frame); break;
     case 'volley': volley(frame, fx.points[1], fx.points[2]); break;
     case 'eclipse': eclipse(frame); break;

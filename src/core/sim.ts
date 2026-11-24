@@ -131,6 +131,7 @@ export class GameSim {
   dodges = 0;
   damageTakenTotal = 0;
   readonly damageByAttack: Partial<Record<AttackId, number>> = {};
+  readonly hitsByAttack: Partial<Record<AttackId, number>> = {};
   private readonly startingTick: number;
   firstLevelUpAt: number | null = null;
   lastDamageSource: string | null = null;
@@ -693,7 +694,10 @@ export class GameSim {
   }
 
   private recordAttackDamage(source: AttackId | undefined, damage: number): void {
-    if (source && damage > 0) this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
+    if (source && damage > 0) {
+      this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
+      this.hitsByAttack[source] = (this.hitsByAttack[source] ?? 0) + 1;
+    }
   }
 
   damageEnemy(e: Enemy, amount: number, source?: AttackId): void {
@@ -1082,6 +1086,7 @@ export class GameSim {
       tokenMultiplier: this.relics.tokenMultiplier(outcome === 'victory'),
       fusions: [...this.weapons.fusions],
       damageByAttack: { ...this.damageByAttack },
+      hitsByAttack: { ...this.hitsByAttack },
       combatTime: (this.tick - this.startingTick) / RUN_CONFIG.tickRate,
       seed: this.seed,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,

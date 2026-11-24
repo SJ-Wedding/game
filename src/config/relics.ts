@@ -1,4 +1,4 @@
-import { FUSION_RELIC_DAMAGE_BONUS } from './weapons';
+import { FUSION_RELIC_DAMAGE_BONUS, isFusionIngredient, type FusionId } from './weapons';
 
 export const TRIPLE_CHOICE_COUNT = 3;
 
@@ -89,9 +89,29 @@ export const OPENING_RELICS = ['awl', 'anvil', 'catalyst', 'scatterSeal', 'bount
 export const RELIC_IDS = Object.keys(RELICS) as RelicId[];
 export const CARRY_LIMIT = 3;
 
-export function relicDescription(id: RelicId): string {
+type WeaponRelicId = { [Id in RelicId]: (typeof RELICS)[Id] extends { weapon: string } ? Id : never }[RelicId];
+
+const FUSION_EFFECTS: Record<WeaponRelicId, string> = {
+  crown: '뇌광 연쇄가 주변 적 최대 2마리에게 더 튀고 맞은 적 자리마다 폭발합니다. 직접 피해 −25%.',
+  secondBell: '뇌광 연쇄 발동 간격이 3분의 1 짧아집니다. 타격 반경 −25%.',
+  cog: '쌍날 폭풍 칼날 +1개, 타격 반경 +20%. 이 무기로 처치할 때마다 피해 +0.5%, 최대 +15%.',
+  returnRing: '쌍날 폭풍이 돌아올 때 타격 반경이 +50%에서 +100%까지 커집니다. 투척 간격 +20%.',
+  fuse: '빙결 지뢰진 폭발 자리에 2초간 서리 장판을 남깁니다. 장판의 초당 피해는 폭발 피해의 10%.',
+  winterLantern: '빙결 지뢰진이 두 곳에서 폭발합니다. 폭발 1회 피해와 둔화 지속시간 −30%.',
+  laces: '잿불 균열에 맞은 적은 2초간 느려지고 0.45초마다 폭발 피해의 20%만큼 화상을 입습니다.',
+  nail: '잿불 균열에 맞은 몬스터의 이동을 0.8초간 멈춥니다. 보스와 돌진 중인 적에게는 피해 +40%.',
+  constellation: '잔영 관통포 조준 +0.3초. 세 대상 이상에 명중하면 마지막 적중 지점에서 양옆으로 포격이 갈라집니다. 갈래당 피해 50%.',
+  mirror: '잔영 관통포가 반대 방향으로도 발사되고, 적을 처치하면 한 번 더 발사됩니다. 포격 1회 피해 −30%.',
+  anchor: '검은 역병 폭발 반경 +50%, 적을 끌어오는 힘 +50%.',
+  plagueJar: '검은 역병의 폭발이 범위 밖의 가까운 적 최대 2마리에게도 전염됩니다. 피해 −20%.',
+};
+
+export function relicDescription(id: RelicId, fusions: Iterable<FusionId> = []): string {
   const relic = RELICS[id];
-  return 'weapon' in relic ? `${relic.effect} 무기가 없으면 모든 공격 피해 +5%, 합체하면 해당 합체기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.` : relic.effect;
+  if (!('weapon' in relic)) return relic.effect;
+  const bonus = `융합 무기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.`;
+  if (isFusionIngredient(fusions, relic.weapon)) return `${FUSION_EFFECTS[id as WeaponRelicId]} ${bonus}`;
+  return `${relic.effect} 무기가 없으면 모든 공격 피해 +5%. 융합 후 전용 효과 적용 및 ${bonus}`;
 }
 
 export function validRelicIds(value: unknown): RelicId[] {
