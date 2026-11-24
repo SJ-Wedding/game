@@ -18,7 +18,7 @@ describe('15분 설계', () => {
     expect(Object.keys(at(90).weights)).toContain('charger');
     expect(Object.keys(at(90).weights)).not.toContain('spitter');
     expect(Object.keys(at(400).weights)).toEqual(expect.arrayContaining(['charger', 'spitter']));
-    expect([at(659).batch, at(660).batch, at(720).batch]).toEqual([4, 8, 12]);
+    expect([599, 600, 660, 720, 810, 900].map((t) => at(t).batch)).toEqual([4, 50, 60, 70, 80, 12]);
     const firstElite = SPAWN_EVENTS.filter((e) => e.kind === 'elite').map((e) => e.at)[0];
     expect(firstElite).toBe(120);
     expect(RUN_CONFIG.bossAt).toBe(810);
@@ -90,21 +90,29 @@ it('균열 수호자는 기본 체력 1050과 받는 피해를 1.5로 나누는 
   expect(elite.maxHp - elite.hp).toBe(60);
 });
 
-it('세 방향 증원을 2초 전에 예고하고 예고한 시각에 24마리를 생성한다', () => {
+it.each([[600, 50], [660, 60], [720, 70], [810, 80]])('%d초의 첫 일반 웨이브는 %d마리를 생성한다', (startTime, count) => {
+  const sim = new GameSim({ seed: 3, startTime, god: true });
+  sim.player.fireCd = Infinity;
+  runUntil(sim, startTime + 0.65);
+  expect(sim.spawnLog.filter((entry) => entry.kind !== 'boss' && !entry.assault)).toHaveLength(count);
+});
+
+it('세 방향 증원을 2초 전에 예고하고 예고한 시각에 70마리를 생성한다', () => {
   const sim = new GameSim({ seed: 2, startTime: 727.5, god: true });
   sim.player.fireCd = Infinity;
   runUntil(sim, 728);
   expect(sim.assaultWarning?.gates).toHaveLength(3);
   expect(sim.assaultWarning?.at).toBe(730);
+  expect(sim.assaultWarning?.count).toBe(70);
   expect(sim.spawnLog.some((entry) => entry.assault)).toBe(false);
   const firstUnusedId = Math.max(0, ...sim.enemies.map((enemy) => enemy.id)) + 1;
   runUntil(sim, 730);
   const spawns = sim.spawnLog.filter((entry) => entry.assault);
-  expect(spawns).toHaveLength(24);
+  expect(spawns).toHaveLength(70);
   expect(spawns.every((entry) => entry.tick === 730 * RUN_CONFIG.tickRate)).toBe(true);
   const reinforcements = sim.enemies.filter((enemy) => enemy.id >= firstUnusedId
     && enemy.reinforced);
-  expect(reinforcements).toHaveLength(24);
+  expect(reinforcements).toHaveLength(70);
   for (const enemy of reinforcements) {
     expect(enemy.xp).toBe(ENEMY_CONFIG[enemy.kind].xp * 0.5);
     expect(enemy.dmgMul).toBeCloseTo((1 + ENEMY_SCALING.damagePerMinute * 730 / 60) * 1.3);
@@ -112,9 +120,9 @@ it('세 방향 증원을 2초 전에 예고하고 예고한 시각에 24마리�
   expect(sim.assaultWarning).toBeNull();
 });
 
-it('14:30에 살아 있는 보스에게 마지막 증원 30마리가 합류한다', () => {
+it('14:30에 살아 있는 보스에게 마지막 증원 80마리가 합류한다', () => {
   const sim = new GameSim({ seed: 2, startTime: 867.5, god: true });
   sim.player.fireCd = Infinity;
   runUntil(sim, 870);
-  expect(sim.spawnLog.filter((entry) => entry.assault)).toHaveLength(30);
+  expect(sim.spawnLog.filter((entry) => entry.assault)).toHaveLength(80);
 });

@@ -539,7 +539,7 @@ export class GameScene extends Phaser.Scene {
         const start = fx.points[0];
         if (fx.kind === 'echo') {
           const opacity = fx.variant === 'echoCharge' ? 0.18 + (1 - alpha) * 0.59 : alpha * 0.87;
-          this.weaponImage(count++, 'echo', start.x, start.y, { scale: 1.32, alpha: opacity, flipX: fx.points[1].x < start.x });
+          this.weaponImage(count++, 'echo', start.x, start.y, { scale: 1.32, alpha: opacity, flipX: (fx.points[1]?.x ?? start.x) < start.x });
           drawEcho(ground, g, fx, opacity);
           continue;
         }

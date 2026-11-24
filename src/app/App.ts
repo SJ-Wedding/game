@@ -263,6 +263,7 @@ export class App {
       loadout,
       starterRank: loadout.character === 'lumen' ? sim.stacks[loadout.weapon] : undefined,
       swordAngle: loadout.character === 'roan' ? sim.swordAngle : undefined,
+      echo: sim.stacks.echo > 0 ? { growth: sim.weapons.echoStats, luck: sim.luck } : undefined,
       layers,
       picks: sim.picks,
       fusions: [...sim.weapons.fusions],

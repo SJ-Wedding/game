@@ -1,5 +1,5 @@
 import { DEFAULT_LOADOUT, LUMEN, SWORD, characterUpgradeValue, type CharacterUpgradeId, type Loadout } from '../config/characters';
-import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
+import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
 import { OPENING_RELIC_LEVEL, validCarry, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
@@ -58,7 +58,7 @@ export interface SpawnRecord {
 
 interface AssaultWarning {
   at: number;
-  perGate: number;
+  count: number;
   origin: { x: number; y: number };
   gates: { x: number; y: number; angle: number; distance: number }[];
 }
@@ -132,6 +132,7 @@ export class GameSim {
   gems: Gem[] = [];
 
   kills = 0;
+  private echoKillUnits = 0;
   killsByKind: Record<string, number> = {};
   /** 공격 입력이 실제로 발사된 횟수 (입력 중복 검사용) */
   shotsFired = 0;
@@ -402,6 +403,19 @@ export class GameSim {
     return luckFor(this.level, this.meta.luck + this.stats.luck + this.relics.luckBonus);
   }
 
+  get echoKillStacks(): number {
+    return this.echoKillUnits / ECHO_GROWTH.unitsPerStack;
+  }
+
+  private countKill(): void {
+    this.kills++;
+    const { maxStacks, unitsPerStack, luckPerPoint } = ECHO_GROWTH;
+    if (this.echoKillUnits >= maxStacks * unitsPerStack || this.loadout.character !== 'ranger') return;
+    const units = Math.round((1 + Math.max(0, this.luck) * luckPerPoint) * unitsPerStack);
+    this.echoKillUnits = Math.min(maxStacks * unitsPerStack, this.echoKillUnits + units);
+  }
+
+  /** 사거리 안에서 몸 가장자리까지 가장 가까운 적(보스 포함). 무적 연출 중인 보스는 제외. */
   findTarget(range: number): { x: number; y: number; r: number } | null {
     const p = this.player;
     let best: { x: number; y: number; r: number } | null = null;
@@ -555,7 +569,7 @@ export class GameSim {
       if (t < ev.at - (ev.kind === 'assault' ? ASSAULT_CONFIG.warning : 0)) break;
       this.eventIndex++;
       if (ev.kind === 'assault') {
-        if (!ev.bossOnly || (this.boss && !this.boss.dead)) this.warnAssault(ev.at, ev.perGate);
+        if (!ev.bossOnly || (this.boss && !this.boss.dead)) this.warnAssault(ev.at, ev.count);
         continue;
       }
       for (let i = 0; i < ev.count + Number(this.relics.has('elitePact')); i++) {
@@ -572,6 +586,8 @@ export class GameSim {
     // 주기 스폰
     const ph = this.currentSpawnPhase(t);
     if (!ph) return;
+    // 보스전 웨이브의 긴 대기시간을 연장전 첫 돌격수 웨이브에 넘기지 않는다.
+    if (t === RUN_CONFIG.timeLimit) this.spawnTimer = 0;
     this.spawnTimer -= dt;
     if (this.spawnTimer > 0) return;
     const progress = clamp((t - ph.from) / (ph.to - ph.from), 0, 1);
@@ -617,7 +633,7 @@ export class GameSim {
     };
   }
 
-  private warnAssault(at: number, perGate: number): void {
+  private warnAssault(at: number, count: number): void {
     const { x, y } = this.player;
     const origin = { x, y };
     const escape = this.escapeAngle();
@@ -633,29 +649,31 @@ export class GameSim {
       }
       return best;
     });
-    this.assaultWarning = { at, perGate, origin, gates };
-    this.emit('assaultWarning');
+    this.assaultWarning = { at, count, origin, gates };
+    this.emit('assaultWarning', x, y, count);
   }
 
   private spawnAssault(assault: AssaultWarning): void {
     this.assaultWarning = null;
     const ph = this.currentSpawnPhase()!;
-    const budget = Math.floor(ph.maxAlive * this.relics.spawnMultiplier) + assault.perGate * assault.gates.length;
-    // 좌·우·뒤를 번갈아 채운다. 적이 쌓여 있어도 특정 출입구에만 증원이 몰리지 않는다.
-    for (let i = 0; i < assault.perGate && this.enemies.length < budget; i++) {
-      for (const gate of assault.gates) {
-        if (this.enemies.length >= budget) break;
-        const angle = gate.angle + (i - (assault.perGate - 1) / 2) * 0.032;
-        const pos = this.spawnPoint(assault.origin, angle, gate.distance + (i % 2) * 40);
-        const kind = ASSAULT_LINEUP[i % ASSAULT_LINEUP.length];
-        const enemy = this.spawnEnemy(kind, pos.x, pos.y);
-        enemy.reinforced = true;
-        enemy.maxHp = Math.round(enemy.maxHp * ASSAULT_CONFIG.hpMultiplier);
-        enemy.hp = enemy.maxHp;
-        enemy.dmgMul *= ASSAULT_CONFIG.damageMultiplier;
-        enemy.xp *= ASSAULT_CONFIG.xpMultiplier;
-        this.spawnLog.push({ tick: this.tick, kind, angle, distance: gate.distance, assault: true });
-      }
+    const budget = Math.floor(ph.maxAlive * this.relics.spawnMultiplier) + assault.count;
+    const gateCount = assault.gates.length;
+    for (let i = 0; i < assault.count && this.enemies.length < budget; i++) {
+      // 좌·우·뒤를 번갈아 채우고, 각 방향의 실제 인원수로 대형을 가운데 정렬한다.
+      const gateIndex = i % gateCount;
+      const gate = assault.gates[gateIndex];
+      const row = Math.floor(i / gateCount);
+      const rows = Math.ceil((assault.count - gateIndex) / gateCount);
+      const angle = gate.angle + (row - (rows - 1) / 2) * 0.025;
+      const pos = this.spawnPoint(assault.origin, angle, gate.distance + (row % 3) * 36);
+      const kind = ASSAULT_LINEUP[row % ASSAULT_LINEUP.length];
+      const enemy = this.spawnEnemy(kind, pos.x, pos.y);
+      enemy.reinforced = true;
+      enemy.maxHp = Math.round(enemy.maxHp * ASSAULT_CONFIG.hpMultiplier);
+      enemy.hp = enemy.maxHp;
+      enemy.dmgMul *= ASSAULT_CONFIG.damageMultiplier;
+      enemy.xp *= ASSAULT_CONFIG.xpMultiplier;
+      this.spawnLog.push({ tick: this.tick, kind, angle, distance: gate.distance, assault: true });
     }
   }
 
@@ -747,7 +765,7 @@ export class GameSim {
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           this.damageEnemy(e, s.damage, shotAttack(s.source));
-          if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx));
+          if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx), s.echoVolley);
           if (s.pierceLeft) {
             s.pierceLeft--;
             s.hitIds?.add(e.id);
@@ -812,7 +830,7 @@ export class GameSim {
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
       e.dead = true;
-      this.kills++;
+      this.countKill();
       this.relics.onEnemyKilled(e, source);
       if (e.kind === 'elite') this.pendingRewards.push(...(this.relics.has('gamblerCoin') ? ['coin' as const] : []), 'elite', 'armory');
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
@@ -841,7 +859,7 @@ export class GameSim {
     if (b.hp <= 0) {
       b.dead = true;
       this.killsByKind.boss = 1;
-      this.kills++;
+      this.countKill();
     }
     if (basic) {
       this.weapons.onBulletHit(b);

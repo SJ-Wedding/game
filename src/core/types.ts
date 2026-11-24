@@ -127,6 +127,8 @@ export interface Projectile {
   big?: boolean;
   /** 틈새의 거울: 처치로 다시 발동한 잔영 탄. 이 탄의 처치는 다시 발동하지 않는다. */
   echoRepeat?: boolean;
+  /** 같은 메아리 발동에서 나온 탄들이 공유하는 틈새의 거울 발동 여부. */
+  echoVolley?: { repeated: boolean };
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */

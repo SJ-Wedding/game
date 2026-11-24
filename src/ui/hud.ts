@@ -1,3 +1,4 @@
+import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -210,10 +211,14 @@ export class Hud {
     }
     for (const ev of events) {
       if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
-      else if (ev.type === 'assaultWarning') this.flash('2초 후 증원 공세! 화살표 방향에서 적이 몰려옵니다', 2.2);
+      else if (ev.type === 'assaultWarning') this.flash(`${ASSAULT_CONFIG.warning}초 후 증원 공세! ${ev.amount}마리 · 화살표 방향`, ASSAULT_CONFIG.warning + 0.2);
       else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
       else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
-      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장 — ${formatTime(RUN_CONFIG.timeLimit)}부터 강화 돌격수가 몰려옵니다`, 4);
+      else if (ev.type === 'bossSpawn') {
+        const message = sim.elapsed >= RUN_CONFIG.bossAt && !sim.overtime ? `증원 웨이브당 ${ph?.batch}마리`
+          : `${formatTime(RUN_CONFIG.timeLimit)}부터 강화 돌격수가 몰려옵니다`;
+        this.flash(`${BOSS_CONFIG.name} 등장 · ${message}`, 4);
+      }
       else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
     }
     if (this.bannerUntil && performance.now() > this.bannerUntil) {

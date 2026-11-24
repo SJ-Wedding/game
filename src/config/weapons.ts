@@ -8,7 +8,7 @@ export const WEAPONS = {
   barrier: { name: '균열 장벽', description: '회피 경로에 균열을 남겨 처음 건너는 적에게 피해를 줍니다.', color: 0xd698ff },
   spear: { name: '관통 창', description: '잠깐 조준한 뒤 같은 선 위의 적을 한꺼번에 꿰뚫습니다.', color: 0xffecac },
   mark: { name: '낙뢰 표식', description: '같은 적에게 기본탄을 세 번 맞히거나 기본탄으로 처치하면 그 자리에 낙뢰가 떨어져 주변 적도 맞힙니다.', color: 0xe2bbff },
-  echo: { name: '메아리 사격', description: '이전 사격 위치에 나타난 잔영이 같은 방향으로 한 발 더 쏩니다.', color: 0x7df2dd },
+  echo: { name: '메아리 사격', description: '이전 사격 위치의 잔영이 추가탄을 발사합니다. 이번 판 처치와 행운에 따라 탄 수·피해·발동 속도·분신 수가 성장합니다.', color: 0x7df2dd },
   gravity: { name: '중력 구체', description: '느리게 전진하며 일반 적을 끌어당긴 뒤 폭발합니다.', color: 0xb6a2ff },
   infection: { name: '처치 전염', description: '적을 감염시킵니다. 감염된 적이 쓰러지면 주변 적으로 번집니다.', color: 0xa6ea73 },
 } as const;
@@ -25,6 +25,48 @@ export const SPECIAL_WEAPON_POWER: Record<WeaponId, number> = {
   turret: 1.35, flame: 1.85, barrier: 1.65, spear: 1.55, mark: 1.65,
   echo: 1.6, gravity: 1.55,
 };
+
+export const ECHO_GROWTH = {
+  stages: 50,
+  firstStageAt: 50,
+  maxStacks: 8000,
+  unitsPerStack: 10000,
+  luckPerPoint: 0.10,
+  damagePerStep: 0.016,
+  intervalPerStep: 0.008,
+  shotStages: [4, 14, 26, 40],
+  cloneStages: [2, 6, 11, 17, 23, 30, 37, 44, 50],
+  extraCloneDamage: 0.65,
+  laterClonePenalty: 0.05,
+  fusionShare: 0.5,
+} as const;
+
+// 처음에는 50스택에서 시작하며, 뒤로 갈수록 다음 단계에 필요한 스택이 늘어난다.
+export const ECHO_STAGE_THRESHOLDS = Array.from({ length: ECHO_GROWTH.stages }, (_, i) => {
+  const { stages, firstStageAt, maxStacks } = ECHO_GROWTH;
+  const base = firstStageAt * (i + 1);
+  const curve = (maxStacks - firstStageAt * stages) * (i / (stages - 1)) ** 2;
+  return Math.round((base + curve) / 5) * 5;
+});
+
+export function echoCloneDamage(index: number): number {
+  return index === 0 ? 1 : ECHO_GROWTH.extraCloneDamage - Math.max(0, index - 2) * ECHO_GROWTH.laterClonePenalty;
+}
+
+export function echoGrowth(stacks: number) {
+  const progress = Math.min(ECHO_GROWTH.maxStacks, stacks);
+  const next = ECHO_STAGE_THRESHOLDS.findIndex((threshold) => progress < threshold);
+  const stage = next === -1 ? ECHO_GROWTH.stages : next;
+  return {
+    progress,
+    stage,
+    nextAt: stage < ECHO_GROWTH.stages ? ECHO_STAGE_THRESHOLDS[stage] : undefined,
+    shots: 1 + ECHO_GROWTH.shotStages.filter((milestone) => stage >= milestone).length,
+    clones: 1 + ECHO_GROWTH.cloneStages.filter((milestone) => stage >= milestone).length,
+    damageBonus: stage * ECHO_GROWTH.damagePerStep,
+    intervalReduction: stage * ECHO_GROWTH.intervalPerStep,
+  };
+}
 
 /** 첫 값은 획득 직후, 이후 값은 Lv 2와 Lv 3 효과다. */
 export const WEAPON_RANK_EFFECTS = {

@@ -136,6 +136,27 @@ test.describe('성장 시스템', () => {
     await expect(relics).toBeVisible();
   });
 
+  test('메아리 처치 성장의 누적 스택과 분신별 탄 수를 상태창에 표시한다', async ({ page }) => {
+    await startRun(page, '&seed=43&god=1');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      sim.stats.luck = 10;
+      for (let i = 0; i < 2200; i++) {
+        const enemy = sim.spawnEnemy('chaser', 120, 120);
+        sim.damageEnemy(enemy, 1e6, 'basic');
+        sim.enemies.pop();
+      }
+      sim.drainEvents();
+      sim.stacks.echo = 1;
+      sim.picks.push({ id: 'echo', grade: 'common' });
+    });
+    await page.keyboard.press('Tab');
+    const growth = page.getByTestId('echo-growth');
+    await expect(growth.locator('summary')).toHaveText('메아리 처치 성장 · 35/50단계 · 4,400 / 8,000스택');
+    await expect(growth).toContainText('탄 4발/분신 · 분신 7명 · 피해 +56% · 발동 간격 −28%');
+    await expect(growth).toContainText('다음 단계 4,605스택 · 현재 처치당 +2.00스택');
+  });
+
   test('드랍 아이템을 밟으면 효과가 적용된다 (회복 물약)', async ({ page }) => {
     await startRun(page, '&seed=33');
     await waitElapsed(page, 1);

@@ -1,7 +1,7 @@
 import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
-import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
+import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type echoGrowth, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { weaponPreview } from './weaponPreview';
@@ -297,6 +297,7 @@ export class Screens {
           ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',
             text: `${WEAPON_RANK_EFFECTS[weapon].label} ${weaponRankEffect(weapon, c.nextStack - 1)} → ${weaponRankEffect(weapon, c.nextStack)}${WEAPON_RANK_EFFECTS[weapon].unit}`,
           })] : []),
+          ...(weapon === 'echo' ? [el('small', { class: 'mastery-bonus', text: `이번 판 처치가 누적됩니다 · 행운 1당 처치 스택 +${ECHO_GROWTH.luckPerPoint}` })] : []),
           el('span', { class: 'stack', text: weapon ? (c.nextStack === 1 ? `획득 즉시 자동 발동 · 최대 Lv ${c.def.maxStacks}` : `Lv ${c.nextStack - 1} → Lv ${c.nextStack} / 최대 Lv ${c.def.maxStacks}`) : c.nextStack === 1 ? '신규 강화' : `${c.nextStack - 1} → ${c.nextStack}중첩` }),
         );
       } else if (c.kind === 'fusion') {
@@ -307,6 +308,7 @@ export class Screens {
           el('span', { class: 'desc', text: recipe.pair.map((id) => WEAPONS[id].name).join(' + ') }),
           el('span', { class: 'desc', text: recipe.effect }),
           el('span', { class: 'desc', text: `재료 공격을 대체 · ${recipe.interval}초 주기 · 방어 ${FUSION_ARMOR_PIERCE * 100}% 관통` }),
+          ...(c.id === 'volley' ? [el('small', { class: 'mastery-bonus', text: '메아리의 처치 피해·발동 간격 보너스 50% 계승' })] : []),
         );
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
@@ -351,6 +353,7 @@ export class Screens {
     loadout: Loadout;
     starterRank?: number;
     swordAngle?: number;
+    echo?: { growth: ReturnType<typeof echoGrowth>; luck: number };
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
     fusions: FusionId[];
@@ -436,6 +439,7 @@ export class Screens {
         ...(opts.swordAngle ? [el('small', { class: 'muted', text: `검 타격 각도 ${opts.swordAngle}°` })] : []),
         el('h3', { text: '이번 판 강화 스택 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
+        ...(opts.echo ? [this.echoStatus(opts.echo.growth, opts.echo.luck, opts.fusions.includes('volley'))] : []),
         ...(!specialist && !opts.recipesOpen ? [recipes] : []),
         el('p', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` }),
     ]);
@@ -470,6 +474,25 @@ export class Screens {
         close,
         preview.tooltip,
     ]));
+  }
+
+  private echoStatus(growth: ReturnType<typeof echoGrowth>, luck: number, fused: boolean): HTMLElement {
+    const { stages, maxStacks, luckPerPoint, damagePerStep, intervalPerStep, extraCloneDamage, cloneStages, shotStages, fusionShare } = ECHO_GROWTH;
+    const fmt = (stacks: number) => Math.floor(stacks).toLocaleString('ko-KR');
+    const share = fused ? fusionShare : 1;
+    const growthPct = (value: number) => `${Number((value * 100).toFixed(1))}%`;
+    const active = `피해 +${growthPct(growth.damageBonus * share)} · 발동 간격 −${growthPct(growth.intervalReduction * share)}`;
+    const current = fused ? `잔영 관통포에 적용 · ${active}` : `탄 ${growth.shots}발/분신 · 분신 ${growth.clones}명 · ${active}`;
+    return el('details', { class: 'fusion-recipes echo-growth', open: '', 'data-testid': 'echo-growth' }, [
+      el('summary', { text: `메아리 처치 성장 · ${growth.stage}/${stages}단계 · ${fmt(growth.progress)} / ${fmt(maxStacks)}스택` }),
+      el('p', { text: current }),
+      el('small', { class: 'muted', text: [
+        growth.nextAt === undefined ? '최대 성장' : `다음 단계 ${fmt(growth.nextAt)}스택`,
+        `현재 처치당 +${(1 + Math.max(0, luck) * luckPerPoint).toFixed(2)}스택`,
+        `단계마다 피해 +${growthPct(damagePerStep * share)}, 발동 간격 −${growthPct(intervalPerStep * share)}`,
+      ].join(' · ') }),
+      ...(!fused ? [el('p', { class: 'muted', text: `탄 +1발 ${shotStages.join('·')}단계 · 분신 +1명 ${cloneStages.join('·')}단계 · 추가 분신 피해 ${Math.round(extraCloneDamage * 100)}%부터 차등 적용` })] : []),
+    ]);
   }
 
   /** 강화 상점: 토큰으로 영구 강화 구매 */

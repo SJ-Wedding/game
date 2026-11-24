@@ -1,5 +1,5 @@
 import { chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
-import { WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
+import { ECHO_GROWTH, echoCloneDamage, echoGrowth, WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -7,6 +7,7 @@ import type { GameSim } from './sim';
 import type { Boss, Enemy } from './types';
 
 interface Point { x: number; y: number }
+interface EchoAim extends Point { angle: number }
 type Target = Boss | Enemy;
 type FusionBurst = Exclude<FusionId, 'tempest'>;
 interface Device extends Point {
@@ -77,8 +78,8 @@ export class WeaponSystem {
   readonly infected = new Map<Enemy, number>();
   private readonly orbitHits = new Map<Target, number>();
   private readonly contagion: Point[] = [];
-  private previousShot: (Point & { angle: number; at: number }) | null = null;
-  private echo: (Point & { angle: number; at: number }) | null = null;
+  private previousShot: (EchoAim & { at: number }) | null = null;
+  private echo: (EchoAim & { at: number }) | null = null;
   private trail: Point | null = null;
   private dodgeTrail: Point | null = null;
   /** 쌍월 톱니: 회전 칼날 처치 수 */
@@ -179,7 +180,8 @@ export class WeaponSystem {
   private fusionDamage(id: FusionId): number {
     const recipe = WEAPON_FUSIONS[id];
     const grade = (this.gradeBonus(recipe.pair[0]) + this.gradeBonus(recipe.pair[1])) / 2;
-    return this.sim.stats.damage * recipe.damage * (1 + grade) * this.sim.relics.fusionMultiplier(id);
+    const growth = id === 'volley' ? 1 + this.echoStats.damageBonus * ECHO_GROWTH.fusionShare : 1;
+    return this.sim.stats.damage * recipe.damage * (1 + grade) * this.sim.relics.fusionMultiplier(id) * growth;
   }
 
   private hitFusion(id: FusionId, target: Target, damage: number): void {
@@ -202,6 +204,7 @@ export class WeaponSystem {
       if (id === 'storm' && relics.has('secondBell')) { radius *= 0.75; interval *= 2 / 3; }
       if (id === 'tempest' && relics.has('returnRing')) interval *= 1.2;
       if (id === 'eclipse' && relics.has('anchor')) radius *= 1.5;
+      if (id === 'volley') interval *= 1 - this.echoStats.intervalReduction * ECHO_GROWTH.fusionShare;
       const range = recipe.range + reachBonus * 0.85;
       const target = this.nearest(player, range);
       if (!target) continue;
@@ -461,17 +464,7 @@ export class WeaponSystem {
       // 별의 닻: 중력 구체 크기 +50%
       if (this.available('gravity', 4.2)) this.device('gravity', p, 1.9, (this.rankEffect('gravity') + sim.reachBonus * 0.16) * (sim.relics.has('anchor') ? 1.5 : 1), p.aim);
     }
-    if (this.echo && this.echo.at <= now) {
-      const { x, y, angle } = this.echo;
-      this.fireEcho(x, y, angle, false);
-      this.echo = null;
-    }
-    // 기본탄의 발사 프레임을 기다리지 않아야 잔영의 짧아진 주기가 그대로 적용된다.
-    const shot = this.previousShot;
-    if (!this.echo && shot && now - shot.at <= 1 / sim.relics.fireRate + 0.2 && this.available('echo', this.rankEffect('echo'))) {
-      this.echo = { ...shot, at: now + ECHO_DELAY };
-      this.trace('echo', [shot, { x: shot.x + Math.cos(shot.angle) * 45, y: shot.y + Math.sin(shot.angle) * 45 }], 0, ECHO_DELAY, 'echoCharge');
-    }
+    this.updateEcho(now);
     if (this.enabled('orbit')) this.orbit();
     if (this.enabled('infection')) this.spread(now);
     this.updateFusions(dt);
@@ -482,27 +475,81 @@ export class WeaponSystem {
     this.updateBurns(now);
   }
 
-  /** 메아리 사격 발사. repeat 은 틈새의 거울로 처치 자리에서 다시 발동한 잔영이다. */
-  private fireEcho(x: number, y: number, angle: number, repeat: boolean): void {
-    const sim = this.sim;
-    const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
-    // 디자인 개선(92359f6) 방식: 양방향 잔영을 하나의 궤적 효과로 그린다
-    const points = [{ x, y }];
-    for (const direction of angles) {
-      const dx = Math.cos(direction);
-      const dy = Math.sin(direction);
-      points.push({ x: x + dx * 45, y: y + dy * 45 });
-      sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
-        damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo',
-        ...(repeat ? { echoRepeat: true } : {}) });
-    }
-    this.trace('echo', points);
+  get echoStats() {
+    return echoGrowth(this.sim.echoKillStacks);
   }
 
-  /** 틈새의 거울: 잔영 탄으로 적을 처치하면 그 자리에서 잔영이 한 번 더 발동한다 (연쇄되지 않음). */
-  onEchoKill(at: Point, angle: number): void {
-    if (!this.sim.relics.has('mirror') || !this.enabled('echo')) return;
-    this.fireEcho(at.x, at.y, angle, true);
+  private updateEcho(now: number): void {
+    if (this.echo && this.echo.at <= now) {
+      this.fireEcho(this.echo, false);
+      this.echo = null;
+    }
+    const shot = this.previousShot;
+    const { relics } = this.sim;
+    if (this.echo || !shot || now - shot.at > 1 / relics.fireRate + 0.2) return;
+    // 기본탄 발사 사이에도 메아리 전용 주기로 조준을 시작할 수 있다.
+    const growth = this.echoStats;
+    const interval = this.rankEffect('echo') * (1 - growth.intervalReduction);
+    if (!this.available('echo', interval)) return;
+    const windup = Math.min(ECHO_DELAY, interval * relics.cooldownMultiplier * 0.8);
+    this.echo = { ...shot, at: now + windup };
+    for (const clone of this.echoFormation(shot, growth.clones)) {
+      this.trace('echo', [clone, {
+        x: clone.x + Math.cos(clone.angle) * 45, y: clone.y + Math.sin(clone.angle) * 45,
+      }], 0, windup, 'echoCharge');
+    }
+  }
+
+  private echoFormation(origin: EchoAim, count: number): EchoAim[] {
+    const dx = Math.cos(origin.angle);
+    const dy = Math.sin(origin.angle);
+    const pad = ARENA_CONFIG.wallPadding + 12;
+    return Array.from({ length: count }, (_, i) => {
+      const column = i % 5;
+      const lane = Math.ceil(column / 2) * (column % 2 ? -1 : 1);
+      const depth = Math.floor(i / 5) * 38;
+      return {
+        x: clamp(origin.x - dy * lane * 36 - dx * depth, pad, ARENA_CONFIG.width - pad),
+        y: clamp(origin.y + dx * lane * 36 - dy * depth, pad, ARENA_CONFIG.height - pad),
+        angle: origin.angle + lane * 0.11,
+      };
+    });
+  }
+
+  private fireEcho(origin: EchoAim, repeat: boolean): void {
+    const sim = this.sim;
+    const { shots, clones, damageBonus } = this.echoStats;
+    const mirror = sim.relics.has('mirror');
+    const volley = mirror && !repeat ? { repeated: false } : undefined;
+    const damage = this.weaponDamage('echo', 1.15 * (mirror ? 0.7 : 1) * (1 + damageBonus));
+    for (const [index, clone] of this.echoFormation(origin, clones).entries()) {
+      const cloneDamage = damage * echoCloneDamage(index);
+      const directions = mirror ? [clone.angle, clone.angle + Math.PI] : [clone.angle];
+      const points: Point[] = [clone];
+      for (const direction of directions) {
+        for (let i = 0; i < shots; i++) {
+          const angle = direction + (i - (shots - 1) / 2) * 0.13;
+          const dx = Math.cos(angle);
+          const dy = Math.sin(angle);
+          points.push({ x: clone.x + dx * 45, y: clone.y + dy * 45 });
+          sim.playerShots.push({
+            x: clone.x, y: clone.y, vx: dx * 620, vy: dy * 620, r: 5,
+            damage: cloneDamage,
+            life: 0.9 + sim.reachBonus / 620, source: 'echo',
+            ...(repeat ? { echoRepeat: true } : {}),
+            ...(volley ? { echoVolley: volley } : {}),
+          });
+        }
+      }
+      this.trace('echo', points);
+    }
+  }
+
+  /** 틈새의 거울: 같은 발동에서 나온 탄은 첫 처치에서만 한 번 더 발동한다. */
+  onEchoKill(at: Point, angle: number, volley?: { repeated: boolean }): void {
+    if (!this.sim.relics.has('mirror') || !this.enabled('echo') || volley?.repeated) return;
+    if (volley) volley.repeated = true;
+    this.fireEcho({ x: at.x, y: at.y, angle }, true);
   }
 
   private updateMineFields(now: number): void {

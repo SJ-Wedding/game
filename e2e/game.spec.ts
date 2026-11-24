@@ -122,9 +122,17 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
   test('후반 증원: 예고 뒤 세 방향에서 강화 몬스터가 등장한다', async ({ page }) => {
     await startRun(page, '&seed=6&start=727&god=1');
     await expect(page.getByTestId('hud-banner')).toContainText('2초 후 증원 공세');
+    await expect(page.getByTestId('hud-banner')).toContainText('70마리');
     await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.assaultWarning?.gates.length ?? 0)).toBe(3);
     await waitElapsed(page, 730.1);
-    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.spawnLog.filter((entry: { assault?: boolean }) => entry.assault).length)).toBe(24);
+    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.spawnLog.filter((entry: { assault?: boolean }) => entry.assault).length)).toBe(70);
+  });
+
+  test('마지막 5분 전환을 안내하고 50마리 웨이브가 시작된다', async ({ page }) => {
+    await startRun(page, '&seed=6&start=599.5&god=1');
+    await expect(page.getByTestId('hud-banner')).toContainText('마지막 5분! 대규모 증원');
+    await expect(page.getByTestId('hud-banner')).toContainText('50마리');
+    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.spawnLog.length)).toBeGreaterThanOrEqual(50);
   });
 
   test('연장전: 15:00부터 강화 돌격수만 새로 등장하고 연장 시간이 표시된다', async ({ page }) => {

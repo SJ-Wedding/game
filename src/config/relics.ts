@@ -27,7 +27,7 @@ export const RELICS = {
   compass: { source: 'elite', symbol: '✥', name: '매설자의 나침반', effect: '회피를 마친 자리에 즉시 무장된 균열 지뢰를 설치합니다. 빙결 지뢰진으로 합체한 뒤에는 해당 위치의 적에게 빙결 지뢰진이 발동합니다. 회피 대기시간 +0.5초.' },
   cog: { source: 'elite', symbol: '☾', weapon: 'orbit', name: '쌍월 톱니', effect: '칼날 +1개. 평소 회전 반경 +20%. 회전 칼날로 적을 처치할 때마다 회전 칼날 피해 +0.5%, 최대 +15%.' },
   anchor: { source: 'elite', symbol: '⊙', weapon: 'gravity', name: '별의 닻', effect: '중력 구체가 제자리에서 발동합니다. 중력 구체 크기 +50%, 적을 끌어오는 힘 +50%.' },
-  mirror: { source: 'elite', symbol: '⟐', weapon: 'echo', name: '틈새의 거울', effect: '잔영이 반대 방향으로도 사격합니다. 잔영으로 적을 처치하면 그 자리에서 잔영이 한 번 더 발동합니다. 잔영 피해 −30%.' },
+  mirror: { source: 'elite', symbol: '⟐', weapon: 'echo', name: '틈새의 거울', effect: '잔영이 반대 방향으로도 사격합니다. 발동마다 잔영 탄으로 처음 적을 처치한 자리에서 잔영이 한 번 더 발동합니다. 잔영 피해 −30%.' },
   fuse: { source: 'elite', symbol: '⁕', weapon: 'mine', name: '두 번째 도화선', effect: '균열 지뢰가 터지면 지뢰 폭발 범위만큼의 장판이 2초간 남아 피해를 줍니다. 장판의 초당 피해는 지뢰 폭발 피해의 10%.' },
   laces: { source: 'elite', symbol: '≈', weapon: 'flame', name: '용광로의 신발끈', effect: '불길 위의 적은 20% 느려집니다. 같은 불길에 1초 이상 머문 적은 2초간 화상 피해를 받습니다. 화상 피해는 불길 피해의 20%.' },
   nail: { source: 'elite', symbol: '†', weapon: 'barrier', name: '문지기의 못', effect: '균열 장벽에 닿은 일반 적은 0.8초간 이동이 멈춥니다. 보스와 돌진 중인 적에게는 추가 피해를 줍니다.' },
