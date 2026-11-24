@@ -125,7 +125,7 @@ export class Screens {
 
     const children: HTMLElement[] = [
       el('h1', { class: 'logo', text: '균열 아레나' }),
-      el('p', { class: 'tagline', text: `몰려드는 균열의 괴물을 쓰러뜨리고 강해져, ${formatTime(RUN_CONFIG.timeLimit)} 안에 ${josa(BOSS_CONFIG.name, '을/를')} 처치하라.` }),
+      el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
       el('div', { class: 'row buttons' }, [play, shop]),
       el('div', { class: 'row' }, [controls, rec]),
       this.volumeControl(volume, h.onVolume),

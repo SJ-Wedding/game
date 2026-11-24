@@ -141,12 +141,12 @@ export class Hud {
     c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
     c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
 
-    c.text(this.timer, 'timer', formatTime(Math.ceil(sim.remaining)));
+    c.text(this.timer, 'timer', sim.overtime ? `+${formatTime(Math.floor(sim.elapsed - RUN_CONFIG.timeLimit))}` : formatTime(Math.ceil(sim.remaining)));
     const toBoss = RUN_CONFIG.bossAt - sim.elapsed;
     c.text(
       this.timerSub,
       'timerSub',
-      sim.bossSpawned ? '남은 시간 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`,
+      sim.overtime ? '연장전 · 강화 돌격수 출현' : sim.bossSpawned ? '연장전까지 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`,
     );
     c.toggle(this.timer, 'urgent', 'urgent', sim.bossSpawned && sim.remaining < 30);
     c.text(this.kills, 'kills', `처치 ${sim.kills}`);
@@ -195,9 +195,10 @@ export class Hud {
     }
     for (const ev of events) {
       if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
+      else if (ev.type === 'assaultWarning') this.flash('2초 후 증원 공세! 화살표 방향에서 적이 몰려옵니다', 2.2);
       else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
       else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
-      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장 — 기본탄 피해 감소 · ${formatTime(RUN_CONFIG.timeLimit)}까지 처치`, 4);
+      else if (ev.type === 'bossSpawn') this.flash(`${BOSS_CONFIG.name} 등장 — ${formatTime(RUN_CONFIG.timeLimit)}부터 강화 돌격수가 몰려옵니다`, 4);
       else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
     }
     if (this.bannerUntil && performance.now() > this.bannerUntil) {

@@ -27,7 +27,7 @@ describe('유물 보상 및 계승', () => {
   it('중간 보스 보상은 전투를 멈추고 중복 없는 별도 후보를 보여준다', () => {
     const sim = makeSim({ carryRelics: ['crown'], presetUpgrades: { mark: 2 } });
     const elite = sim.spawnEnemy('elite', 900, 900);
-    sim.damageEnemy(elite, elite.hp);
+    sim.damageEnemy(elite, 1e6);
     sim.step(IDLE_INPUT);
     expect(sim.phase).toBe('levelup');
     expect(sim.step(IDLE_INPUT)).toBe(false);

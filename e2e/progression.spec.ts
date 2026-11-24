@@ -149,7 +149,7 @@ test.describe('성장 시스템', () => {
       const sim = (window as any).__rift.sim;
       Object.assign(sim.stacks, { chain: 3, mark: 3 });
       const elite = sim.spawnEnemy('elite', sim.player.x + 150, sim.player.y);
-      sim.damageEnemy(elite, elite.hp);
+      sim.damageEnemy(elite, 1e6);
     });
     await expect(page.getByRole('heading', { name: '중간 보스 유물' })).toBeVisible();
     await page.getByTestId('choice-0').click();
@@ -214,7 +214,7 @@ test.describe('성장 시스템', () => {
       const sim = (window as any).__rift.sim;
       sim.relics.acquire('gamblerCoin');
       const elite = sim.spawnEnemy('elite', sim.player.x + 150, sim.player.y);
-      sim.damageEnemy(elite, elite.hp);
+      sim.damageEnemy(elite, 1e6);
     });
     await expect(page.getByRole('heading', { name: '도박꾼의 동전' })).toBeVisible();
     await expect(page.locator('.card')).toHaveCount(2);

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BOSS_CONFIG } from '../src/config/boss';
+import { ENEMY_CONFIG, ENEMY_SCALING } from '../src/config/enemies';
+import { createEnemy } from '../src/core/enemies';
 import { RUN_CONFIG } from '../src/config/run';
 import { IDLE_INPUT } from '../src/core/types';
 import { makeSim, runTicks, runUntil } from './helpers';
@@ -39,10 +41,10 @@ describe('보스 등장', () => {
     expect(boss.hp).toBe(boss.maxHp);
   });
 
-  it('체력이 절반 이하가 되면 2페이즈로 전환한다', () => {
+  it('체력이 60%가 되면 2페이즈로 전환한다', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.bossAt, god: true });
     runTicks(sim, 120);
-    sim.damageBoss(sim.boss!.maxHp * 0.55);
+    sim.damageBoss(sim.boss!.maxHp * 0.4);
     sim.step(IDLE_INPUT);
     expect(sim.boss!.phase).toBe(2);
     expect(sim.boss!.state).toBe('phaseShift');
@@ -64,23 +66,33 @@ describe('승리와 패배', () => {
     expect(sim.elapsed).toBe(t); // 종료 후 시간 정지
   });
 
-  it('15:00 까지 보스를 처치하지 못하면 시간 초과 패배', () => {
+  it('15:00에 보스가 살아 있으면 강화 돌격수 연장전으로 진입한다', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.timeLimit - 3, god: true });
+    sim.player.fireCd = Infinity;
     runUntil(sim, RUN_CONFIG.timeLimit - 1 / RUN_CONFIG.tickRate);
-    expect(sim.phase).not.toBe('ended');
+    expect(sim.overtime).toBe(false);
     runTicks(sim, 1);
-    expect(sim.phase).toBe('ended');
-    expect(sim.result).toMatchObject({ outcome: 'defeat', cause: 'timeout', killedBy: null });
-    expect(sim.result!.survivalTime).toBe(RUN_CONFIG.timeLimit);
-    expect(sim.result!.bossHpRatio).toBeGreaterThan(0);
+    expect(sim.overtime).toBe(true);
+    expect(sim.phase).toBe('combat');
+    expect(sim.result).toBeNull();
+    runTicks(sim, 180);
+    const spawned = sim.spawnLog.filter((entry) => entry.tick >= RUN_CONFIG.timeLimit * RUN_CONFIG.tickRate);
+    expect(spawned.length).toBeGreaterThan(0);
+    expect(spawned.every((entry) => entry.kind === 'charger')).toBe(true);
+    const normal = createEnemy(0, 'charger', 1000, 1000, RUN_CONFIG.timeLimit - 1 / RUN_CONFIG.tickRate);
+    const overtime = createEnemy(0, 'charger', 1000, 1000, RUN_CONFIG.timeLimit);
+    const scaledHp = ENEMY_CONFIG.charger.hp * (1 + ENEMY_SCALING.hpPerMinute * RUN_CONFIG.timeLimit / 60);
+    expect(overtime.maxHp).toBe(Math.round(scaledHp * 1.5));
+    expect(overtime.dmgMul).toBeCloseTo(normal.dmgMul * 2, 3);
   });
 
-  it('처음부터 아무것도 하지 않아도(무적) 정확히 15:00 에 시간 초과로 끝난다', () => {
-    const sim = makeSim({ seed: 3, god: true });
-    sim.player.fireCd = Infinity; // 자동 사격으로 클리어하지 않는 시간 초과 상황을 만든다.
-    runUntil(sim, RUN_CONFIG.timeLimit + 10);
-    expect(sim.tick).toBe(RUN_CONFIG.timeLimit * RUN_CONFIG.tickRate);
-    expect(sim.result?.cause).toBe('timeout');
+  it('연장전에서 보스를 처치해도 승리한다', () => {
+    const sim = makeSim({ startTime: RUN_CONFIG.timeLimit, god: true });
+    runTicks(sim, 120);
+    sim.damageBoss(sim.boss!.maxHp);
+    sim.step(IDLE_INPUT);
+    expect(sim.result).toMatchObject({ outcome: 'victory', cause: 'boss' });
+    expect(sim.result!.survivalTime).toBeGreaterThan(RUN_CONFIG.timeLimit);
   });
 
   it('사망하면 마지막으로 맞은 공격이 원인으로 기록된다', () => {

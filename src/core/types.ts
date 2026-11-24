@@ -64,6 +64,7 @@ export interface Enemy {
   dmgMul: number;
   xp: number;
   basicResistance: number;
+  reinforced: boolean;
   state: EnemyState;
   /** 현재 상태 남은 시간 */
   timer: number;
@@ -164,6 +165,7 @@ export type SimEventType =
   | 'levelup'
   | 'pickup'
   | 'eliteSpawn'
+  | 'assaultWarning'
   | 'bossSpawn'
   | 'bossPhase'
   | 'bossAttack'

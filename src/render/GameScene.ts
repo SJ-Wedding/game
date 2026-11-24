@@ -3,6 +3,7 @@ import { ARENA_CONFIG, VIEW_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
 import { DROP_CONFIG } from '../config/drops';
 import { ENEMY_CONFIG } from '../config/enemies';
+import { ASSAULT_CONFIG } from '../config/spawns';
 import type { App } from '../app/App';
 import { BOSS_CHARGE_LENGTH } from '../core/boss';
 import type { GameSim } from '../core/sim';
@@ -262,6 +263,23 @@ export class GameScene extends Phaser.Scene {
     if (!sim) return;
     const t = sim.elapsed;
 
+    const assault = sim.assaultWarning;
+    if (assault) {
+      const opacity = 0.6 + 0.35 * (1 - Math.max(0, assault.at - t) / ASSAULT_CONFIG.warning);
+      for (const gate of assault.gates) {
+        const dx = Math.cos(gate.angle);
+        const dy = Math.sin(gate.angle);
+        const reach = Math.min(240, gate.distance * 0.65);
+        const x = assault.origin.x + dx * reach;
+        const y = assault.origin.y + dy * reach;
+        const tip = { x: x - dx * 20, y: y - dy * 20 };
+        ground.lineStyle(5, 0xffb45d, opacity).strokePoints([
+          { x: x - dy * 15, y: y + dx * 15 }, tip, { x: x + dy * 15, y: y - dx * 15 },
+        ]);
+        ground.lineStyle(2, 0xffffb3, opacity).lineBetween(x + dx * 26, y + dy * 26, tip.x, tip.y);
+      }
+    }
+
     // 1) 장판 예고 (낙화)
     for (const h of sim.hazards) {
       const k = h.t / h.dur;
@@ -513,6 +531,12 @@ export class GameScene extends Phaser.Scene {
       .setFlipX(Math.cos(angle) < -0.15).setScale(e.kind === 'elite' ? 3 : 2);
     if (e.basicResistance > 0) {
       this.groundEffects.lineStyle(2, 0xe2c9a3, 0.76).strokeCircle(e.x, e.y, e.r + 5);
+    }
+    if (e.reinforced) {
+      const top = e.y - e.r - 7;
+      this.g.lineStyle(2, 0xffb26c, 0.92).strokePoints([
+        { x: e.x - 5, y: top + 3 }, { x: e.x, y: top }, { x: e.x + 5, y: top + 3 },
+      ]);
     }
     if (e.flash > 0) image.setTintFill(PALETTE.hit);
     else image.clearTint();

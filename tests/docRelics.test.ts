@@ -158,7 +158,7 @@ describe('2장: 생존, 흡수 및 방어', () => {
   it('가시 돋친 철갑: 받은 피해의 150%를 반사하고 피격 무적 +0.4초', () => {
     const sim = withRelics('thornMail');
     const p = sim.player;
-    const e = sim.spawnEnemy('elite', p.x + 100, p.y);
+    const e = sim.spawnEnemy('chaser', p.x + 100, p.y);
     const hp = e.hp;
     sim.hurtPlayer(10, '시험');
     expect(hp - e.hp).toBeCloseTo(15);
@@ -272,7 +272,7 @@ describe('3장: 기동성 및 특수 무기 순환', () => {
   it('폭풍의 핵: 1,500px 이동 뒤 다음 사격이 반경 160px 충격파(공격력 200%)', () => {
     const sim = withRelics('stormCore');
     const p = sim.player;
-    const e = sim.spawnEnemy('elite', p.x + 100, p.y);
+    const e = sim.spawnEnemy('chaser', p.x + 100, p.y);
     const hp = e.hp;
     sim.relics.onMove(true, 1499);
     sim.relics.volley();

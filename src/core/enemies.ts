@@ -1,5 +1,6 @@
 import { ARENA_CONFIG } from '../config/arena';
 import { ENEMY_CONFIG, ENEMY_SCALING, type EnemyKind } from '../config/enemies';
+import { RUN_CONFIG } from '../config/run';
 import { clamp, dist } from './math';
 import type { GameSim } from './sim';
 import type { Enemy } from './types';
@@ -8,7 +9,8 @@ import type { Enemy } from './types';
 export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t: number): Enemy {
   const c = ENEMY_CONFIG[kind];
   const minutes = t / 60;
-  const hp = Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes));
+  const boosted = kind === 'charger' && t >= RUN_CONFIG.timeLimit;
+  const hp = Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes) * (boosted ? ENEMY_SCALING.overtimeChargerHp : 1));
   return {
     id,
     kind,
@@ -21,10 +23,11 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
     slowUntil: 0,
     rootedUntil: 0,
     fireSlowUntil: 0,
-    dmgMul: 1 + ENEMY_SCALING.damagePerMinute * minutes,
+    dmgMul: (1 + ENEMY_SCALING.damagePerMinute * minutes) * (boosted ? ENEMY_SCALING.overtimeChargerDamage : 1),
     xp: c.xp,
     basicResistance: t >= ENEMY_SCALING.armorAt && (kind === 'charger' || kind === 'elite')
       ? ENEMY_SCALING.basicResistance : 0,
+    reinforced: boosted,
     state: 'move',
     timer: 0,
     // 등장 직후 바로 공격하지 않도록 첫 공격에 약간의 여유

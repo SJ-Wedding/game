@@ -113,7 +113,7 @@ export const ENEMY_CONFIG: {
   },
   elite: {
     name: '균열 수호자',
-    hp: 700,
+    hp: 1050,
     speed: 84,
     radius: 30,
     contactDamage: 15,
@@ -146,8 +146,12 @@ export const ENEMY_SCALING = {
   resistanceAt: 480,
   initialResistance: 0.15,
   resistancePerMinute: 0.055,
-  maxResistance: 0.45,
+  finalResistancePerMinute: 0.094,
+  maxResistance: 0.55,
   armorAt: 540,
   basicResistance: 0.30,
   damagePerMinute: 0.02,
+  eliteDurability: 1.5,
+  overtimeChargerHp: 1.5,
+  overtimeChargerDamage: 2,
 } as const;

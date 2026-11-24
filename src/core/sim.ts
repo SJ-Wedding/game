@@ -7,7 +7,7 @@ import { ENEMY_CONFIG, ENEMY_SCALING, type EnemyKind, type NormalEnemyKind } fro
 import { AUTO_COMBAT, COMBAT_REACH, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
-import { SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
+import { ASSAULT_CONFIG, SPAWN_EVENTS, SPAWN_PHASES, type SpawnPhase } from '../config/spawns';
 import { DROPS, DROP_CONFIG, type DropKind } from '../config/drops';
 import { ALL_UPGRADES, UPGRADE_BY_ID, WEAPON_UPGRADES, type UpgradeId } from '../config/upgrades';
 import { metaBonus, type MetaBonus, type MetaPurchases } from './meta';
@@ -51,7 +51,17 @@ export interface SpawnRecord {
   /** 플레이어 기준 오프셋 난수 (각도, 거리) */
   angle: number;
   distance: number;
+  assault?: true;
 }
+
+interface AssaultWarning {
+  at: number;
+  perGate: number;
+  origin: { x: number; y: number };
+  gates: { x: number; y: number; angle: number; distance: number }[];
+}
+
+const ASSAULT_LINEUP = ['charger', 'spitter', 'charger', 'chaser', 'charger', 'spitter', 'chaser', 'chaser'] as const;
 
 /**
  * 전투 규칙 전체. Phaser·DOM 에 의존하지 않으므로 Node 에서 테스트·시뮬레이션할 수 있다.
@@ -108,6 +118,7 @@ export class GameSim {
   enemies: Enemy[] = [];
   boss: Boss | null = null;
   bossSpawned = false;
+  assaultWarning: AssaultWarning | null = null;
   playerShots: Projectile[] = [];
   enemyShots: Projectile[] = [];
   hazards: Hazard[] = [];
@@ -199,6 +210,10 @@ export class GameSim {
 
   get remaining(): number {
     return Math.max(0, RUN_CONFIG.timeLimit - this.elapsed);
+  }
+
+  get overtime(): boolean {
+    return this.elapsed >= RUN_CONFIG.timeLimit;
   }
 
   get assisted(): boolean {
@@ -444,9 +459,15 @@ export class GameSim {
   private updateSpawner(dt: number): void {
     const t = this.elapsed;
 
-    // 시각 이벤트 (엘리트)
-    while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at <= t) {
-      const ev = SPAWN_EVENTS[this.eventIndex++];
+    if (this.assaultWarning && t >= this.assaultWarning.at) this.spawnAssault(this.assaultWarning);
+    while (this.eventIndex < SPAWN_EVENTS.length) {
+      const ev = SPAWN_EVENTS[this.eventIndex];
+      if (t < ev.at - (ev.kind === 'assault' ? ASSAULT_CONFIG.warning : 0)) break;
+      this.eventIndex++;
+      if (ev.kind === 'assault') {
+        if (!ev.bossOnly || (this.boss && !this.boss.dead)) this.warnAssault(ev.at, ev.perGate);
+        continue;
+      }
       for (let i = 0; i < ev.count + Number(this.relics.has('elitePact')); i++) {
         const pos = this.rollSpawnPosition();
         this.spawnLog.push({ tick: this.tick, kind: ev.kind, angle: pos.angle, distance: pos.distance });
@@ -466,19 +487,23 @@ export class GameSim {
     const progress = clamp((t - ph.from) / (ph.to - ph.from), 0, 1);
     const density = this.relics.spawnMultiplier;
     this.spawnTimer += lerp(ph.interval[0], ph.interval[1], progress) / density;
+    const weights = this.boss?.phase === 2 && ph.phase2Weights ? ph.phase2Weights : ph.weights;
+    const xpMultiplier = ph.xpMultiplier ?? 1;
+    const flank = t >= RUN_CONFIG.finalAssaultAt && t < 720;
+    const direction = flank ? this.escapeAngle() : undefined;
     for (let i = 0; i < ph.batch; i++) {
       // 난수는 생성 여부와 관계없이 항상 같은 개수를 소비 → 같은 시드면 같은 스폰 순서
-      const kind = this.rollKind(ph);
-      const pos = this.rollSpawnPosition();
+      const kind = this.rollKind(weights);
+      const pos = this.rollSpawnPosition(kind === 'chaser' ? undefined : direction, kind === 'spitter');
       const alive = this.enemies.length;
       if (alive >= Math.floor(ph.maxAlive * density)) continue;
       this.spawnLog.push({ tick: this.tick, kind, angle: pos.angle, distance: pos.distance });
-      this.spawnEnemy(kind, pos.x, pos.y);
+      this.spawnEnemy(kind, pos.x, pos.y).xp *= xpMultiplier;
     }
   }
 
-  private rollKind(ph: SpawnPhase): NormalEnemyKind {
-    const entries = Object.entries(ph.weights) as [NormalEnemyKind, number][];
+  private rollKind(weights: SpawnPhase['weights']): NormalEnemyKind {
+    const entries = Object.entries(weights) as [NormalEnemyKind, number][];
     const total = entries.reduce((s, [, w]) => s + w, 0);
     let r = this.rngSpawn.next() * total;
     for (const [k, w] of entries) {
@@ -488,22 +513,73 @@ export class GameSim {
     return entries[entries.length - 1][0];
   }
 
+  private escapeAngle(): number {
+    const dx = ARENA_CONFIG.width / 2 - this.player.x;
+    const dy = ARENA_CONFIG.height / 2 - this.player.y;
+    return Math.hypot(dx, dy) < 64 ? this.player.aim : Math.atan2(dy, dx);
+  }
+
+  private spawnPoint(origin: { x: number; y: number }, angle: number, distance: number): { x: number; y: number } {
+    const pad = ARENA_CONFIG.wallPadding + 30;
+    return {
+      x: clamp(origin.x + Math.cos(angle) * distance, pad, ARENA_CONFIG.width - pad),
+      y: clamp(origin.y + Math.sin(angle) * distance, pad, ARENA_CONFIG.height - pad),
+    };
+  }
+
+  private warnAssault(at: number, perGate: number): void {
+    const { x, y } = this.player;
+    const origin = { x, y };
+    const escape = this.escapeAngle();
+    const range = ARENA_CONFIG.spawnDistance[0];
+    const gates = [-Math.PI / 2, Math.PI / 2, Math.PI].map((offset) => {
+      const wanted = escape + offset;
+      let best = { ...this.spawnPoint(origin, wanted, range), angle: wanted, distance: 0 };
+      for (const shift of [0, -0.45, 0.45, -0.95, 0.95]) {
+        const point = this.spawnPoint(origin, wanted + shift, range);
+        const distance = dist(x, y, point.x, point.y);
+        if (distance > best.distance) best = { ...point, angle: Math.atan2(point.y - y, point.x - x), distance };
+        if (distance >= ARENA_CONFIG.minSpawnDistance) break;
+      }
+      return best;
+    });
+    this.assaultWarning = { at, perGate, origin, gates };
+    this.emit('assaultWarning');
+  }
+
+  private spawnAssault(assault: AssaultWarning): void {
+    this.assaultWarning = null;
+    const ph = this.currentSpawnPhase()!;
+    const budget = Math.floor(ph.maxAlive * this.relics.spawnMultiplier) + assault.perGate * assault.gates.length;
+    // 좌·우·뒤를 번갈아 채운다. 적이 쌓여 있어도 특정 출입구에만 증원이 몰리지 않는다.
+    for (let i = 0; i < assault.perGate && this.enemies.length < budget; i++) {
+      for (const gate of assault.gates) {
+        if (this.enemies.length >= budget) break;
+        const angle = gate.angle + (i - (assault.perGate - 1) / 2) * 0.032;
+        const pos = this.spawnPoint(assault.origin, angle, gate.distance + (i % 2) * 40);
+        const kind = ASSAULT_LINEUP[i % ASSAULT_LINEUP.length];
+        const enemy = this.spawnEnemy(kind, pos.x, pos.y);
+        enemy.reinforced = true;
+        enemy.maxHp = Math.round(enemy.maxHp * ASSAULT_CONFIG.hpMultiplier);
+        enemy.hp = enemy.maxHp;
+        enemy.dmgMul *= ASSAULT_CONFIG.damageMultiplier;
+        enemy.xp *= ASSAULT_CONFIG.xpMultiplier;
+        this.spawnLog.push({ tick: this.tick, kind, angle, distance: gate.distance, assault: true });
+      }
+    }
+  }
+
   /** 화면 밖 위치를 고른다. 난수 2개(각도·거리)를 소비. */
-  private rollSpawnPosition(): { x: number; y: number; angle: number; distance: number } {
-    const angle = this.rngSpawn.next() * Math.PI * 2;
+  private rollSpawnPosition(direction?: number, behind = false): { x: number; y: number; angle: number; distance: number } {
+    const sample = this.rngSpawn.next();
+    const angle = direction === undefined ? sample * Math.PI * 2
+      : direction + (behind ? Math.PI : sample < 0.5 ? -Math.PI / 2 : Math.PI / 2) + (sample % 0.5 - 0.25);
     const [dMin, dMax] = ARENA_CONFIG.spawnDistance;
     const distance = lerp(dMin, dMax, this.rngSpawn.next());
     const p = this.player;
-    const place = (a: number) => {
-      const pad = ARENA_CONFIG.wallPadding + 30;
-      return {
-        x: clamp(p.x + Math.cos(a) * distance, pad, ARENA_CONFIG.width - pad),
-        y: clamp(p.y + Math.sin(a) * distance, pad, ARENA_CONFIG.height - pad),
-      };
-    };
-    let pos = place(angle);
+    let pos = this.spawnPoint(p, angle, distance);
     if (dist(pos.x, pos.y, p.x, p.y) < ARENA_CONFIG.minSpawnDistance) {
-      const alt = place(angle + Math.PI);
+      const alt = this.spawnPoint(p, angle + Math.PI, distance);
       if (dist(alt.x, alt.y, p.x, p.y) > dist(pos.x, pos.y, p.x, p.y)) pos = alt;
     }
     return { ...pos, angle, distance };
@@ -624,10 +700,15 @@ export class GameSim {
     if (e.dead) return;
     const basic = source === 'basic';
     const t = this.elapsed;
-    const { resistanceAt, initialResistance, resistancePerMinute, maxResistance } = ENEMY_SCALING;
-    const resistance = t < resistanceAt ? 0 : Math.min(maxResistance, initialResistance + (t - resistanceAt) / 60 * resistancePerMinute);
+    const { resistanceAt, initialResistance, resistancePerMinute, finalResistancePerMinute, maxResistance, eliteDurability } = ENEMY_SCALING;
+    const finalAt = RUN_CONFIG.finalAssaultAt;
+    const regularMinutes = (Math.min(t, finalAt) - resistanceAt) / 60;
+    const finalMinutes = Math.max(0, t - finalAt) / 60;
+    const resistance = t < resistanceAt ? 0 : Math.min(maxResistance,
+      initialResistance + regularMinutes * resistancePerMinute + finalMinutes * finalResistancePerMinute);
     const effectiveResistance = source && Object.hasOwn(WEAPON_FUSIONS, source) ? resistance * (1 - FUSION_ARMOR_PIERCE) : resistance;
     let damage = amount * this.relics.damageMultiplier(e, basic) * (1 - effectiveResistance) * (basic ? 1 - e.basicResistance : 1);
+    if (e.kind === 'elite') damage /= eliteDurability;
     if (basic && this.relics.executes(e)) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
@@ -974,7 +1055,6 @@ export class GameSim {
     }
     if (this.boss?.dead) this.end('victory', 'boss');
     else if (p.hp <= 0) this.end('defeat', 'death');
-    else if (this.elapsed >= RUN_CONFIG.timeLimit) this.end('defeat', 'timeout');
   }
 
   private end(outcome: RunOutcome, cause: RunEndCause): void {

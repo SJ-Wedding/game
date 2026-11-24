@@ -40,7 +40,6 @@ export function updateBoss(sim: GameSim, dt: number): void {
   if (!b || b.dead) return;
   const p = sim.player;
   const C = BOSS_CONFIG;
-  const pi = b.phase - 1;
   if (b.flash > 0) b.flash -= dt;
 
   // 페이즈 전환
@@ -50,6 +49,7 @@ export function updateBoss(sim: GameSim, dt: number): void {
     b.timer = C.phaseShiftTime;
     sim.emit('bossPhase', b.x, b.y);
   }
+  const pi = b.phase - 1;
 
   let contactDamage = C.contactDamage;
   let contactSource = C.attackNames.contact;
@@ -95,9 +95,11 @@ export function updateBoss(sim: GameSim, dt: number): void {
           b.state = 'cast';
           b.timer = C.meteor.castTime;
         } else {
-          for (let i = 0; i < C.summon.count; i++) {
-            const a = (i / C.summon.count) * Math.PI * 2;
-            sim.spawnEnemy('chaser', b.x + Math.cos(a) * (b.r + 40), b.y + Math.sin(a) * (b.r + 40));
+          const cap = sim.currentSpawnPhase()?.maxAlive ?? Infinity;
+          for (const [i, kind] of C.summon.kinds.entries()) {
+            if (sim.enemies.length >= cap) break;
+            const a = (i / C.summon.kinds.length) * Math.PI * 2;
+            sim.spawnEnemy(sim.overtime ? 'charger' : kind, b.x + Math.cos(a) * (b.r + 40), b.y + Math.sin(a) * (b.r + 40));
           }
           b.state = 'cast';
           b.timer = C.summon.castTime;

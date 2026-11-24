@@ -195,7 +195,7 @@ describe('무기 강화의 추가 효과', () => {
     const sim = makeSim();
     for (const kind of ['chaser', 'spitter', 'charger', 'elite'] as const) {
       const enemy = sim.spawnEnemy(kind, 1000, 1000);
-      sim.damageEnemy(enemy, enemy.hp);
+      sim.damageEnemy(enemy, 1e6);
     }
     expect(sim.gems.map((gem) => gem.value)).toEqual([1, 3, 4, 40]);
   });
@@ -347,7 +347,7 @@ it('엘리트 무기 보상은 준비된 합체를 제시하고 일반 레벨업
   const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 } });
   sim.gainXp(sim.xpNeeded);
   const elite = sim.spawnEnemy('elite', 900, 900);
-  sim.damageEnemy(elite, elite.hp);
+  sim.damageEnemy(elite, 1e6);
   sim.step(IDLE_INPUT);
   expect(sim.choices[0].kind).toBe('relic');
   sim.choose(0);
@@ -399,8 +399,8 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageEnemy(target, 1000, 'echo');
   sim.damageEnemy(target, 1000, 'chain');
   sim.damageBoss(1000, 'storm');
-  expect(sim.damageByAttack.basic).toBeCloseTo(3.85);
-  expect(sim.damageByAttack.echo).toBeCloseTo(550);
+  expect(sim.damageByAttack.basic).toBeCloseTo(3.15);
+  expect(sim.damageByAttack.echo).toBeCloseTo(450);
   expect(Object.keys(sim.damageByAttack)).toEqual(['basic', 'echo']);
   const boss = sim.boss!;
   boss.state = 'idle';
@@ -409,6 +409,6 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageBoss(1000, 'chain');
   sim.step(IDLE_INPUT);
   expect(boss.hp).toBe(0);
-  expect(sim.result?.damageByAttack).toEqual({ basic: expect.closeTo(3.85), echo: 550, storm: 200 });
+  expect(sim.result?.damageByAttack).toEqual({ basic: expect.closeTo(3.15), echo: expect.closeTo(450), storm: 200 });
   expect(sim.result?.combatTime).toBeCloseTo(1 / 60);
 });

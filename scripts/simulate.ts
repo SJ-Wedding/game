@@ -69,21 +69,21 @@ for (let i = 0; i < runs; i++) {
       hpAtBoss = Math.round(sim.player.hp);
     }
   }
-  const r = sim.result!;
+  const r = sim.result;
   rows.push({
     seed,
-    outcome: r.outcome,
-    cause: r.cause,
-    time: r.survivalTime,
-    level: r.level,
+    outcome: r?.outcome ?? 'unfinished',
+    cause: r?.cause ?? '—',
+    time: r?.survivalTime ?? sim.elapsed,
+    level: sim.level,
     levelAtBoss,
     picksAtBoss,
     hpAtBoss,
     firstLevel: sim.firstLevelUpAt,
-    bossHp: r.bossHpRatio,
-    kills: r.kills,
-    killedBy: r.killedBy,
-    tokens: tokenReward(r).total,
+    bossHp: r?.bossHpRatio ?? (sim.boss ? sim.boss.hp / sim.boss.maxHp : null),
+    kills: sim.kills,
+    killedBy: r?.killedBy ?? null,
+    tokens: r ? tokenReward(r).total : 0,
   });
 }
 
@@ -92,7 +92,7 @@ for (const r of rows) {
   console.log(
     [
       String(r.seed).padEnd(6),
-      (r.outcome === 'victory' ? '승리' : '패배').padEnd(5),
+      (r.outcome === 'victory' ? '승리' : r.outcome === 'defeat' ? '패배' : '미종료').padEnd(5),
       r.cause.padEnd(8),
       formatTime(r.time).padStart(5),
       String(r.level).padStart(3),
@@ -114,7 +114,7 @@ console.log('\n── 요약 ──');
 console.log(`봇 숙련도 ${skill}, ${runs}판, 영구 강화 ${metaArg}`);
 const toks = rows.map((r) => r.tokens).sort((a, b) => a - b);
 console.log(`판당 토큰 중앙값 ${median(toks)} (범위 ${toks[0]}~${toks[toks.length - 1]})`);
-console.log(`승리 ${wins.length} / 사망 ${rows.filter((r) => r.cause === 'death').length} / 시간초과 ${rows.filter((r) => r.cause === 'timeout').length}`);
+console.log(`승리 ${wins.length} / 사망 ${rows.filter((r) => r.cause === 'death').length} / 미종료 ${rows.filter((r) => r.outcome === 'unfinished').length}`);
 if (wins.length) console.log(`승리 시각: 최소 ${formatTime(winTimes[0])}, 중앙값 ${formatTime(median(winTimes))}, 최대 ${formatTime(winTimes[winTimes.length - 1])}`);
 console.log(`승리 중 ${formatTime(RUN_CONFIG.bossAt)}~${formatTime(RUN_CONFIG.timeLimit)} 비율: ${wins.filter((r) => r.time >= RUN_CONFIG.bossAt && r.time <= RUN_CONFIG.timeLimit).length}/${wins.length}`);
 console.log(`첫 레벨업 중앙값 ${median(firsts).toFixed(0)}초 (최대 ${firsts[firsts.length - 1]?.toFixed(0)}초)`);

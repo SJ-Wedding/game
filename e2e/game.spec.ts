@@ -118,21 +118,35 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.getByTestId('result-upgrades')).toContainText('연사 숙련');
   });
 
-  test('시간 초과: 15:00 까지 보스를 못 잡으면 패배하고 원인이 표시된다', async ({ page }) => {
-    await startRun(page, '&seed=6&start=894&god=1');
-    await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');
-    await expect(page.getByTestId('outcome')).toHaveText('패배');
-    await expect(page.getByTestId('cause')).toContainText('처치하지 못했습니다');
-    await expect(page.getByTestId('result-time')).toHaveText('15:00');
-    const s = await snap(page);
-    expect(s.result).toMatchObject({ outcome: 'defeat', cause: 'timeout', survivalTime: 900 });
+  test('후반 증원: 예고 뒤 세 방향에서 강화 몬스터가 등장한다', async ({ page }) => {
+    await startRun(page, '&seed=6&start=727&god=1');
+    await expect(page.getByTestId('hud-banner')).toContainText('2초 후 증원 공세');
+    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.assaultWarning?.gates.length ?? 0)).toBe(3);
+    await waitElapsed(page, 730.1);
+    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.spawnLog.filter((entry: { assault?: boolean }) => entry.assault).length)).toBe(24);
+  });
+
+  test('연장전: 15:00부터 강화 돌격수만 새로 등장하고 연장 시간이 표시된다', async ({ page }) => {
+    await startRun(page, '&seed=6&start=899&god=1');
+    await expect(page.getByTestId('hud-timer')).toHaveText(/^\+0:\d\d$/);
+    await expect(page.locator('.timer-sub')).toContainText('연장전');
+    await waitElapsed(page, 901.5);
+    const spawns = await page.evaluate(() =>
+      (window as any).__rift.sim.spawnLog.filter((record: { tick: number }) => record.tick >= 900 * 60).map((record: { kind: string }) => record.kind));
+    expect(spawns.length).toBeGreaterThan(0);
+    expect([...new Set(spawns)]).toEqual(['charger']);
+    expect((await snap(page)).result).toBeNull();
   });
 
   test('재시작: 한 번의 입력으로 다시 시작되고, 반복해도 스폰과 입력이 중복되지 않는다', async ({ page }) => {
-    // 짧은 판(종료 6초 전 시작)을 여러 번 끝내고 Enter 로 재시작
+    // 보스전부터 시작해 여러 번 끝내고 Enter 로 재시작
     await startRun(page, '&seed=77&start=894&god=1');
+    const finishRun = async () => {
+      await page.evaluate(() => { (window as any).__rift.sim.player.hp = 0; });
+      await expect.poll(async () => (await snap(page)).screen).toBe('result');
+    };
     for (let i = 0; i < 4; i++) {
-      await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');
+      await finishRun();
       const before = (await snap(page)).runsStarted;
       await page.waitForTimeout(700); // 결과 화면 입력 보호 시간
       await page.keyboard.press('Enter');
@@ -143,7 +157,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
       expect(after.elapsed!).toBeLessThan(896); // 새 판 (894초부터 다시)
     }
     // 결과 화면의 버튼 클릭으로도 재시작
-    await expect.poll(async () => (await snap(page)).screen, { timeout: 30_000 }).toBe('result');
+    await finishRun();
     await page.getByTestId('restart').click();
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   });
