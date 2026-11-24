@@ -50,10 +50,16 @@ describe('유물 보상 및 계승', () => {
   });
 
   it('저장된 계승 목록에서 알 수 없는 유물과 중복을 제거하고 세 개까지만 가져온다', () => {
-    const ids = ['oath', 'oath', 'unknown', 'flint', 'anchor', 'heart'];
-    expect(validCarry(ids)).toEqual(['oath', 'flint', 'anchor']);
+    const ids = ['oath', 'oath', 'unknown', 'buckle', 'anchor', 'heart'];
+    expect(validCarry(ids)).toEqual(['oath', 'buckle', 'anchor']);
     const data = parseSave(JSON.stringify({ ...defaultSave(), relicCarry: ids })).data;
-    expect([...makeSim({ carryRelics: data.relicCarry }).relics.owned]).toEqual(['oath', 'flint', 'anchor']);
+    expect([...makeSim({ carryRelics: data.relicCarry }).relics.owned]).toEqual(['oath', 'buckle', 'anchor']);
+  });
+
+  it('삭제된 유물(수호자의 매듭·첫불의 부싯돌·흉터의 인장)은 선택지에 없고, 예전 저장의 계승 목록에서도 빠진다', () => {
+    for (const id of ['knot', 'flint', 'scars']) expect(Object.hasOwn(RELICS, id)).toBe(false);
+    const data = parseSave(JSON.stringify({ ...defaultSave(), relicCarry: ['flint', 'knot', 'oath', 'scars', 'heart'] })).data;
+    expect(data.relicCarry).toEqual(['oath', 'heart']);
   });
 });
 
@@ -90,40 +96,31 @@ describe('유물 효과', () => {
     expect(sim.relics.dodgeCooldown).toBe(sim.stats.dodgeCooldown + 0.5);
   });
 
-  it('쌍월 톱니는 세 번째 칼날을 추가하고 회피 시 회전 반경을 넓힌다', () => {
+  it('쌍월 톱니는 칼날을 하나 더하고 회전 반경을 20% 넓히며, 칼날 처치마다 칼날 피해가 0.5%씩 최대 15% 오른다', () => {
     const sim = makeSim({ carryRelics: ['cog'], presetUpgrades: { orbit: 1 } });
     sim.step(IDLE_INPUT);
     const distance = () => Math.hypot(sim.weapons.blades[0].x - sim.player.x, sim.weapons.blades[0].y - sim.player.y);
     expect(sim.weapons.blades).toHaveLength(3);
-    expect(distance()).toBeCloseTo(48);
+    expect(distance()).toBeCloseTo(78);
     sim.step({ ...IDLE_INPUT, moveX: 1, dodge: true });
-    expect(distance()).toBeCloseTo(84);
+    expect(distance()).toBeCloseTo(78); // 회피해도 반경은 그대로
+    // 칼날 처치 수에 따른 피해 증가: 쿨다운이 없는 표적에 한 번 맞힌 피해를 비교
+    const hitDamage = (kills: number) => {
+      (sim.weapons as any).cogKills = kills;
+      (sim.weapons as any).orbitHits.clear();
+      const blade = sim.weapons.blades[0];
+      const e = sim.spawnEnemy('chaser', blade.x, blade.y);
+      e.hp = e.maxHp = 1e6;
+      (sim.weapons as any).orbit();
+      return 1e6 - e.hp;
+    };
+    const base = hitDamage(0);
+    expect(hitDamage(10) / base).toBeCloseTo(1.05, 5);
+    expect(hitDamage(100) / base).toBeCloseTo(1.15, 5);
   });
 });
 
 describe('유물과 전투의 상호작용', () => {
-  it('첫불의 부싯돌이 60초 뒤 사격 피해 보너스를 최대 체력으로 바꾼다', () => {
-    const sim = makeSim({ carryRelics: ['flint'] });
-    expect(sim.relics.shotDamage()).toBeCloseTo(sim.stats.damage * 1.25);
-    sim.tick = 60 * 60;
-    sim.relics.update();
-    expect(sim.relics.shotDamage()).toBe(sim.stats.damage);
-    expect(sim.relics.maxHp).toBe(sim.stats.maxHp + 15);
-    expect(sim.player.hp).toBe(sim.relics.maxHp);
-  });
-
-  it('수호자의 매듭과 흉터의 인장은 피격 후 다음 타격에 발동한다', () => {
-    const sim = makeSim({ carryRelics: ['knot', 'scars'] });
-    sim.hurtPlayer(25, 'test');
-    expect(sim.player.hp).toBe(sim.stats.maxHp - 25);
-    sim.player.invuln = 0;
-    sim.hurtPlayer(20, 'test');
-    expect(sim.player.hp).toBe(sim.stats.maxHp - 37);
-    expect(sim.relics.shotDamage()).toBeCloseTo(sim.stats.damage * 1.3);
-    expect(sim.relics.shotDamage()).toBeCloseTo(sim.stats.damage * 1.3);
-    expect(sim.relics.shotDamage()).toBe(sim.stats.damage);
-  });
-
   it('마지막 심장은 체력이 낮을 때 회복을 줄이고 무기 재사용을 앞당긴다', () => {
     const sim = makeSim({ carryRelics: ['heart'], presetUpgrades: { mine: 1 } });
     const lowHp = sim.stats.maxHp * 0.2;
@@ -162,16 +159,25 @@ describe('유물과 전투의 상호작용', () => {
     sim.step(IDLE_INPUT);
     expect(sim.weapons.effects.some((fx) => fx.kind === 'chain' && fx.points.length === 7)).toBe(true);
     expect(enemies.every((enemy) => enemy.hp < enemy.maxHp)).toBe(true);
+    // 맞힌 적마다 그 자리에서 폭발 (반경 54)
+    expect(sim.weapons.effects.filter((fx) => fx.kind === 'chain' && fx.radius === 54)).toHaveLength(6);
   });
 
-  it('별의 닻은 중력 구체를 제자리에 유지한다', () => {
-    const sim = makeSim({ carryRelics: ['anchor'], presetUpgrades: { gravity: 1 } });
-    const enemy = sim.spawnEnemy('chaser', sim.player.x + 100, sim.player.y);
-    enemy.hp = enemy.maxHp = 1000;
-    const x = sim.player.x;
-    runUntil(sim, 0.5);
-    expect(sim.weapons.devices.find((d) => d.kind === 'gravity')?.x).toBe(x);
-    expect(enemy.x).toBeLessThan(x + 100);
+  it('별의 닻은 중력 구체를 제자리에 유지하고, 크기와 끌어오는 힘을 50% 키운다', () => {
+    const pull = (relic: boolean) => {
+      const sim = makeSim({ carryRelics: relic ? ['anchor'] : [], presetUpgrades: { gravity: 1 } });
+      const enemy = sim.spawnEnemy('chaser', sim.player.x + 100, sim.player.y);
+      enemy.hp = enemy.maxHp = 1000;
+      enemy.speed = 0;
+      const x = sim.player.x;
+      runUntil(sim, 0.5);
+      return { sim, x, device: sim.weapons.devices.find((d) => d.kind === 'gravity')!, moved: x + 100 - enemy.x };
+    };
+    const base = pull(false);
+    const anchored = pull(true);
+    expect(anchored.device.x).toBe(anchored.x);
+    expect(anchored.device.r).toBeCloseTo(base.device.r * 1.5);
+    expect(anchored.moved).toBeGreaterThan(base.moved);
   });
 
   it('틈새의 거울은 잔영이 양방향으로 사격하게 한다', () => {
@@ -185,19 +191,56 @@ describe('유물과 전투의 상호작용', () => {
     expect(shots[0].vx).toBeCloseTo(-shots[1].vx);
   });
 
-  it('두 번째 도화선은 작은 지뢰를 한 번만 생성한다', () => {
+  it('두 번째 도화선은 지뢰 폭발 자리에 2초간 장판을 남겨 초당 폭발 피해의 10%를 준다', () => {
     const sim = makeSim({ carryRelics: ['fuse'], presetUpgrades: { mine: 1 }, god: true });
     const enemy = sim.spawnEnemy('chaser', sim.player.x + 27, sim.player.y);
-    enemy.hp = enemy.maxHp = 1000;
+    enemy.hp = enemy.maxHp = 1e6;
     enemy.speed = 0;
     runUntil(sim, 0.5);
-    const mine = sim.weapons.devices.find((d) => d.kind === 'mine' && d.secondary)!;
-    enemy.x += 100;
-    sim.weapons.update(10);
-    expect(sim.weapons.devices).toContain(mine);
-    enemy.x -= 100;
-    runUntil(sim, 1.3);
-    expect(sim.weapons.devices.some((d) => d.kind === 'mine')).toBe(false);
+    expect(sim.weapons.mineFields).toHaveLength(1);
+    expect(sim.weapons.devices.some((d) => d.kind === 'mine' && d.secondary)).toBe(false); // 작은 지뢰는 더 이상 없음
+    // 기본 사격 피해와 섞이지 않도록 '지뢰' 피해 기록만 비교한다
+    const blast = sim.damageByAttack.mine ?? 0;
+    expect(blast).toBeGreaterThan(0);
+    sim.player.x -= 400; // 새 지뢰가 이 적 옆에 다시 깔리지 않도록 멀리 이동
+    runUntil(sim, 2.6);
+    const fieldDamage = (sim.damageByAttack.mine ?? 0) - blast;
+    expect(fieldDamage / blast).toBeCloseTo(0.2, 2); // 2초 × 초당 10%
+    expect(sim.weapons.mineFields).toHaveLength(0);
+  });
+
+  it('틈새의 거울: 잔영 탄으로 처치하면 그 자리에서 잔영이 한 번 더 발동하고, 다시 연쇄되지는 않는다', () => {
+    const sim = makeSim({ carryRelics: ['mirror'], presetUpgrades: { echo: 1 }, god: true });
+    const victim = sim.spawnEnemy('chaser', sim.player.x + 200, sim.player.y);
+    victim.hp = 1;
+    victim.speed = 0;
+    sim.playerShots.push({ x: victim.x - 20, y: victim.y, vx: 620, vy: 0, r: 5, damage: 50, life: 1, source: 'echo' });
+    sim.step(IDLE_INPUT);
+    expect(victim.dead).toBe(true);
+    const repeats = sim.playerShots.filter((s) => s.echoRepeat);
+    expect(repeats).toHaveLength(2); // 양방향
+    // 다시 발동한 잔영으로 처치해도 더 이상 생기지 않는다
+    const next = sim.spawnEnemy('chaser', repeats[0].x + 10, repeats[0].y);
+    next.hp = 1;
+    next.speed = 0;
+    sim.step(IDLE_INPUT);
+    expect(sim.playerShots.filter((s) => s.echoRepeat).length).toBeLessThanOrEqual(2);
+  });
+
+  it('용광로의 신발끈: 같은 불길에 1초 이상 머문 적은 2초간 화상 피해를 받는다', () => {
+    const sim = makeSim({ carryRelics: ['laces'], presetUpgrades: { flame: 1 }, god: true });
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 10, sim.player.y);
+    enemy.hp = enemy.maxHp = 1e6;
+    enemy.speed = 0;
+    runUntil(sim, 1.2);
+    expect((sim.weapons as any).burns.has(enemy)).toBe(true);
+    // 불길에서 벗어난 뒤에도 2초 동안 화상 피해가 들어간다
+    enemy.x += 600;
+    const hp = enemy.hp;
+    runUntil(sim, 2.5);
+    expect(enemy.hp).toBeLessThan(hp);
+    runUntil(sim, 4);
+    expect((sim.weapons as any).burns.has(enemy)).toBe(false);
   });
 
   it('불길에 머무는 적을 둔화시키고 장벽에 닿은 적을 잠시 멈춘다', () => {
@@ -232,7 +275,7 @@ it('군집의 북은 일반 스폰을 늘리고 수호자 인장은 예약된 �
 });
 
 it('승리 후 미선택 유물은 선택 가능 목록 전체를 저장한다', () => {
-  const draft = ['oath', 'flint', 'crown', 'anchor', 'heart'];
+  const draft = ['oath', 'buckle', 'crown', 'anchor', 'heart'];
   const data = parseSave(JSON.stringify({ ...defaultSave(), pendingRelicDraft: [...draft, 'bogus', 'oath'] })).data;
   expect(data.pendingRelicDraft).toEqual(draft);
   expect(data.relicCarry).toBeUndefined();

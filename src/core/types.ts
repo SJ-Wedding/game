@@ -120,6 +120,8 @@ export interface Projectile {
   source: string;
   pierceLeft?: number;
   hitIds?: Set<number>;
+  /** 틈새의 거울: 처치로 다시 발동한 잔영 탄. 이 탄의 처치는 다시 발동하지 않는다. */
+  echoRepeat?: boolean;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */

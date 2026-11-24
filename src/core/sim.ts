@@ -300,7 +300,6 @@ export class GameSim {
       }
       p.dodgeTime = s.dodgeDuration;
       p.dodgeCd = this.relics.dodgeCooldown;
-      this.relics.dodgeUntil = this.elapsed + 2;
       p.invuln = Math.max(p.invuln, s.dodgeInvuln);
       this.dodges++;
       this.weapons.onDodge();
@@ -556,6 +555,7 @@ export class GameSim {
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
           this.damageEnemy(e, s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
+          if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx));
           if (s.pierceLeft) {
             s.pierceLeft--;
             s.hitIds?.add(e.id);

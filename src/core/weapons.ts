@@ -45,6 +45,12 @@ export class WeaponSystem {
   private echo: (Point & { angle: number; at: number }) | null = null;
   private trail: Point | null = null;
   private dodgeTrail: Point | null = null;
+  /** 쌍월 톱니: 회전 칼날 처치 수 */
+  private cogKills = 0;
+  /** 두 번째 도화선: 지뢰 폭발 뒤 남는 장판 */
+  readonly mineFields: (Point & { r: number; until: number; next: number; damage: number })[] = [];
+  /** 용광로의 신발끈: 화상 (대상 → 끝나는 시각, 다음 피해 시각) */
+  private readonly burns = new Map<Target, { until: number; next: number }>();
 
   constructor(private readonly sim: GameSim) {}
 
@@ -196,18 +202,12 @@ export class WeaponSystem {
     if ((sim.stacks.axe || sim.stacks.spear || sim.stacks.gravity) && (sim.target || sim.findTarget(540 + sim.reachBonus))) {
       if (this.available('axe', 2.0)) this.device('axe', p, 2.2, this.rankEffect('axe'), p.aim);
       if (this.available('spear', 2.6)) this.device('spear', p, 0.38, this.rankEffect('spear') + sim.reachBonus, p.aim);
-      if (this.available('gravity', 4.2)) this.device('gravity', p, 1.9, this.rankEffect('gravity') + sim.reachBonus * 0.16, p.aim);
+      // 별의 닻: 중력 구체 크기 +50%
+      if (this.available('gravity', 4.2)) this.device('gravity', p, 1.9, (this.rankEffect('gravity') + sim.reachBonus * 0.16) * (sim.relics.has('anchor') ? 1.5 : 1), p.aim);
     }
     if (this.echo && this.echo.at <= now) {
       const { x, y, angle } = this.echo;
-      const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
-      for (const direction of angles) {
-        const dx = Math.cos(direction);
-        const dy = Math.sin(direction);
-        this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
-        sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
-          damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo' });
-      }
+      this.fireEcho(x, y, angle, false);
       this.echo = null;
     }
     // 기본탄의 발사 프레임을 기다리지 않아야 잔영의 짧아진 주기가 그대로 적용된다.
@@ -220,6 +220,52 @@ export class WeaponSystem {
 
     for (const device of this.devices) this.updateDevice(device, dt);
     compact(this.devices, (device) => device.age < device.duration);
+    this.updateMineFields(now);
+    this.updateBurns(now);
+  }
+
+  /** 메아리 사격 발사. repeat 은 틈새의 거울로 처치 자리에서 다시 발동한 잔영이다. */
+  private fireEcho(x: number, y: number, angle: number, repeat: boolean): void {
+    const sim = this.sim;
+    const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
+    for (const direction of angles) {
+      const dx = Math.cos(direction);
+      const dy = Math.sin(direction);
+      this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
+      sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
+        damage: this.weaponDamage('echo', 1.15 * (sim.relics.has('mirror') ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo',
+        ...(repeat ? { echoRepeat: true } : {}) });
+    }
+  }
+
+  /** 틈새의 거울: 잔영 탄으로 적을 처치하면 그 자리에서 잔영이 한 번 더 발동한다 (연쇄되지 않음). */
+  onEchoKill(at: Point, angle: number): void {
+    if (!this.sim.relics.has('mirror') || !this.sim.stacks.echo) return;
+    this.fireEcho(at.x, at.y, angle, true);
+  }
+
+  private updateMineFields(now: number): void {
+    for (const f of this.mineFields) {
+      if (now > f.until || now + 1e-6 < f.next) continue; // 틱 시각과 프레임 시각의 부동소수 오차 허용
+      f.next += 0.5;
+      for (const target of this.targets()) {
+        if (dist(f.x, f.y, target.x, target.y) < f.r + target.r) this.damage('mine', target, f.damage);
+      }
+    }
+    compact(this.mineFields, (f) => now <= f.until);
+  }
+
+  private updateBurns(now: number): void {
+    for (const [target, burn] of this.burns) {
+      if (target.dead || now > burn.until) {
+        this.burns.delete(target);
+        continue;
+      }
+      if (now < burn.next) continue;
+      burn.next += 0.45;
+      // 화상 피해 = 불길 한 번 피해(0.34)의 20%
+      this.damage('flame', target, 0.34 * 0.2);
+    }
   }
 
   private chain(): void {
@@ -233,18 +279,21 @@ export class WeaponSystem {
     while (target && hit.size < this.rankEffect('chain') + (crown ? 2 : 0)) {
       hit.add(target);
       points.push(target);
-      this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown && hit.size === 1 ? 0.75 : 1));
+      const at = { x: target.x, y: target.y };
+      this.damage('chain', target, 1.85 * 0.76 ** (hit.size - 1) * (crown ? 0.75 : 1));
+      // 폭풍의 왕관: 연쇄 번개가 맞힌 모든 적 자리에서 폭발
+      if (crown) this.area('chain', at, 54, 0.75);
       target = this.nearest(target, 125, hit);
     }
     this.trace('chain', points, 0, 0.32);
-    if (crown) this.area('chain', points[points.length - 1], 54, 0.75);
   }
 
   private orbit(): void {
     const { player, elapsed } = this.sim;
     const cog = this.sim.relics.has('cog');
     const bladeCount = this.rankEffect('orbit') + Number(cog);
-    const radius = (cog ? (elapsed < this.sim.relics.dodgeUntil ? 84 : 48) : 65) + this.sim.reachBonus * 0.08;
+    const radius = 65 * (cog ? 1.2 : 1) + this.sim.reachBonus * 0.08;
+    const cogBonus = cog ? 1 + Math.min(0.15, this.cogKills * 0.005) : 1;
     for (let i = 0; i < bladeCount; i++) {
       const angle = elapsed * 4 + i * Math.PI * 2 / bladeCount;
       const blade = this.blades[i] ??= { x: 0, y: 0 };
@@ -253,7 +302,9 @@ export class WeaponSystem {
       for (const target of this.targets()) {
         if ((this.orbitHits.get(target) ?? 0) > elapsed
           || dist(blade.x, blade.y, target.x, target.y) >= target.r + 13) continue;
-        this.damage('orbit', target, 0.8);
+        const wasAlive = !target.dead;
+        this.damage('orbit', target, 0.8 * cogBonus);
+        if (cog && wasAlive && target.dead) this.cogKills++;
         if (!target.dead) this.orbitHits.set(target, elapsed + 0.42 * this.sim.relics.periodicHitMultiplier);
       }
     }
@@ -300,9 +351,11 @@ export class WeaponSystem {
           this.area(d.kind, d, d.r, 2.85 * (d.secondary ? 0.4 : 1));
           d.age = d.duration;
           if (!d.secondary && this.sim.relics.has('fuse') && this.sim.stacks.mine) {
-            const child = this.device('mine', d, Infinity, 44);
-            child.secondary = true;
-            child.armAt = 0.7 + dt; // A new device also advances in the current tick.
+            // 두 번째 도화선: 폭발 범위만큼의 장판이 2초간 남아 0.5초마다 폭발 피해의 5%(초당 10%)를 준다
+            const now = this.sim.elapsed;
+            // 0.5·1.0·1.5·2.0초에 4번 (부동소수 오차로 마지막 틱이 빠지지 않게 약간 여유)
+            this.mineFields.push({ x: d.x, y: d.y, r: d.r, until: now + 2.05, next: now + 0.5, damage: 2.85 * 0.05 });
+            this.trace('mine', [d], d.r, 2);
           }
         }
         break;
@@ -354,13 +407,13 @@ export class WeaponSystem {
         for (const e of this.sim.enemies) {
           const distance = dist(e.x, e.y, d.x, d.y);
           if (e.dead || e.kind === 'elite' || e.state === 'dash' || distance >= d.r || distance < 1) continue;
-          if (anchor) d.hit.add(e);
-          const ratio = Math.min(dt * 105 / distance, 1);
+          // 별의 닻: 끌어오는 힘 +50%
+          const ratio = Math.min(dt * 105 * (anchor ? 1.5 : 1) / distance, 1);
           const pad = ARENA_CONFIG.wallPadding + e.r;
           e.x = clamp(e.x + (d.x - e.x) * ratio, pad, ARENA_CONFIG.width - pad);
           e.y = clamp(e.y + (d.y - e.y) * ratio, pad, ARENA_CONFIG.height - pad);
         }
-        if (finished) this.area(d.kind, d, d.r, 2.5 * (1 + Math.min(d.hit.size, 10) * 0.08));
+        if (finished) this.area(d.kind, d, d.r, 2.5);
         break;
       }
     }
@@ -377,7 +430,11 @@ export class WeaponSystem {
       const previous = exposures.get(target) ?? 0;
       const duration = previous + dt;
       exposures.set(target, duration);
-      if (previous < 1 && duration >= 1) this.damage(d.kind, target, 0.72);
+      // 1초 이상 머물면 2초간 화상 (머무는 동안 계속 갱신)
+      if (duration >= 1) {
+        const burn = this.burns.get(target);
+        this.burns.set(target, { until: this.sim.elapsed + 2, next: burn?.next ?? this.sim.elapsed + 0.45 });
+      }
     }
   }
 
