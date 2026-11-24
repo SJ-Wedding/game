@@ -88,9 +88,11 @@ describe('특수 무기', () => {
     const { sim, target, advance } = setup('echo');
     target(280);
     sim.player.fireCd = 0;
-    // 두 번째 기본 사격(1/공격 속도 초 뒤) + 잔영 지연 0.36초가 지날 때까지 (공격 속도와 무관하게)
-    advance(Math.ceil((1 / sim.stats.fireRate + 0.36) * 60) + 5);
-    expect(sim.playerShots.some((shot) => shot.source === 'echo')).toBe(true);
+    const shotOrigin = sim.player.x;
+    advance(Math.ceil(0.36 * 60) + 5);
+    const echo = sim.playerShots.find((shot) => shot.source === 'echo');
+    expect(echo?.x).toBeGreaterThan(shotOrigin);
+    expect(echo?.x).toBeLessThan(shotOrigin + 70);
   });
 
   it('중력 구체가 적을 끌어온 뒤 피해를 준다', () => {
@@ -135,13 +137,13 @@ describe('무기 강화의 추가 효과', () => {
     expect(sim.weapons.devices.filter((d) => d.kind === 'mine')).toHaveLength(2);
   });
 
-  it('Lv 3 회전 칼날과 메아리 사격은 칼날 4개와 잔영 탄환 3발을 만든다', () => {
+  it('Lv 3 회전 칼날은 4개를 만들고 메아리는 한 번에 한 발을 쏜다', () => {
     const sim = makeSim({ presetUpgrades: { orbit: 3, echo: 3 } });
     sim.weapons.onShot();
     sim.weapons.onShot();
     for (let i = 0; i < 30; i++) sim.step(IDLE_INPUT);
     expect(sim.weapons.blades).toHaveLength(4);
-    expect(sim.playerShots.filter((shot) => shot.source === 'echo')).toHaveLength(3);
+    expect(sim.playerShots.filter((shot) => shot.source === 'echo')).toHaveLength(1);
   });
 
   it('Lv 3 화염 발자국은 기존 반경 밖의 적까지 타격한다', () => {
@@ -251,4 +253,53 @@ it('엘리트 무기 보상은 준비된 합체를 제시하고 일반 레벨업
   expect(sim.pendingLevels).toBe(1);
   expect(sim.armoryOpen).toBe(false);
   expect(sim.choices[0].kind).toBe('upgrade');
+});
+
+it('메아리의 Lv 3은 Lv 1보다 빠르게 한 발씩 발사한다', () => {
+  const fireTicks = (rank: number) => {
+    const sim = makeSim({ presetUpgrades: { echo: rank } });
+    const times: number[] = [];
+    for (let i = 0; i < 160; i++) {
+      if (i % 40 === 0) sim.weapons.onShot();
+      sim.step(IDLE_INPUT);
+      if (sim.playerShots.some((s) => s.source === 'echo')) {
+        times.push(sim.tick);
+        sim.playerShots.length = 0;
+      }
+    }
+    return times;
+  };
+  const base = fireTicks(1);
+  const upgraded = fireTicks(3);
+  expect((base[1] - base[0]) / 60).toBeCloseTo(1.25, 1);
+  expect((upgraded[1] - upgraded[0]) / 60).toBeCloseTo(0.75, 1);
+  expect(upgraded.length).toBeGreaterThan(base.length);
+});
+
+it('처치 전염과 서리 포탑은 하향된 기본 피해를 기록한다', () => {
+  for (const [id, multiplier] of [['infection', 0.75], ['turret', 1.35 * 0.86]] as const) {
+    const sim = makeSim({ presetUpgrades: { [id]: 1 } });
+    const target = sim.spawnEnemy('chaser', sim.player.x + 130, sim.player.y);
+    target.hp = target.maxHp = 1000;
+    sim.step(IDLE_INPUT);
+    expect(sim.damageByAttack[id]).toBeCloseTo(sim.stats.damage * multiplier);
+  }
+});
+
+it('공격별 피해에는 실제 피해만 집계하고 쓰러진 적이나 무적 보스는 세지 않는다', () => {
+  const sim = makeSim({ startTime: 810, god: true });
+  const target = sim.spawnEnemy('charger', 900, 900);
+  target.hp = 15;
+  sim.damageEnemy(target, 10, 'basic');
+  sim.damageEnemy(target, 1000, 'echo');
+  sim.damageEnemy(target, 1000, 'chain');
+  sim.damageBoss(1000, 'storm');
+  expect(sim.damageByAttack).toEqual({ basic: 7, echo: 8 });
+  const boss = sim.boss!;
+  boss.state = 'idle';
+  boss.hp = 100;
+  sim.damageBoss(200, 'storm');
+  sim.step(IDLE_INPUT);
+  expect(sim.result?.damageByAttack).toEqual({ basic: 7, echo: 8, storm: 100 });
+  expect(sim.result?.combatTime).toBeCloseTo(1 / 60);
 });

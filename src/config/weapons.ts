@@ -21,8 +21,8 @@ export const WEAPON_DAMAGE_PER_RANK = 0.2;
 export const WEAPON_GRADE_DAMAGE = { common: 0, rare: 0.08, epic: 0.16, legendary: 0.24 } as const;
 
 export const SPECIAL_WEAPON_POWER: Record<WeaponId, number> = {
-  chain: 1, infection: 1, mine: 1.45, orbit: 1.65, axe: 1.55,
-  turret: 1.8, flame: 1.85, barrier: 1.65, spear: 1.55, mark: 1.65,
+  chain: 1, infection: 0.75, mine: 1.45, orbit: 1.65, axe: 1.55,
+  turret: 1.35, flame: 1.85, barrier: 1.65, spear: 1.55, mark: 1.65,
   echo: 1.6, gravity: 1.55,
 };
 
@@ -37,7 +37,7 @@ export const WEAPON_RANK_EFFECTS = {
   barrier: { label: '장벽 타격 반폭', unit: 'px', values: [18, 24, 30] },
   spear: { label: '관통 사거리', unit: 'px', values: [540, 620, 700] },
   mark: { label: '낙뢰 반경', unit: 'px', values: [82, 98, 114] },
-  echo: { label: '방향당 잔영 탄환', unit: '발', values: [1, 2, 3] },
+  echo: { label: '잔영 발동 주기', unit: '초', values: [1.25, 1, 0.75] },
   gravity: { label: '끌어당김·폭발 반경', unit: 'px', values: [145, 170, 195] },
   infection: { label: '처치 시 전염 반경', unit: 'px', values: [96, 115, 134] },
 } as const satisfies Record<WeaponId, { label: string; unit: string; values: readonly [number, number, number] }>;

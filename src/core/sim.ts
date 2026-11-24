@@ -18,11 +18,11 @@ import { xpToNext } from './progression';
 import { deriveSeed, Rng } from './rng';
 import { computeStats, emptyStacks, healOnPick, picksFromCounts, type Stacks, type UpgradePick } from './stats';
 import type {
-  Boss, Enemy, Gem, Hazard, InputState, Pickup, Player, Projectile, RunEndCause, RunOutcome, RunResult,
+  AttackId, Boss, Enemy, Gem, Hazard, InputState, Pickup, Player, Projectile, RunEndCause, RunOutcome, RunResult,
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
 import { WeaponSystem } from './weapons';
-import { applyUpgrade, luckFor, rollGrade, rollRunChoices } from './upgrades';
+import { applyUpgrade, luckFor, rollChoices, rollGrade, rollRunChoices } from './upgrades';
 
 export interface SimOptions {
   seed: number;
@@ -64,8 +64,9 @@ export class GameSim {
   readonly weapons = new WeaponSystem(this);
   readonly relics = new RelicEffects(this);
   private readonly rngRelic: Rng;
-  private readonly pendingRewards: (RelicSource | 'armory')[] = [];
+  private readonly pendingRewards: (RelicSource | 'armory' | 'bonus')[] = [];
   armoryOpen = false;
+  bonusOpen = false;
   readonly options: SimOptions;
 
   /** 경과 틱. elapsed = tick / tickRate */
@@ -108,6 +109,8 @@ export class GameSim {
   shotsFired = 0;
   dodges = 0;
   damageTakenTotal = 0;
+  readonly damageByAttack: Partial<Record<AttackId, number>> = {};
+  private readonly startingTick: number;
   firstLevelUpAt: number | null = null;
   lastDamageSource: string | null = null;
   spawnLog: SpawnRecord[] = [];
@@ -164,6 +167,7 @@ export class GameSim {
 
     const start = Math.max(0, options.startTime ?? 0);
     this.tick = Math.round(start * RUN_CONFIG.tickRate);
+    this.startingTick = this.tick;
     for (const id of validCarry(options.carryRelics)) this.relics.acquire(id);
     while (this.eventIndex < SPAWN_EVENTS.length && SPAWN_EVENTS[this.eventIndex].at < start) this.eventIndex++;
     if (start >= RUN_CONFIG.bossAt) this.spawnBoss();
@@ -552,7 +556,7 @@ export class GameSim {
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'player') this.weapons.onBulletHit(e);
           else if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
-          this.damageEnemy(e, s.damage, s.source === 'player');
+          this.damageEnemy(e, s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
           if (s.pierceLeft) {
             s.pierceLeft--;
             s.hitIds?.add(e.id);
@@ -570,7 +574,7 @@ export class GameSim {
             if (s.source === 'player') this.weapons.onBulletHit(boss);
             else if (s.source === 'echo') this.weapons.onFusionHit('echo', boss);
           }
-          this.damageBoss(s.damage, s.source === 'player');
+          this.damageBoss(s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
         }
       }
     }
@@ -590,9 +594,18 @@ export class GameSim {
     compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
   }
 
-  damageEnemy(e: Enemy, amount: number, basic = false): void {
+  private recordAttackDamage(source: AttackId | undefined, hpBefore: number, hpAfter: number): void {
+    if (!source) return;
+    const damage = hpBefore - Math.max(0, hpAfter);
+    if (damage > 0) this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
+  }
+
+  damageEnemy(e: Enemy, amount: number, source?: AttackId): void {
     if (e.dead) return;
+    const basic = source === 'basic';
+    const hpBefore = e.hp;
     e.hp -= amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
+    this.recordAttackDamage(source, hpBefore, e.hp);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
@@ -608,10 +621,13 @@ export class GameSim {
     }
   }
 
-  damageBoss(amount: number, basic = false): void {
+  damageBoss(amount: number, source?: AttackId): void {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
+    const basic = source === 'basic';
+    const hpBefore = b.hp;
     b.hp = Math.max(0, b.hp - amount * this.relics.damageMultiplier(b, basic) * (basic ? 1 - BOSS_CONFIG.basicResistance : 1));
+    this.recordAttackDamage(source, hpBefore, b.hp);
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
     if (b.hp <= 0) {
@@ -706,14 +722,27 @@ export class GameSim {
     return choices;
   }
 
+  grantBonusChoices(count: number): void {
+    // 장착 보상은 대기 중인 일반 레벨업과 엘리트 보상보다 먼저 연다.
+    for (let i = 0; i < count; i++) this.pendingRewards.unshift('bonus');
+  }
+
+  get bonusChoicesLeft(): number {
+    return Number(this.bonusOpen) + this.pendingRewards.filter((source) => source === 'bonus').length;
+  }
+
   private openLevelUp(): void {
     this.choices = [];
     this.armoryOpen = false;
+    this.bonusOpen = false;
     while (this.pendingRewards.length && !this.choices.length) {
       const source = this.pendingRewards.shift()!;
       if (source === 'armory') {
         this.choices = this.rollArmoryChoices();
         this.armoryOpen = this.choices.length > 0;
+      } else if (source === 'bonus') {
+        this.choices = [...this.fusionChoices(), ...rollChoices(this.rngUpgrade, this.stacks, this.luck)].slice(0, PROGRESSION_CONFIG.choiceCount);
+        this.bonusOpen = true;
       } else {
         this.choices = rollRelics(source, this.rngRelic, this.relics.owned);
       }
@@ -738,7 +767,7 @@ export class GameSim {
     if (c.kind === 'relic') {
       this.relics.acquire(c.id);
     } else {
-      const rewardLevel = !this.armoryOpen && !this.startPickOpen ? this.pendingLevel : 0;
+      const rewardLevel = !this.armoryOpen && !this.bonusOpen && !this.startPickOpen ? this.pendingLevel : 0;
       if (c.kind === 'fusion') {
         this.weapons.fusions.add(c.id);
         this.pickOrder.push(c.id);
@@ -752,7 +781,7 @@ export class GameSim {
         this.relics.heal(c.heal);
         this.pickOrder.push(c.id);
       }
-      if (!this.armoryOpen) {
+      if (!this.armoryOpen && !this.bonusOpen) {
         this.pendingLevels--;
         this.startPickOpen = false;
       }
@@ -766,7 +795,7 @@ export class GameSim {
 
   /** 레벨업 후보 새로고침. 남은 횟수가 없거나 레벨업 중이 아니면 false */
   reroll(): boolean {
-    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.armoryOpen || this.choices[0]?.kind === 'relic') return false;
+    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.armoryOpen || this.bonusOpen || this.choices[0]?.kind === 'relic') return false;
     const prev = this.choices.filter((c) => c.kind === 'upgrade').map((c) => (c.kind === 'upgrade' ? c.def.id : ('' as UpgradeId)));
     this.rerollsLeft--;
     this.rerollsUsed++;
@@ -819,7 +848,7 @@ export class GameSim {
     } else {
       for (const e of this.enemies) {
         if (!e.dead && Math.abs(e.x - p.x) < DROP_CONFIG.bombHalfWidth && Math.abs(e.y - p.y) < DROP_CONFIG.bombHalfHeight) {
-          this.damageEnemy(e, DROP_CONFIG.bombDamage);
+          this.damageEnemy(e, DROP_CONFIG.bombDamage, 'bomb');
         }
       }
       this.emit('bomb', p.x, p.y);
@@ -872,6 +901,8 @@ export class GameSim {
       itemsCollected: this.itemsCollected,
       relics: [...this.relics.owned],
       fusions: [...this.weapons.fusions],
+      damageByAttack: { ...this.damageByAttack },
+      combatTime: (this.tick - this.startingTick) / RUN_CONFIG.tickRate,
       seed: this.seed,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
       assisted: this.assisted,

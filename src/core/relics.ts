@@ -1,4 +1,4 @@
-import { OPENING_RELICS, RELICS, RELIC_IDS, type RelicId, type RelicSource } from '../config/relics';
+import { OPENING_RELICS, RELICS, RELIC_IDS, TRIPLE_CHOICE_COUNT, type RelicId, type RelicSource } from '../config/relics';
 import { dist } from './math';
 import type { Rng } from './rng';
 import type { GameSim } from './sim';
@@ -35,6 +35,7 @@ export class RelicEffects {
   acquire(id: RelicId): void {
     if (this.owned.has(id)) return;
     this.owned.add(id);
+    if (id === 'tripleChoice') this.sim.grantBonusChoices(TRIPLE_CHOICE_COUNT);
     if (id === 'oath') this.oathKills = this.sim.kills;
     if (id === 'flint') this.flintUntil = this.sim.elapsed + 60;
   }

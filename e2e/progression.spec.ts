@@ -160,4 +160,35 @@ test.describe('성장 시스템', () => {
     await expect(page.locator('#overlay')).toBeHidden();
   });
 
+  test('삼중 선택의 인장은 세 번 선택할 수 있고 결과는 공격별 실제 피해와 DPS를 표시한다', async ({ page }) => {
+    await startRun(page, '&seed=43&god=1');
+    await page.evaluate(() => (window as any).__rift.sim.relics.acquire('tripleChoice'));
+    for (const remaining of [3, 2, 1]) {
+      await expect(page.getByRole('heading', { name: '삼중 선택의 인장' })).toBeVisible();
+      await expect(page.locator('.levelup .muted')).toContainText(`남은 선택 ${remaining}회`);
+      await page.getByTestId('choice-0').click();
+    }
+    await expect(page.locator('#overlay')).toBeHidden();
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      const enemy = sim.spawnEnemy('chaser', 900, 900);
+      enemy.hp = 20;
+      sim.damageEnemy(enemy, 8, 'basic');
+      sim.damageEnemy(enemy, 1000, 'echo');
+      sim.spawnBoss();
+      sim.boss.state = 'idle';
+      sim.boss.hp = 45;
+      sim.damageBoss(100, 'volley');
+    });
+    await expect(page.getByTestId('outcome')).toHaveText('승리');
+    const summary = page.getByTestId('damage-breakdown');
+    await expect(summary).toContainText('평균 DPS');
+    for (const [id, damage, name] of [['basic', '8', '기본 사격'], ['echo', '12', '메아리 사격'], ['volley', '45', '잔영 관통포']]) {
+      const row = summary.locator(`[data-attack="${id}"]`);
+      await expect(row).toContainText(name);
+      await expect(row.locator('td').first()).toHaveText(damage);
+      await expect(row.locator('td').last()).not.toHaveText('0');
+    }
+  });
+
 });

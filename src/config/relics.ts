@@ -1,4 +1,7 @@
+export const TRIPLE_CHOICE_COUNT = 3;
+
 export const RELICS = {
+  tripleChoice: { source: 'elite', symbol: 'Ⅲ', name: '삼중 선택의 인장', effect: '판마다 처음 장착할 때 보너스 강화 선택이 3회 열립니다. 각 화면에서 강화 하나를 고릅니다.' },
   awl: { source: 'level', symbol: '↠', name: '철심 탄환', effect: '기본탄 한 발이 일반 적을 한 마리 더 관통합니다. 후반 관통과 중첩됩니다.' },
   anvil: { source: 'level', symbol: '▲', name: '무쇠 공이', effect: '기본 사격 속도 −25%, 기본탄 한 발 피해 +55%.' },
   catalyst: { source: 'level', symbol: '◈', name: '균열 가속기', effect: '기본탄 피해 −25%. 주기형 특수 무기의 발동 및 연속 타격 간격 −25%.' },

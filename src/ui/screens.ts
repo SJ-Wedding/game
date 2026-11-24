@@ -13,7 +13,7 @@ import type { UpgradePick } from '../core/stats';
 import { upgradeText } from '../core/upgrades';
 import { UPGRADE_BY_ID } from '../config/upgrades';
 import { formatTime } from '../core/math';
-import type { RunResult, UpgradeChoice } from '../core/types';
+import type { AttackId, RunResult, UpgradeChoice } from '../core/types';
 import type { NewRecord, SaveMeta, SaveRecords } from '../storage/save';
 import { el, josa } from './dom';
 
@@ -196,6 +196,7 @@ export class Screens {
     choices: UpgradeChoice[];
     rerollsLeft: number;
     armory: boolean;
+    bonusChoices: number;
     onChoose: (i: number) => void;
     onReroll: () => void;
   }): void {
@@ -253,9 +254,9 @@ export class Screens {
       'levelup',
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
-        el('p', { class: 'muted', text: opts.armory ? '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요' : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('p', { class: 'muted', text: opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요' : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: 'cards' }, cards),
-        ...(reward || opts.armory ? [] : [reroll]),
+        ...(reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
     );
   }
@@ -413,6 +414,7 @@ export class Screens {
               el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}) — 타이틀의 강화 상점에서 사용` }),
             ])
           : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
+        this.damageBreakdown(result),
         restart,
         el('div', { class: 'row buttons' }, [title]),
         el('small', { class: 'muted' }, [
@@ -422,6 +424,36 @@ export class Screens {
         ]),
       ]),
     );
+  }
+
+  private damageBreakdown(result: RunResult): HTMLElement {
+    const totals = result.damageByAttack ?? {};
+    const sources = new Set<AttackId>(['basic', ...(Object.keys(totals) as AttackId[]), ...(result.fusions ?? [])]);
+    for (const { id } of result.upgrades) {
+      const weapon = UPGRADE_BY_ID[id].weapon;
+      if (weapon) sources.add(weapon);
+    }
+    const duration = result.combatTime ?? result.survivalTime;
+    const rows = [...sources].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0)).map((source) => {
+      const name = source === 'basic' ? '기본 사격' : source === 'bomb' ? '균열 폭탄'
+        : source in WEAPON_FUSIONS ? WEAPON_FUSIONS[source as FusionId].name : WEAPONS[source as keyof typeof WEAPONS].name;
+      const damage = totals[source] ?? 0;
+      return el('tr', { 'data-attack': source }, [
+        el('th', { scope: 'row', text: name }),
+        el('td', { text: n1(damage) }),
+        el('td', { text: n1(duration > 0 ? damage / duration : 0) }),
+      ]);
+    });
+    return el('details', { class: 'result-damage', open: '', 'data-testid': 'damage-breakdown' }, [
+      el('summary', { text: '공격별 피해량 · DPS' }),
+      el('small', { class: 'muted', text: '실제 피해량 ÷ 전체 전투 시간. 초과 피해 제외.' }),
+      el('div', { class: 'result-damage-scroll' }, [
+        el('table', { class: 'stat-table' }, [
+          el('thead', {}, [el('tr', {}, [el('th', { text: '공격' }), el('th', { text: '총 피해량' }), el('th', { text: '평균 DPS' })])]),
+          el('tbody', {}, rows),
+        ]),
+      ]),
+    ]);
   }
 
   cancelCarry(): void {

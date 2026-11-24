@@ -56,7 +56,7 @@ it('후반 적은 더 높은 체력을 가지며 갑주는 기본탄 피해에�
   const early = new GameSim({ seed: 7 }).spawnEnemy('charger', 900, 900);
   expect(late.maxHp).toBeGreaterThan(early.maxHp);
   expect(late.basicResistance).toBe(0.30);
-  sim.damageEnemy(late, 20, true);
+  sim.damageEnemy(late, 20, 'basic');
   expect(late.maxHp - late.hp).toBeCloseTo(14);
   sim.damageEnemy(late, 20);
   expect(late.maxHp - late.hp).toBeCloseTo(34);

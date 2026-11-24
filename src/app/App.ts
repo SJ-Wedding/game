@@ -172,7 +172,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
+    const title = sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
@@ -181,6 +181,7 @@ export class App {
       choices: sim.choices,
       rerollsLeft: sim.rerollsLeft,
       armory: sim.armoryOpen,
+      bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
       onChoose: (i) => this.choose(i),
       onReroll: () => this.reroll(),
     });

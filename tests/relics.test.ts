@@ -289,3 +289,24 @@ describe('초반 전투 유물', () => {
     expect(sim.playerShots[0].vx).toBeCloseTo(sim.stats.projectileSpeed * 1.2);
   });
 });
+
+it('삼중 선택의 인장은 판마다 한 번 보너스 3회를 열고 일반 레벨업을 소모하지 않는다', () => {
+  const sim = makeSim({ carryRelics: ['tripleChoice'] });
+  sim.relics.acquire('tripleChoice');
+  sim.gainXp(sim.xpNeeded);
+  sim.step(IDLE_INPUT);
+  const tick = sim.tick;
+  for (const remaining of [3, 2, 1]) {
+    expect(sim.bonusOpen).toBe(true);
+    expect(sim.bonusChoicesLeft).toBe(remaining);
+    expect(sim.pendingLevels).toBe(1);
+    expect(sim.step(IDLE_INPUT)).toBe(false);
+    expect(sim.reroll()).toBe(false);
+    expect(sim.choose(0)).toBe(true);
+  }
+  expect(sim.bonusOpen).toBe(false);
+  expect(sim.bonusChoicesLeft).toBe(0);
+  expect(sim.pendingLevels).toBe(1);
+  expect(sim.tick).toBe(tick);
+  expect(sim.picks).toHaveLength(3);
+});

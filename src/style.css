@@ -247,3 +247,7 @@ button:disabled { opacity: 0.45; cursor: default; }
   margin: 0.6em 0; padding: 0; list-style: none;
 }
 .fusion-recipes li { padding: 0.4em 0.55em; background: #151324; border-left: 2px solid #956dc2; font-size: 0.85em; }
+
+.result-damage { width: 100%; text-align: left; padding: 0.55em 0.8em; background: #211a2c; border-radius: 6px; }
+.result-damage summary { cursor: pointer; font-weight: 700; }
+.result-damage-scroll { max-height: 21vh; overflow: auto; margin-top: 0.4em; }

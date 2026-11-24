@@ -1,4 +1,4 @@
-import type { FusionId } from '../config/weapons';
+import type { FusionId, WeaponId } from '../config/weapons';
 import type { RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
 import type { DropKind } from '../config/drops';
@@ -184,6 +184,8 @@ export type UpgradeChoice =
   | { kind: 'relic'; id: RelicId; source: RelicSource }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
+export type AttackId = 'basic' | 'bomb' | WeaponId | FusionId;
+
 export type RunOutcome = 'victory' | 'defeat';
 export type RunEndCause = 'boss' | 'death' | 'timeout';
 
@@ -205,6 +207,8 @@ export interface RunResult {
   itemsCollected: number;
   relics?: RelicId[];
   fusions?: FusionId[];
+  damageByAttack?: Partial<Record<AttackId, number>>;
+  combatTime?: number;
   seed: number;
   bossHpRatio: number | null;
   /** 개발 모드 옵션(보스 직전 시작/무적)이 사용된 판인가 — 최고 기록에서 제외 */

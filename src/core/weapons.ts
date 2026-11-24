@@ -40,7 +40,7 @@ export class WeaponSystem {
   readonly infected = new Map<Enemy, number>();
   private readonly orbitHits = new Map<Target, number>();
   private readonly contagion: Point[] = [];
-  private previousShot: (Point & { angle: number }) | null = null;
+  private previousShot: (Point & { angle: number; at: number }) | null = null;
   private echo: (Point & { angle: number; at: number }) | null = null;
   private trail: Point | null = null;
   private dodgeTrail: Point | null = null;
@@ -88,8 +88,8 @@ export class WeaponSystem {
   private damage(kind: WeaponId, target: Target, factor: number): void {
     this.onFusionHit(kind, target);
     const damage = this.weaponDamage(kind, factor);
-    if ('id' in target) this.sim.damageEnemy(target, damage);
-    else this.sim.damageBoss(damage);
+    if ('id' in target) this.sim.damageEnemy(target, damage, kind);
+    else this.sim.damageBoss(damage, kind);
   }
 
   onFusionHit(kind: WeaponId, target: Target): void {
@@ -105,8 +105,8 @@ export class WeaponSystem {
         for (const nearby of this.targets()) {
           if (dist(target.x, target.y, nearby.x, nearby.y) > recipe.radius + nearby.r) continue;
           const damage = this.sim.stats.damage * recipe.damage;
-          if ('id' in nearby) this.sim.damageEnemy(nearby, damage);
-          else this.sim.damageBoss(damage);
+          if ('id' in nearby) this.sim.damageEnemy(nearby, damage, id);
+          else this.sim.damageBoss(damage, id);
         }
       } else {
         recent[id] = { weapon: kind, at: now };
@@ -145,10 +145,7 @@ export class WeaponSystem {
   onShot(): void {
     if (!this.sim.stacks.echo) return;
     const { x, y, aim: angle } = this.sim.player;
-    if (this.previousShot && this.available('echo', 1.25)) {
-      this.echo = { ...this.previousShot, at: this.sim.elapsed + 0.36 };
-    }
-    this.previousShot = { x, y, angle };
+    this.previousShot = { x, y, angle, at: this.sim.elapsed };
   }
 
   onBulletHit(target: Target): void {
@@ -198,18 +195,19 @@ export class WeaponSystem {
     if (this.echo && this.echo.at <= now) {
       const { x, y, angle } = this.echo;
       const angles = sim.relics.has('mirror') ? [angle, angle + Math.PI] : [angle];
-      const count = this.rankEffect('echo');
       for (const direction of angles) {
-        for (let i = 0; i < count; i++) {
-          const shotAngle = direction + (i - (count - 1) / 2) * 0.2;
-          const dx = Math.cos(shotAngle);
-          const dy = Math.sin(shotAngle);
-          this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
-          sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
-            damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo' });
-        }
+        const dx = Math.cos(direction);
+        const dy = Math.sin(direction);
+        this.trace('echo', [{ x, y }, { x: x + dx * 45, y: y + dy * 45 }]);
+        sim.playerShots.push({ x, y, vx: dx * 620, vy: dy * 620, r: 5,
+          damage: this.weaponDamage('echo', 1.15 * (angles.length > 1 ? 0.7 : 1)), life: 0.9 + sim.reachBonus / 620, source: 'echo' });
       }
       this.echo = null;
+    }
+    // 기본탄의 발사 프레임을 기다리지 않아야 잔영의 짧아진 주기가 그대로 적용된다.
+    const shot = this.previousShot;
+    if (!this.echo && shot && now - shot.at <= 1 / sim.relics.fireRate + 0.2 && this.available('echo', this.rankEffect('echo'))) {
+      this.echo = { ...shot, at: now + 0.36 };
     }
     if (sim.stacks.orbit) this.orbit();
     if (sim.stacks.infection) this.spread(now);
