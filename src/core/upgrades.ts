@@ -14,14 +14,15 @@ export function gradeWeights(luck: number): number[] {
 }
 
 /** 등급 1개 추첨. 난수는 항상 1개 소비. */
-export function rollGrade(rng: Rng, luck: number): GradeId {
+export function rollGrade(rng: Rng, luck: number, noCommon = false): GradeId {
   const w = gradeWeights(luck);
+  if (noCommon) w[0] = 0;
   let r = rng.next() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < w.length; i++) {
     r -= w[i];
     if (r < 0) return GRADES[i].id;
   }
-  return 'common';
+  return noCommon ? 'rare' : 'common';
 }
 
 /** 레벨에 따른 행운 + 영구 강화 행운 */

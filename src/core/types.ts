@@ -120,6 +120,8 @@ export interface Projectile {
   source: string;
   pierceLeft?: number;
   hitIds?: Set<number>;
+  /** 기본 사격 직후 큰 탄(다섯째 종) 등 그리기용 표시 */
+  big?: boolean;
   /** 틈새의 거울: 처치로 다시 발동한 잔영 탄. 이 탄의 처치는 다시 발동하지 않는다. */
   echoRepeat?: boolean;
 }
@@ -140,6 +142,8 @@ export interface Gem {
   y: number;
   value: number;
   pulled: boolean;
+  /** 바닥에 떨어진 뒤 지난 시간(초). 썩어 가는 보석이 사용 */
+  age?: number;
 }
 
 /** 바닥에 떨어진 아이템 */
@@ -184,9 +188,10 @@ export type UpgradeChoice =
   | { kind: 'upgrade'; def: UpgradeDef; grade: GradeId; nextStack: number }
   | { kind: 'fusion'; id: FusionId }
   | { kind: 'relic'; id: RelicId; source: RelicSource }
+  | { kind: 'coin'; id: 'flip' | 'pass' }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
-export type AttackId = 'basic' | 'bomb' | WeaponId | FusionId;
+export type AttackId = 'basic' | 'bomb' | 'relic' | WeaponId | FusionId;
 
 export type RunOutcome = 'victory' | 'defeat';
 export type RunEndCause = 'boss' | 'death' | 'timeout';
@@ -208,6 +213,8 @@ export interface RunResult {
   revived: number;
   itemsCollected: number;
   relics?: RelicId[];
+  /** 유물로 늘어난 토큰 배율 (탐욕의 황금 주사위, 서두른 초대장) */
+  tokenMultiplier?: number;
   fusions?: FusionId[];
   /** 적중 시 보정된 피해량의 합. 남은 체력을 초과한 피해도 포함한다. */
   damageByAttack?: Partial<Record<AttackId, number>>;

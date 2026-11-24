@@ -193,4 +193,21 @@ test.describe('성장 시스템', () => {
     }
   });
 
+  test('도박꾼의 동전: 균열 수호자 처치 뒤 동전 화면이 열리고, 던지면 결과가 다음 보상 화면에 표시된다', async ({ page }) => {
+    await startRun(page, '&seed=44&god=1');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      sim.relics.acquire('gamblerCoin');
+      const elite = sim.spawnEnemy('elite', sim.player.x + 150, sim.player.y);
+      sim.damageEnemy(elite, elite.hp);
+    });
+    await expect(page.getByRole('heading', { name: '도박꾼의 동전' })).toBeVisible();
+    await expect(page.locator('.card')).toHaveCount(2);
+    await expect(page.getByTestId('reroll')).toHaveCount(0);
+    await page.getByTestId('choice-0').click();
+    await expect(page.getByTestId('coin-notice')).toHaveText(/동전 (앞면|뒷면)/);
+    await page.getByTestId('choice-0').click();
+    await expect(page.getByTestId('coin-notice')).toHaveCount(0);
+  });
+
 });

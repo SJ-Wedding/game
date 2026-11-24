@@ -1,4 +1,4 @@
-import { OPENING_RELIC_LEVEL, validCarry, type RelicId } from '../config/relics';
+import { OPENING_RELIC_LEVEL, carryable, validCarry, type RelicId } from '../config/relics';
 import type { Sfx } from '../audio/sfx';
 import { randomSeed } from '../core/rng';
 import { GameSim } from '../core/sim';
@@ -172,7 +172,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
+    const title = reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? '수호자의 무기 보상' : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
       : sim.startPickOpen ? '시작 강화 선택' : `레벨 업! Lv ${sim.pendingLevel}`;
     this.screens.showLevelUp({
@@ -182,6 +182,7 @@ export class App {
       rerollsLeft: sim.rerollsLeft,
       armory: sim.armoryOpen,
       bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
+      notice: sim.coinNotice,
       onChoose: (i) => this.choose(i),
       onReroll: () => this.reroll(),
     });
@@ -207,7 +208,7 @@ export class App {
       dodgeCooldown: sim.relics.dodgeCooldown,
       fireRate: sim.relics.fireRate,
       xpGain: sim.stats.xpGain * sim.relics.xpMultiplier,
-      damageTaken: sim.relics.damageTaken,
+      damageTaken: sim.relics.damageTaken(),
       luck: sim.luck,
       projectileRange: sim.stats.projectileRange + sim.reachBonus + sim.relics.basicReachBonus,
       projectileCount: sim.relics.projectileCount,
@@ -255,8 +256,10 @@ export class App {
     const { data, newRecords, tokens } = recordRun(this.save, result);
     this.save = data;
     if (result.outcome === 'victory') {
-      if (result.assisted) this.assistedRelicDraft = result.relics ?? [];
-      else this.save = { ...this.save, pendingRelicDraft: result.relics ?? [] };
+      // 판 밖 성장에 영향을 주는 유물은 계승 후보에서 뺀다
+      const draft = (result.relics ?? []).filter(carryable);
+      if (result.assisted) this.assistedRelicDraft = draft;
+      else this.save = { ...this.save, pendingRelicDraft: draft };
     }
     writeSave(this.storage, this.save);
     this.lastResult = result;

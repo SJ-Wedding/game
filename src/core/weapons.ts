@@ -17,6 +17,8 @@ interface Device extends Point {
   hit: Set<Target>;
   armAt?: number;
   secondary?: boolean;
+  /** 귀환의 고리: 커지기 전 도끼 타격 반경 */
+  baseR?: number;
   exposures?: Map<Target, number>;
 }
 interface EffectTiming {
@@ -142,7 +144,7 @@ export class WeaponSystem {
     }
   }
 
-  private trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24, variant?: WeaponEffect['variant']): void {
+  trace(kind: WeaponId, points: Point[], radius = 0, duration = 0.24, variant?: WeaponEffect['variant']): void {
     this.effects.push({ kind, variant, points: points.map(({ x, y }) => ({ x, y })), radius, life: duration, duration });
   }
 
@@ -166,7 +168,19 @@ export class WeaponSystem {
   private available(kind: WeaponId, interval: number): boolean {
     if (!this.sim.stacks[kind] || this.sim.elapsed < (this.ready.get(kind) ?? 0)) return false;
     this.ready.set(kind, this.sim.elapsed + interval * this.sim.relics.cooldownMultiplier);
+    // 불안정한 마력 코어: 25% 확률로 재사용 대기시간 즉시 초기화
+    if (this.sim.relics.onWeaponActivated()) this.ready.set(kind, this.sim.elapsed);
     return true;
+  }
+
+  /** 시간 왜곡의 모래시계: 모든 특수 무기의 남은 재사용 대기시간 감소 */
+  reduceCooldowns(seconds: number): void {
+    for (const [kind, at] of this.ready) this.ready.set(kind, at - seconds);
+  }
+
+  /** 흡혈귀의 깨진 성배: 감염·화상 상태인가 */
+  afflicted(enemy: Enemy): boolean {
+    return this.infected.has(enemy) || this.burns.has(enemy);
   }
 
   onDodge(): void {
@@ -182,14 +196,15 @@ export class WeaponSystem {
   onBulletHit(target: Target): void {
     if (!this.sim.stacks.mark) return;
     const hits = (this.marks.get(target) ?? 0) + 1;
-    if (!target.dead && hits < 3) {
+    const bell = this.sim.relics.has('secondBell');
+    if (!target.dead && hits < (bell ? 2 : 3)) {
       this.marks.set(target, hits);
       this.trace('mark', [target], target.r, 0.2, 'markCharge');
       return;
     }
     this.marks.delete(target);
     if (target.dead) this.onFusionHit('mark', target);
-    this.area('mark', target, this.rankEffect('mark') + this.sim.reachBonus * 0.12, 1.45);
+    this.area('mark', target, (this.rankEffect('mark') + this.sim.reachBonus * 0.12) * (bell ? 0.75 : 1), 1.45);
   }
 
   onEnemyKilled(enemy: Enemy): void {
@@ -206,7 +221,12 @@ export class WeaponSystem {
 
     if (sim.stacks.chain && now >= (this.ready.get('chain') ?? 0)) this.chain();
     if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 96);
-    if (this.available('turret', this.rankEffect('turret'))) this.device('turret', p, 6, 340 + sim.reachBonus * 0.55);
+    if (this.available('turret', this.rankEffect('turret'))) {
+      // 겨울 등불: 지속시간 −30%, 한 번에 2대
+      if (sim.relics.has('winterLantern')) {
+        for (const side of [-1, 1]) this.device('turret', { x: p.x + side * 34, y: p.y }, 6 * 0.7, 340 + sim.reachBonus * 0.55);
+      } else this.device('turret', p, 6, 340 + sim.reachBonus * 0.55);
+    }
     if (sim.stacks.flame && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
       this.trail = { x: p.x, y: p.y };
       this.device('flame', p, 2, this.rankEffect('flame'));
@@ -220,8 +240,9 @@ export class WeaponSystem {
     }
 
     if ((sim.stacks.axe || sim.stacks.spear || sim.stacks.gravity) && (sim.target || sim.findTarget(540 + sim.reachBonus))) {
-      if (this.available('axe', 2.0)) this.device('axe', p, 2.2, this.rankEffect('axe'), p.aim);
-      if (this.available('spear', 2.6)) this.device('spear', p, 0.38, this.rankEffect('spear') + sim.reachBonus, p.aim);
+      if (this.available('axe', 2.0 * (sim.relics.has('returnRing') ? 1.2 : 1))) this.device('axe', p, 2.2, this.rankEffect('axe'), p.aim).baseR = this.rankEffect('axe');
+      // 별자리 창끝: 조준 시간 +0.3초
+      if (this.available('spear', 2.6)) this.device('spear', p, 0.38 + (sim.relics.has('constellation') ? 0.3 : 0), this.rankEffect('spear') + sim.reachBonus, p.aim);
       // 별의 닻: 중력 구체 크기 +50%
       if (this.available('gravity', 4.2)) this.device('gravity', p, 1.9, (this.rankEffect('gravity') + sim.reachBonus * 0.16) * (sim.relics.has('anchor') ? 1.5 : 1), p.aim);
     }
@@ -298,6 +319,7 @@ export class WeaponSystem {
     if (!target) return;
     const crown = this.sim.relics.has('crown');
     this.ready.set('chain', this.sim.elapsed + 2.15 * this.sim.relics.cooldownMultiplier);
+    if (this.sim.relics.onWeaponActivated()) this.ready.set('chain', this.sim.elapsed);
     const hit = new Set<Target>();
     const points: Point[] = [p];
     while (target && hit.size < this.rankEffect('chain') + (crown ? 2 : 0)) {
@@ -350,19 +372,40 @@ export class WeaponSystem {
       if (target) {
         this.infected.set(target, now + 5);
         this.trace('infection', [target], target.r, 0.46);
-        this.damage('infection', target, 1);
+        this.damage('infection', target, this.infectionFactor);
       }
     }
     const origins = this.contagion.splice(0);
+    const jar = this.sim.relics.has('plagueJar');
     for (const origin of origins) {
       const radius = this.rankEffect('infection');
-      for (const enemy of this.sim.enemies) {
-        if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > radius + enemy.r) continue;
+      const infect = (enemy: Enemy) => {
         this.infected.set(enemy, now + 5);
         this.trace('infection', [origin, enemy], enemy.r, 0.62);
-        this.damage('infection', enemy, 1.1);
+        this.damage('infection', enemy, 1.1 * this.infectionFactor);
+      };
+      for (const enemy of this.sim.enemies) {
+        if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > radius + enemy.r) continue;
+        infect(enemy);
+      }
+      // 역병 항아리: 번질 때 범위 밖에서도 가까운 적 2마리 추가 감염 (반경 2배 안)
+      for (let extra = 0; jar && extra < 2; extra++) {
+        let best: Enemy | null = null;
+        let range = radius * 2;
+        for (const enemy of this.sim.enemies) {
+          if (enemy.dead || this.infected.has(enemy)) continue;
+          const d = dist(enemy.x, enemy.y, origin.x, origin.y) - enemy.r;
+          if (d < range) { range = d; best = enemy; }
+        }
+        if (!best) break;
+        infect(best);
       }
     }
+  }
+
+  /** 역병 항아리: 감염 피해 −20% */
+  private get infectionFactor(): number {
+    return this.sim.relics.has('plagueJar') ? 0.8 : 1;
   }
 
   private updateDevice(d: Device, dt: number): void {
@@ -404,7 +447,14 @@ export class WeaponSystem {
         }
         break;
       case 'spear':
-        if (finished) this.sweep(d, 12, 2.6);
+        if (finished) {
+          this.sweep(d, 12, d.secondary ? 2.6 * 0.5 : 2.6);
+          // 별자리 창끝: 적 3마리 이상을 꿰뚫으면 끝 지점에서 좌우로 창 2개
+          if (!d.secondary && d.hit.size >= 3 && this.sim.relics.has('constellation')) {
+            const end = { x: d.x + Math.cos(d.angle) * d.r, y: d.y + Math.sin(d.angle) * d.r };
+            for (const side of [-1, 1]) this.device('spear', end, 0.12, d.r * 0.6, d.angle + side * Math.PI / 2).secondary = true;
+          }
+        }
         break;
       case 'barrier':
         if (!finished) this.sweep(d, this.rankEffect('barrier'), 1.8);
@@ -412,6 +462,8 @@ export class WeaponSystem {
       case 'axe': {
         const returning = d.age >= 0.72;
         if (returning && previous < 0.72) d.hit.clear();
+        // 귀환의 고리: 돌아오는 동안 타격 반경 +50% → +100%
+        if (this.sim.relics.has('returnRing') && d.baseR) d.r = d.baseR * (returning ? 1.5 + 0.5 * Math.min(1, (d.age - 0.72) / 0.8) : 1);
         const p = this.sim.player;
         if (returning) d.angle = Math.atan2(p.y - d.y, p.x - d.x);
         if (returning && dist(d.x, d.y, p.x, p.y) < 16) {

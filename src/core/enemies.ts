@@ -194,7 +194,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
     e.y = clamp(e.y, pad, ARENA_CONFIG.height - pad);
 
     if (dist(e.x, e.y, p.x, p.y) < e.r + p.r) {
-      sim.hurtPlayer(contactDamage * e.dmgMul, contactSource);
+      sim.hurtPlayer(contactDamage * e.dmgMul, contactSource, 'contact');
     }
   }
   separate(sim);

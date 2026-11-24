@@ -100,7 +100,7 @@ describe('로컬 저장', () => {
     let d = defaultSave();
     const r = recordRun(d, result({ survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
     // 생존 10분 × 2 + 처치 140/50 = 2 + 엘리트 2 × 5 = 32
-    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, total: 32 });
+    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, relics: 0, total: 32 });
     d = r.data;
     expect(d.meta.tokens).toBe(32);
     const win = recordRun(d, result({ outcome: 'victory', cause: 'boss', survivalTime: 860, killsByKind: {} }));

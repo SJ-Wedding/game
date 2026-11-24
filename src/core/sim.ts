@@ -22,6 +22,10 @@ import type {
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
 import { WeaponSystem } from './weapons';
+
+function shotAttack(source: string): AttackId | undefined {
+  return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' ? 'relic' : undefined;
+}
 import { applyUpgrade, luckFor, rollChoices, rollGrade, rollRunChoices } from './upgrades';
 
 export interface SimOptions {
@@ -64,7 +68,13 @@ export class GameSim {
   readonly weapons = new WeaponSystem(this);
   readonly relics = new RelicEffects(this);
   private readonly rngRelic: Rng;
-  private readonly pendingRewards: (RelicSource | 'armory' | 'bonus')[] = [];
+  /** 유물 효과 판정 전용 난수 (다른 난수 흐름을 바꾸지 않는다) */
+  readonly rngRelicFx: Rng;
+  private readonly pendingRewards: (RelicSource | 'armory' | 'bonus' | 'coin')[] = [];
+  /** 도박꾼의 동전 결과 안내 (다음 보상 화면에 한 번 표시) */
+  coinNotice: string | null = null;
+  /** 균열 결정 보장이 지금 후보에 적용되었는가 */
+  private rareApplied = false;
   armoryOpen = false;
   bonusOpen = false;
   readonly options: SimOptions;
@@ -137,6 +147,7 @@ export class GameSim {
     this.rerollsLeft = PROGRESSION_CONFIG.baseRerolls + this.meta.rerolls;
     this.revivesLeft = this.meta.revives;
     this.rngRelic = new Rng(deriveSeed(this.seed, 'relic'));
+    this.rngRelicFx = new Rng(deriveSeed(this.seed, 'relicFx'));
 
     if (options.presetUpgrades) {
       for (const pick of picksFromCounts(options.presetUpgrades)) {
@@ -195,7 +206,12 @@ export class GameSim {
   }
 
   get xpNeeded(): number {
-    return xpToNext(this.level);
+    return this.xpFor(this.level);
+  }
+
+  xpFor(level: number): number {
+    const need = xpToNext(level);
+    return this.relics.xpNeededMultiplier === 1 ? need : Math.round(need * this.relics.xpNeededMultiplier);
   }
 
   /** 전투 시간이 흐르는 상태인가 */
@@ -244,7 +260,7 @@ export class GameSim {
     const dt = 1 / RUN_CONFIG.tickRate;
     this.tick++;
 
-    this.relics.update();
+    this.relics.update(dt);
     this.updatePlayer(dt, input);
     this.updateSpawner(dt);
     updateEnemies(this, dt);
@@ -268,7 +284,7 @@ export class GameSim {
     if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
     if (p.dodgeCd > 0) p.dodgeCd = Math.max(0, p.dodgeCd - dt);
     if (p.hurtFlash > 0) p.hurtFlash -= dt;
-    if (s.regen > 0 && p.hp > 0) this.relics.heal(s.regen * dt);
+    if (s.regen > 0 && p.hp > 0) this.relics.heal(s.regen * this.relics.regenMultiplier * dt);
 
     let mx = input.moveX;
     let my = input.moveY;
@@ -290,7 +306,8 @@ export class GameSim {
       p.aim = Math.atan2(input.aimY - p.y, input.aimX - p.x);
     }
 
-    if (input.dodge && p.dodgeCd <= 0 && p.dodgeTime <= 0) {
+    // 바람의 장화: 기본 회피가 대기 중이면 추가 충전을 쓴다
+    if (input.dodge && p.dodgeTime <= 0 && (p.dodgeCd <= 0 || this.relics.useSpareDodge())) {
       if (len > 0.01) {
         p.dodgeDx = mx / Math.hypot(mx, my);
         p.dodgeDy = my / Math.hypot(mx, my);
@@ -299,17 +316,21 @@ export class GameSim {
         p.dodgeDy = Math.sin(p.aim);
       }
       p.dodgeTime = s.dodgeDuration;
-      p.dodgeCd = this.relics.dodgeCooldown;
+      if (p.dodgeCd <= 0) p.dodgeCd = this.relics.dodgeCooldown;
       p.invuln = Math.max(p.invuln, s.dodgeInvuln);
       this.dodges++;
       this.weapons.onDodge();
+      this.relics.onDodge();
       this.emit('dodge', p.x, p.y);
     }
 
     const horizontal = p.dodgeTime > 0 ? p.dodgeDx : mx;
     if (Math.abs(horizontal) > 0.08) p.facingLeft = horizontal < 0;
 
-    const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(len > 0.01 || p.dodgeTime > 0);
+    const moving = len > 0.01 || p.dodgeTime > 0;
+    const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(moving);
+    const fromX = p.x;
+    const fromY = p.y;
     if (p.dodgeTime > 0) {
       p.dodgeTime -= dt;
       p.x += p.dodgeDx * s.dodgeSpeed * dt;
@@ -321,6 +342,7 @@ export class GameSim {
     const pad = ARENA_CONFIG.wallPadding + p.r;
     p.x = clamp(p.x, pad, ARENA_CONFIG.width - pad);
     p.y = clamp(p.y, pad, ARENA_CONFIG.height - pad);
+    this.relics.onMove(moving, Math.hypot(p.x - fromX, p.y - fromY));
 
     p.fireCd -= dt;
     if (fire && p.fireCd <= 0) {
@@ -338,7 +360,7 @@ export class GameSim {
   }
 
   get luck(): number {
-    return luckFor(this.level, this.meta.luck + this.stats.luck);
+    return luckFor(this.level, this.meta.luck + this.stats.luck + this.relics.luckBonus);
   }
 
   findTarget(range: number): { x: number; y: number; r: number } | null {
@@ -368,42 +390,47 @@ export class GameSim {
     const spread = (s.spreadDeg * Math.PI) / 180;
     const speed = this.relics.projectileSpeed;
     const life = (s.projectileRange + this.reachBonus + this.relics.basicReachBonus) / speed;
-    const pierceLeft = (this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl'));
-    const damage = this.relics.shotDamage();
-    for (let i = 0; i < n; i++) {
-      const a = p.aim + (i - (n - 1) / 2) * spread;
+    const mods = this.relics.volley();
+    const pierceLeft = (this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl')) + mods.pierce;
+    const damage = this.relics.shotDamage() * mods.damage;
+    const shoot = (a: number, back: number) => {
       const c = Math.cos(a);
       const si = Math.sin(a);
       this.playerShots.push({
-        x: p.x + c * (p.r + 4),
-        y: p.y + si * (p.r + 4),
+        x: p.x + c * (p.r + 4 - back),
+        y: p.y + si * (p.r + 4 - back),
         vx: c * speed,
         vy: si * speed,
-        r: s.projectileRadius,
+        r: s.projectileRadius * mods.radius,
         damage,
         life,
         source: 'player',
+        ...(mods.radius > 1 ? { big: true } : {}),
         ...(pierceLeft ? { pierceLeft, hitIds: new Set<number>() } : {}),
       });
-    }
+    };
+    for (let i = 0; i < n; i++) shoot(p.aim + (i - (n - 1) / 2) * spread, 0);
+    // 쌍둥이 그림자 검: 같은 방향으로 잔상 탄 1발
+    if (mods.twin) shoot(p.aim, 22);
     this.weapons.onShot();
     this.shotsFired++;
     this.emit('shoot', p.x, p.y);
   }
 
   /** 플레이어 피해 처리. 무적·회피 중이면 무시. 실제로 피해를 입었으면 true */
-  hurtPlayer(amount: number, source: string): boolean {
+  hurtPlayer(amount: number, source: string, kind?: 'shot' | 'contact'): boolean {
     const p = this.player;
     if (this.phase !== 'combat' || p.hp <= 0) return false;
     if (p.invuln > 0 || p.dodgeTime > 0) return false;
     if (this.options.god) return false;
-    const dmg = this.relics.onHurt(amount * this.relics.damageTaken);
+    const dmg = this.relics.onHurt(amount * this.relics.damageTaken(kind));
     p.hp = Math.max(0, p.hp - dmg);
-    p.invuln = Math.max(p.invuln, this.stats.hurtInvuln);
+    p.invuln = Math.max(p.invuln, this.stats.hurtInvuln + this.relics.hurtInvulnBonus);
     p.hurtFlash = 0.25;
     this.damageTakenTotal += dmg;
     this.lastDamageSource = source;
     this.emit('hurt', p.x, p.y);
+    this.relics.afterHurt(dmg);
     return true;
   }
 
@@ -488,7 +515,7 @@ export class GameSim {
     return e;
   }
 
-  private spawnBoss(): void {
+  spawnBoss(): void {
     this.bossSpawned = true;
     const p = this.player;
     // 아레나 중앙 쪽으로, 플레이어에게서 420px 떨어진 곳
@@ -554,7 +581,7 @@ export class GameSim {
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
           if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
-          this.damageEnemy(e, s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
+          this.damageEnemy(e, s.damage, shotAttack(s.source));
           if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx));
           if (s.pierceLeft) {
             s.pierceLeft--;
@@ -570,7 +597,7 @@ export class GameSim {
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
           if (s.source === 'echo' && !bossInvulnerable(boss)) this.weapons.onFusionHit('echo', boss);
-          this.damageBoss(s.damage, s.source === 'player' ? 'basic' : s.source === 'echo' ? 'echo' : undefined);
+          this.damageBoss(s.damage, shotAttack(s.source));
         }
       }
     }
@@ -583,8 +610,9 @@ export class GameSim {
       s.life -= dt;
       const rr = p.r + s.r;
       if (s.life > 0 && dist2(s.x, s.y, p.x, p.y) < rr * rr) {
-        // 무적(회피) 중이면 통과한다
-        if (this.hurtPlayer(s.damage, s.source)) s.life = 0;
+        // 무적(회피) 중이면 통과한다. 잔상 망토가 켜져 있으면 맞지 않는다.
+        if (p.dodgeTime > 0) this.relics.onGraze();
+        if (!this.relics.shotImmune && this.hurtPlayer(s.damage, s.source, 'shot')) s.life = 0;
       }
     }
     compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
@@ -597,23 +625,28 @@ export class GameSim {
   damageEnemy(e: Enemy, amount: number, source?: AttackId): void {
     if (e.dead) return;
     const basic = source === 'basic';
-    const damage = amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
+    let damage = amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
+    if (basic && this.relics.executes(e)) damage = Math.max(damage, e.hp);
     e.hp -= damage;
+    this.relics.onDamageEnemy(e);
     this.recordAttackDamage(source, damage);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
       e.dead = true;
       this.kills++;
-      this.relics.onEnemyKilled();
-      if (e.kind === 'elite') this.pendingRewards.push('elite', 'armory');
+      this.relics.onEnemyKilled(e, source);
+      if (e.kind === 'elite') this.pendingRewards.push(...(this.relics.has('gamblerCoin') ? ['coin' as const] : []), 'elite', 'armory');
       this.killsByKind[e.kind] = (this.killsByKind[e.kind] ?? 0) + 1;
       this.gems.push({ x: e.x, y: e.y, value: e.xp, pulled: false });
       this.rollDrop(e);
       this.weapons.onEnemyKilled(e);
       this.emit('kill', e.x, e.y);
     }
-    if (basic) this.weapons.onBulletHit(e);
+    if (basic) {
+      this.weapons.onBulletHit(e);
+      this.relics.onBasicHit(e);
+    }
   }
 
   damageBoss(amount: number, source?: AttackId): void {
@@ -630,7 +663,10 @@ export class GameSim {
       this.killsByKind.boss = 1;
       this.kills++;
     }
-    if (basic) this.weapons.onBulletHit(b);
+    if (basic) {
+      this.weapons.onBulletHit(b);
+      this.relics.onBasicHit(b);
+    }
   }
 
   private updateHazards(dt: number): void {
@@ -649,9 +685,16 @@ export class GameSim {
 
   private updateGems(dt: number): void {
     const p = this.player;
-    const radius = this.stats.pickupRadius;
+    const radius = this.stats.pickupRadius * this.relics.pickupRadiusMultiplier;
+    const rotting = this.relics.has('rottingGem');
     const speed = PROGRESSION_CONFIG.gemMagnetSpeed;
     for (const g of this.gems) {
+      g.age = (g.age ?? 0) + dt;
+      // 썩어 가는 보석: 끌려오지 않은 보석은 10초 뒤 사라진다
+      if (rotting && !g.pulled && g.age > 10) {
+        g.value = 0;
+        continue;
+      }
       const d = dist(g.x, g.y, p.x, p.y);
       if (g.pulled || d < radius) {
         g.pulled = true;
@@ -672,8 +715,8 @@ export class GameSim {
     const gained = amount * this.stats.xpGain * this.relics.xpMultiplier;
     this.xp += gained;
     this.emit('pickup', this.player.x, this.player.y, gained);
-    while (this.xp >= xpToNext(this.level)) {
-      this.xp -= xpToNext(this.level);
+    while (this.xp >= this.xpFor(this.level)) {
+      this.xp -= this.xpFor(this.level);
       this.level++;
       this.pendingLevels++;
       if (this.firstLevelUpAt === null) this.firstLevelUpAt = this.elapsed;
@@ -686,11 +729,30 @@ export class GameSim {
   }
 
   private rollLevelChoices(exclude: UpgradeId[] = []) {
-    const luck = luckFor(this.pendingLevel, this.meta.luck + this.stats.luck);
+    const luck = luckFor(this.pendingLevel, this.meta.luck + this.stats.luck + this.relics.luckBonus);
     // 시작 강화는 무기 후보 규칙(레벨 2·5·8…)을 따르지 않는다
     const level = this.startPickOpen ? 0 : this.pendingLevel;
     const choices = rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude);
-    return [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
+    let out = [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
+    // 점술가의 카드: 후보 2개. 무기 후보(마지막 칸)는 남긴다.
+    if (out.length > this.relics.choiceCount) out = [out[0], ...out.slice(out.length - this.relics.choiceCount + 1)];
+    this.applyGradeRelics(out, luck, true);
+    return out;
+  }
+
+  /** 이름 없는 계약(일반 등급 제외)과 균열 결정(희귀 이상 1장 보장) */
+  private applyGradeRelics(choices: UpgradeChoice[], luck: number, crystal: boolean): void {
+    if (this.relics.noCommonGrade) {
+      for (const c of choices) if (c.kind === 'upgrade' && c.grade === 'common') c.grade = rollGrade(this.rngRelicFx, luck, true);
+    }
+    this.rareApplied = false;
+    if (crystal && this.relics.rareCards > 0) {
+      const cards = choices.filter((c) => c.kind === 'upgrade');
+      if (cards.length) {
+        this.rareApplied = true;
+        if (cards.every((c) => c.grade === 'common')) cards[0].grade = 'rare';
+      }
+    }
   }
 
   private fusionChoices(): UpgradeChoice[] {
@@ -738,7 +800,11 @@ export class GameSim {
         this.armoryOpen = this.choices.length > 0;
       } else if (source === 'bonus') {
         this.choices = [...this.fusionChoices(), ...rollChoices(this.rngUpgrade, this.stacks, this.luck)].slice(0, PROGRESSION_CONFIG.choiceCount);
+        this.applyGradeRelics(this.choices, this.luck, false);
         this.bonusOpen = true;
+      } else if (source === 'coin') {
+        // 다음에 열릴 엘리트 유물 선택이 남아 있을 때만 동전을 던질 수 있다
+        if (this.pendingRewards.includes('elite')) this.choices = [{ kind: 'coin', id: 'flip' }, { kind: 'coin', id: 'pass' }];
       } else {
         this.choices = rollRelics(source, this.rngRelic, this.relics.owned);
       }
@@ -760,7 +826,10 @@ export class GameSim {
     if (this.phase !== 'levelup') return false;
     const c = this.choices[index];
     if (!c) return false;
-    if (c.kind === 'relic') {
+    if (c.kind !== 'coin') this.coinNotice = null;
+    if (c.kind === 'coin') {
+      this.flipCoin(c.id === 'flip');
+    } else if (c.kind === 'relic') {
       this.relics.acquire(c.id);
     } else {
       const rewardLevel = !this.armoryOpen && !this.bonusOpen && !this.startPickOpen ? this.pendingLevel : 0;
@@ -778,6 +847,8 @@ export class GameSim {
         this.pickOrder.push(c.id);
       }
       if (!this.armoryOpen && !this.bonusOpen) {
+        if (this.rareApplied && !this.startPickOpen) this.relics.rareCards--;
+        this.rareApplied = false;
         this.pendingLevels--;
         this.startPickOpen = false;
       }
@@ -789,9 +860,28 @@ export class GameSim {
     return true;
   }
 
+  /** 도박꾼의 동전: 앞면이면 엘리트 유물 선택 1회 추가, 뒷면이면 현재 체력 15%와 이번 유물 선택을 잃는다 */
+  private flipCoin(flip: boolean): void {
+    if (!flip) {
+      this.coinNotice = null;
+      return;
+    }
+    const p = this.player;
+    if (this.rngRelicFx.next() < 0.5) {
+      this.pendingRewards.unshift('elite');
+      this.coinNotice = '동전 앞면! 유물 선택 1회 추가';
+    } else {
+      const i = this.pendingRewards.indexOf('elite');
+      if (i >= 0) this.pendingRewards.splice(i, 1);
+      if (!this.options.god) p.hp = Math.max(1, p.hp * 0.85);
+      p.hurtFlash = 0.25;
+      this.coinNotice = '동전 뒷면… 체력 15%와 유물 선택을 잃었습니다';
+    }
+  }
+
   /** 레벨업 후보 새로고침. 남은 횟수가 없거나 레벨업 중이 아니면 false */
   reroll(): boolean {
-    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.armoryOpen || this.bonusOpen || this.choices[0]?.kind === 'relic') return false;
+    if (this.phase !== 'levelup' || this.rerollsLeft <= 0 || this.armoryOpen || this.bonusOpen || this.choices[0]?.kind === 'relic' || this.choices[0]?.kind === 'coin') return false;
     const prev = this.choices.filter((c) => c.kind === 'upgrade').map((c) => (c.kind === 'upgrade' ? c.def.id : ('' as UpgradeId)));
     this.rerollsLeft--;
     this.rerollsUsed++;
@@ -810,7 +900,7 @@ export class GameSim {
     else {
       let acc = 0;
       for (const d of DROPS) {
-        acc += d.chance;
+        acc += d.chance * this.relics.dropChanceMultiplier(d.kind);
         if (r < acc) {
           kind = d.kind;
           break;
@@ -837,8 +927,9 @@ export class GameSim {
   useItem(kind: DropKind): void {
     const p = this.player;
     this.itemsCollected++;
+    const full = p.hp >= this.relics.maxHp - 1e-6;
     if (kind === 'heal') {
-      this.relics.heal(DROP_CONFIG.healAmount);
+      this.relics.heal(DROP_CONFIG.healAmount * this.relics.potionMultiplier);
     } else if (kind === 'magnet') {
       for (const g of this.gems) g.pulled = true;
     } else {
@@ -847,8 +938,14 @@ export class GameSim {
           this.damageEnemy(e, DROP_CONFIG.bombDamage, 'bomb');
         }
       }
+      // 화약 상자: 폭탄 범위 안의 보스에게 최대 체력의 3%
+      const b = this.boss;
+      if (b && this.relics.has('powderBox') && Math.abs(b.x - p.x) < DROP_CONFIG.bombHalfWidth && Math.abs(b.y - p.y) < DROP_CONFIG.bombHalfHeight) {
+        this.damageBoss(b.maxHp * 0.03, 'bomb');
+      }
       this.emit('bomb', p.x, p.y);
     }
+    this.relics.onItem(kind, full);
     this.emit('item', p.x, p.y);
   }
 
@@ -860,6 +957,9 @@ export class GameSim {
 
   private checkEnd(): void {
     const p = this.player;
+    if (!this.boss?.dead && p.hp <= 0 && this.relics.tryFeather()) {
+      this.emit('revive', p.x, p.y);
+    }
     if (!this.boss?.dead && p.hp <= 0 && this.revivesLeft > 0) {
       // 영구 강화 '부활': 체력 50%로 일어나고 주변 적 탄을 지운다
       this.revivesLeft--;
@@ -896,6 +996,7 @@ export class GameSim {
       revived: this.revived,
       itemsCollected: this.itemsCollected,
       relics: [...this.relics.owned],
+      tokenMultiplier: this.relics.tokenMultiplier(outcome === 'victory'),
       fusions: [...this.weapons.fusions],
       damageByAttack: { ...this.damageByAttack },
       combatTime: (this.tick - this.startingTick) / RUN_CONFIG.tickRate,
