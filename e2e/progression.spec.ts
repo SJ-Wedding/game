@@ -160,7 +160,7 @@ test.describe('성장 시스템', () => {
     await expect(page.locator('#overlay')).toBeHidden();
   });
 
-  test('삼중 선택의 인장은 세 번 선택할 수 있고 결과는 공격별 실제 피해와 DPS를 표시한다', async ({ page }) => {
+  test('삼중 선택의 인장은 세 번 선택할 수 있고 결과는 초과 피해를 포함한 공격별 피해량과 DPS를 표시한다', async ({ page }) => {
     await startRun(page, '&seed=43&god=1');
     await page.evaluate(() => (window as any).__rift.sim.relics.acquire('tripleChoice'));
     for (const remaining of [3, 2, 1]) {
@@ -183,11 +183,13 @@ test.describe('성장 시스템', () => {
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     const summary = page.getByTestId('damage-breakdown');
     await expect(summary).toContainText('평균 DPS');
-    for (const [id, damage, name] of [['basic', '8', '기본 사격'], ['echo', '12', '메아리 사격'], ['volley', '45', '잔영 관통포']]) {
+    await expect(summary).toContainText('초과 피해를 포함한 총 피해량');
+    const combatTime: number = await page.evaluate(() => (window as any).__rift.sim.result.combatTime);
+    for (const [id, damage, name] of [['basic', 8, '기본 사격'], ['echo', 1000, '메아리 사격'], ['volley', 100, '잔영 관통포']] as const) {
       const row = summary.locator(`[data-attack="${id}"]`);
       await expect(row).toContainText(name);
-      await expect(row.locator('td').first()).toHaveText(damage);
-      await expect(row.locator('td').last()).not.toHaveText('0');
+      await expect(row.locator('td').first()).toHaveText(String(damage));
+      await expect(row.locator('td').last()).toHaveText(String(Number((damage / combatTime).toFixed(1))));
     }
   });
 

@@ -446,7 +446,7 @@ export class Screens {
     });
     return el('details', { class: 'result-damage', open: '', 'data-testid': 'damage-breakdown' }, [
       el('summary', { text: '공격별 피해량 · DPS' }),
-      el('small', { class: 'muted', text: '실제 피해량 ÷ 전체 전투 시간. 초과 피해 제외.' }),
+      el('small', { class: 'muted', text: '초과 피해를 포함한 총 피해량 ÷ 전체 전투 시간.' }),
       el('div', { class: 'result-damage-scroll' }, [
         el('table', { class: 'stat-table' }, [
           el('thead', {}, [el('tr', {}, [el('th', { text: '공격' }), el('th', { text: '총 피해량' }), el('th', { text: '평균 DPS' })])]),

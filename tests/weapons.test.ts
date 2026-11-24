@@ -286,7 +286,7 @@ it('처치 전염과 서리 포탑은 하향된 기본 피해를 기록한다', 
   }
 });
 
-it('공격별 피해에는 실제 피해만 집계하고 쓰러진 적이나 무적 보스는 세지 않는다', () => {
+it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이나 무적 보스는 집계에서 제외한다', () => {
   const sim = makeSim({ startTime: 810, god: true });
   const target = sim.spawnEnemy('charger', 900, 900);
   target.hp = 15;
@@ -294,12 +294,14 @@ it('공격별 피해에는 실제 피해만 집계하고 쓰러진 적이나 무
   sim.damageEnemy(target, 1000, 'echo');
   sim.damageEnemy(target, 1000, 'chain');
   sim.damageBoss(1000, 'storm');
-  expect(sim.damageByAttack).toEqual({ basic: 7, echo: 8 });
+  expect(sim.damageByAttack).toEqual({ basic: 7, echo: 1000 });
   const boss = sim.boss!;
   boss.state = 'idle';
   boss.hp = 100;
   sim.damageBoss(200, 'storm');
+  sim.damageBoss(1000, 'chain');
   sim.step(IDLE_INPUT);
-  expect(sim.result?.damageByAttack).toEqual({ basic: 7, echo: 8, storm: 100 });
+  expect(boss.hp).toBe(0);
+  expect(sim.result?.damageByAttack).toEqual({ basic: 7, echo: 1000, storm: 200 });
   expect(sim.result?.combatTime).toBeCloseTo(1 / 60);
 });

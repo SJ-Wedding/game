@@ -594,18 +594,16 @@ export class GameSim {
     compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
   }
 
-  private recordAttackDamage(source: AttackId | undefined, hpBefore: number, hpAfter: number): void {
-    if (!source) return;
-    const damage = hpBefore - Math.max(0, hpAfter);
-    if (damage > 0) this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
+  private recordAttackDamage(source: AttackId | undefined, damage: number): void {
+    if (source && damage > 0) this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
   }
 
   damageEnemy(e: Enemy, amount: number, source?: AttackId): void {
     if (e.dead) return;
     const basic = source === 'basic';
-    const hpBefore = e.hp;
-    e.hp -= amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
-    this.recordAttackDamage(source, hpBefore, e.hp);
+    const damage = amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
+    e.hp -= damage;
+    this.recordAttackDamage(source, damage);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
@@ -625,9 +623,9 @@ export class GameSim {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
     const basic = source === 'basic';
-    const hpBefore = b.hp;
-    b.hp = Math.max(0, b.hp - amount * this.relics.damageMultiplier(b, basic) * (basic ? 1 - BOSS_CONFIG.basicResistance : 1));
-    this.recordAttackDamage(source, hpBefore, b.hp);
+    const damage = amount * this.relics.damageMultiplier(b, basic) * (basic ? 1 - BOSS_CONFIG.basicResistance : 1);
+    b.hp = Math.max(0, b.hp - damage);
+    this.recordAttackDamage(source, damage);
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
     if (b.hp <= 0) {
