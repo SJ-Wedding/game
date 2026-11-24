@@ -48,6 +48,19 @@ describe('특수 무기', () => {
     expect(enemy.hp).toBeLessThan(enemy.maxHp);
   });
 
+  it('화염 발자국 안에 있는 플레이어는 피해 없이 주변 적을 태운다', () => {
+    const sim = makeSim({ presetUpgrades: { flame: 1 }, carryRelics: ['laces'] });
+    const { x, y, hp } = sim.player;
+    sim.player.fireCd = Infinity;
+    const enemy = sim.spawnEnemy('chaser', x + 33, y);
+    enemy.speed = 0;
+    enemy.hp = 1000;
+    for (let i = 0; i < 100; i++) sim.step(IDLE_INPUT);
+    expect(sim.player.hp).toBe(hp);
+    expect(sim.damageTakenTotal).toBe(0);
+    expect(sim.damageByAttack.flame).toBeGreaterThan(0);
+  });
+
   it('설치된 지뢰는 시간이 지나도 남아 있다가 적이 접근하면 제거된다', () => {
     const { sim, target, advance } = setup('mine');
     advance(1);

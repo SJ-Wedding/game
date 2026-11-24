@@ -280,13 +280,22 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // 1) 장판 예고 (낙화)
+    // 1) 낙화 경계선은 플레이어의 불꽃에 겹쳐도 보이도록 전경에 그린다.
     for (const h of sim.hazards) {
       const k = h.t / h.dur;
       const urgent = h.dur - h.t < 0.25;
-      ground.fillStyle(PALETTE.telegraph, urgent ? 0.4 : 0.16).fillCircle(h.x, h.y, h.r);
-      ground.fillStyle(PALETTE.telegraph, 0.35).fillCircle(h.x, h.y, h.r * k);
-      ground.lineStyle(urgent ? 4 : 2, PALETTE.telegraphEdge, 0.95).strokeCircle(h.x, h.y, h.r);
+      ground.fillStyle(0xdb195d, urgent ? 0.38 : 0.18).fillCircle(h.x, h.y, h.r);
+      ground.fillStyle(0xff3980, 0.26).fillCircle(h.x, h.y, h.r * k);
+      g.lineStyle(6, 0x3f102b, 0.95).strokeCircle(h.x, h.y, h.r);
+      g.lineStyle(urgent ? 4 : 2, 0xff9dc7, 1).strokeCircle(h.x, h.y, h.r);
+      for (let i = 0; i < 4; i++) {
+        const a = (i + 0.5) * Math.PI / 2;
+        const dx = Math.cos(a);
+        const dy = Math.sin(a);
+        const x = h.x + dx * h.r;
+        const y = h.y + dy * h.r;
+        g.fillStyle(0xff9dc7, 1).fillTriangle(x - dy * 5, y + dx * 5, x + dy * 5, y - dx * 5, x - dx * 10, y - dy * 10);
+      }
     }
 
     // 2) 돌진·원형 탄막 예고

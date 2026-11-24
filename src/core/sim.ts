@@ -757,7 +757,7 @@ export class GameSim {
     for (const h of this.hazards) {
       h.t += dt;
       if (h.t >= h.dur) {
-        if (dist(h.x, h.y, p.x, p.y) < h.r + p.r * 0.5) this.hurtPlayer(h.damage, h.source);
+        if (dist2(h.x, h.y, p.x, p.y) <= h.r * h.r) this.hurtPlayer(h.damage, h.source);
         this.emit('explode', h.x, h.y);
       }
     }

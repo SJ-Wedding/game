@@ -52,6 +52,18 @@ describe('보스 등장', () => {
 });
 
 describe('승리와 패배', () => {
+  it.each([[0, true], [85, true], [88, false]] as const)('낙화 중심에서 %dpx 떨어진 플레이어의 폭발 피해 판정은 %s이다', (distance, hit) => {
+    const sim = makeSim();
+    const { x, y, hp } = sim.player;
+    const { radius, delay, damage } = BOSS_CONFIG.meteor;
+    sim.addHazard(x + distance, y, radius, delay, damage, BOSS_CONFIG.attackNames.meteor);
+    runUntil(sim, delay - 1 / RUN_CONFIG.tickRate);
+    expect(sim.player.hp).toBe(hp);
+    runTicks(sim, 2);
+    expect(sim.player.hp).toBe(hit ? hp - damage : hp);
+    expect(sim.lastDamageSource).toBe(hit ? BOSS_CONFIG.attackNames.meteor : null);
+  });
+
   it('보스를 처치하면 즉시 승리한다', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.bossAt, god: true });
     runTicks(sim, 120); // 등장 연출 이후

@@ -4,7 +4,7 @@ export const WEAPONS = {
   orbit: { name: '회전 칼날', description: '두 개의 칼날이 몸 주위를 돌며 닿는 적을 벱니다.', color: 0xcce9f5 },
   axe: { name: '부메랑 도끼', description: '적을 관통하며, 돌아올 때 현재 위치를 따라옵니다.', color: 0xffd17c },
   turret: { name: '서리 포탑', description: '잠시 머무는 포탑이 주변 적에게 둔화탄을 쏩니다.', color: 0x96c8ff },
-  flame: { name: '화염 발자국', description: '움직인 자리에 잠깐 남는 불길이 적을 태웁니다.', color: 0xff9559 },
+  flame: { name: '화염 발자국', description: '움직인 자리에 잠깐 남는 불길이 닿은 몬스터에게 피해를 줍니다. 플레이어는 불길을 밟아도 안전합니다.', color: 0xff9559 },
   barrier: { name: '균열 장벽', description: '회피 경로에 균열을 남겨 처음 건너는 적에게 피해를 줍니다.', color: 0xd698ff },
   spear: { name: '관통 창', description: '잠깐 조준한 뒤 같은 선 위의 적을 한꺼번에 꿰뚫습니다.', color: 0xffecac },
   mark: { name: '낙뢰 표식', description: '같은 적에게 기본탄을 세 번 맞히거나 기본탄으로 처치하면 그 자리에 낙뢰가 떨어져 주변 적도 맞힙니다.', color: 0xe2bbff },
