@@ -18,10 +18,10 @@ export interface GradeDef {
 }
 
 export const GRADES: GradeDef[] = [
-  { id: 'common', name: '일반', mult: 1.0, weight: 65, luckShift: -6, color: '#9aa0b5' },
-  { id: 'rare', name: '희귀', mult: 1.5, weight: 25, luckShift: 3.5, color: '#4ea3ff' },
-  { id: 'epic', name: '영웅', mult: 2.0, weight: 8, luckShift: 1.8, color: '#b36bff' },
-  { id: 'legendary', name: '전설', mult: 3.0, weight: 2, luckShift: 0.7, color: '#ffc43d' },
+  { id: 'common', name: '일반', mult: 1.0, weight: 65, luckShift: -8, color: '#9aa0b5' },
+  { id: 'rare', name: '희귀', mult: 1.5, weight: 25, luckShift: 4, color: '#4ea3ff' },
+  { id: 'epic', name: '영웅', mult: 2.0, weight: 8, luckShift: 2.6, color: '#b36bff' },
+  { id: 'legendary', name: '전설', mult: 3.0, weight: 2, luckShift: 1.4, color: '#ffc43d' },
 ];
 
 export const GRADE_INDEX: Record<GradeId, number> = { common: 0, rare: 1, epic: 2, legendary: 3 };
@@ -30,5 +30,5 @@ export const GRADE_CONFIG = {
   /** 레벨이 오를수록 행운 증가: 행운 += (레벨 - 1) × luckPerLevel */
   luckPerLevel: 0.06,
   /** 일반 등급 최소 가중치 (행운이 아무리 높아도 이 아래로 내려가지 않음) */
-  minCommonWeight: 20,
+  minCommonWeight: 15,
 };

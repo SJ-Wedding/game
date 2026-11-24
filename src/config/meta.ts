@@ -56,7 +56,7 @@ export const META_UNLOCKS: MetaUnlockDef[] = [
   { id: 'reroll', name: '선택지 새로고침 +1', description: '한 판에 쓸 수 있는 레벨업 새로고침 횟수 +1', maxLevel: 2, costs: [40, 80] },
   { id: 'revive', name: '부활', description: '한 판에 한 번, 쓰러지면 체력 50%로 일어납니다', maxLevel: 1, costs: [100] },
   { id: 'startPick', name: '시작 강화', description: '전투 시작 시 강화 1개를 골라 시작합니다', maxLevel: 1, costs: [60] },
-  { id: 'luck', name: '행운', description: '단계마다 행운 +1. 일반 강화와 특수 무기의 희귀 이상 등급 확률이 높아집니다.', maxLevel: 5, costs: [50, 100, 130, 160, 200] },
+  { id: 'luck', name: '행운', description: '단계마다 행운 +1. 일반 강화와 특수 무기의 희귀·영웅·전설 등급 확률이 높아집니다.', maxLevel: 5, costs: [50, 100, 130, 160, 200] },
 ];
 
 /**

@@ -50,14 +50,31 @@ describe('15분 설계', () => {
   });
 });
 
-it('후반 적은 더 높은 체력을 가지며 갑주는 기본탄 피해에만 적용된다', () => {
+it('8분부터 증원이 늘고 이미 등장한 적도 추가 피해 감소를 얻는다', () => {
+  const sim = new GameSim({ seed: 3, startTime: 479 });
+  const enemy = sim.spawnEnemy('chaser', 900, 900);
+  enemy.hp = 1000;
+  const early = sim.currentSpawnPhase()!;
+  const late = sim.currentSpawnPhase(480)!;
+  expect(late.batch).toBeGreaterThan(early.batch);
+  expect(late.maxAlive).toBeGreaterThan(early.maxAlive);
+  sim.damageEnemy(enemy, 20, 'echo');
+  expect(enemy.hp).toBe(980);
+  sim.tick += 60;
+  sim.damageEnemy(enemy, 20, 'echo');
+  expect(enemy.hp).toBe(963);
+  sim.damageEnemy(enemy, 20, 'volley');
+  expect(enemy.hp).toBe(944.5);
+});
+
+it('9분에 나온 갑주 적은 기본탄 저항과 후반 피해 감소를 함께 적용한다', () => {
   const sim = new GameSim({ seed: 7, startTime: 540 });
   const late = sim.spawnEnemy('charger', 900, 900);
   const early = new GameSim({ seed: 7 }).spawnEnemy('charger', 900, 900);
   expect(late.maxHp).toBeGreaterThan(early.maxHp);
   expect(late.basicResistance).toBe(0.30);
   sim.damageEnemy(late, 20, 'basic');
-  expect(late.maxHp - late.hp).toBeCloseTo(14);
-  sim.damageEnemy(late, 20);
-  expect(late.maxHp - late.hp).toBeCloseTo(34);
+  expect(late.maxHp - late.hp).toBeCloseTo(11.13);
+  sim.damageEnemy(late, 20, 'echo');
+  expect(late.maxHp - late.hp).toBeCloseTo(27.03);
 });

@@ -155,9 +155,24 @@ test.describe('성장 시스템', () => {
     await page.getByTestId('choice-0').click();
     await expect(page.getByRole('heading', { name: '수호자의 무기 보상' })).toBeVisible();
     await expect(page.getByTestId('reroll')).toHaveCount(0);
-    await page.locator('.fusion-card').filter({ hasText: '뇌광 연쇄' }).click();
+    const fusion = page.locator('.fusion-card').filter({ hasText: '뇌광 연쇄' });
+    await expect(fusion).toContainText('재료 공격을 대체');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      const enemy = sim.spawnEnemy('chaser', sim.player.x + 135, sim.player.y);
+      enemy.hp = enemy.maxHp = 1000;
+      enemy.speed = 0;
+      sim.player.fireCd = 999;
+    });
+    await fusion.click();
     await expect(page.locator('.chips .fusion-chip')).toHaveText('뇌광 연쇄 Lv 3');
     await expect(page.locator('#overlay')).toBeHidden();
+    await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.damageByAttack.storm ?? 0)).toBeGreaterThan(0);
+    const materialAttacks = await page.evaluate(() => {
+      const { damageByAttack } = (window as any).__rift.sim;
+      return [damageByAttack.chain ?? 0, damageByAttack.mark ?? 0];
+    });
+    expect(materialAttacks).toEqual([0, 0]);
   });
 
   test('삼중 선택의 인장은 세 번 선택할 수 있고 결과는 초과 피해를 포함한 공격별 피해량과 DPS를 표시한다', async ({ page }) => {

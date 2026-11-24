@@ -1,3 +1,5 @@
+import { FUSION_RELIC_DAMAGE_BONUS } from './weapons';
+
 export const TRIPLE_CHOICE_COUNT = 3;
 
 export const RELICS = {
@@ -17,7 +19,7 @@ export const RELICS = {
   duel: { source: 'level', symbol: '⚔', name: '결투자의 인장', effect: '반경 280 안의 유일한 적에게 모든 피해 +25%. 적이 넷 이상이면 기본탄 피해 −10%.' },
   heart: { source: 'level', symbol: '♥', name: '마지막 심장', effect: '체력 30% 미만일 때 주기형 특수 무기의 다음 재사용 대기시간 −25%, 받는 회복 −50%.' },
   crown: { source: 'elite', symbol: '♛', weapon: 'chain', name: '폭풍의 왕관', effect: '연쇄 번개가 2회 더 튀고 각 타격마다 적 자리에서 폭발합니다. 연쇄 번개 타격 피해 −25%.' },
-  compass: { source: 'elite', symbol: '✥', name: '매설자의 나침반', effect: '회피를 마친 자리에 즉시 무장된 균열 지뢰를 설치합니다. 회피 대기시간 +0.5초.' },
+  compass: { source: 'elite', symbol: '✥', name: '매설자의 나침반', effect: '회피를 마친 자리에 즉시 무장된 균열 지뢰를 설치합니다. 빙결 지뢰진으로 합체한 뒤에는 해당 위치의 적에게 빙결 지뢰진이 발동합니다. 회피 대기시간 +0.5초.' },
   cog: { source: 'elite', symbol: '☾', weapon: 'orbit', name: '쌍월 톱니', effect: '칼날 +1개. 평소 회전 반경 +20%. 회전 칼날로 적을 처치할 때마다 회전 칼날 피해 +0.5%, 최대 +15%.' },
   anchor: { source: 'elite', symbol: '⊙', weapon: 'gravity', name: '별의 닻', effect: '중력 구체가 제자리에서 발동합니다. 중력 구체 크기 +50%, 적을 끌어오는 힘 +50%.' },
   mirror: { source: 'elite', symbol: '⟐', weapon: 'echo', name: '틈새의 거울', effect: '잔영이 반대 방향으로도 사격합니다. 잔영으로 적을 처치하면 그 자리에서 잔영이 한 번 더 발동합니다. 잔영 피해 −30%.' },
@@ -89,7 +91,7 @@ export const CARRY_LIMIT = 3;
 
 export function relicDescription(id: RelicId): string {
   const relic = RELICS[id];
-  return 'weapon' in relic ? `${relic.effect} 해당 무기가 없으면 모든 공격 피해 +5%.` : relic.effect;
+  return 'weapon' in relic ? `${relic.effect} 무기가 없으면 모든 공격 피해 +5%, 합체하면 해당 합체기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.` : relic.effect;
 }
 
 export function validRelicIds(value: unknown): RelicId[] {

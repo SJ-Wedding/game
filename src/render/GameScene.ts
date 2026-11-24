@@ -407,7 +407,7 @@ export class GameScene extends Phaser.Scene {
             drawRiftBarrier(ground, d, d.angle, d.r, weaponRankEffect('barrier', sim.stacks.barrier), d.duration - d.age, d.age);
             break;
           case 'flame':
-            drawFlame(ground, g, d.x, d.y, d.r, d.age, d.duration);
+            drawFlame(ground, g, d.x, d.y, d.r, d.age, d.duration, 0.5);
             break;
           case 'gravity':
             drawGravityPull(ground, d.x, d.y, d.r, d.age);

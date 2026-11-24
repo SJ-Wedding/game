@@ -1,4 +1,4 @@
-import { FUSION_HIT_WINDOW, WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
+import { WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -47,12 +47,13 @@ const ECHO_DELAY = 0.36;
 export class WeaponSystem {
   private qualityPickCount = -1;
   private readonly quality = new Map<WeaponId, number>();
-  readonly fusions = new Set<FusionId>();
-  private readonly fusionHits = new WeakMap<Target, Partial<Record<FusionId, { weapon: WeaponId; at: number }>>>();
+  private readonly activeFusions = new Set<FusionId>();
+  readonly fusions: ReadonlySet<FusionId> = this.activeFusions;
+  private readonly fusedIngredients = new Set<WeaponId>();
   readonly devices: Device[] = [];
   readonly effects: (WeaponEffect | ResonanceEffect)[] = [];
   readonly blades: Point[] = [];
-  private readonly ready = new Map<WeaponId, number>();
+  private readonly ready = new Map<WeaponId | FusionId, number>();
   private readonly marks = new Map<Target, number>();
   readonly infected = new Map<Enemy, number>();
   private readonly orbitHits = new Map<Target, number>();
@@ -93,8 +94,7 @@ export class WeaponSystem {
     return weaponRankEffect(kind, this.sim.stacks[kind]);
   }
 
-  private weaponDamage(kind: WeaponId, factor: number): number {
-    const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
+  private gradeBonus(kind: WeaponId): number {
     if (this.qualityPickCount !== this.sim.picks.length) {
       this.qualityPickCount = this.sim.picks.length;
       this.quality.clear();
@@ -104,43 +104,101 @@ export class WeaponSystem {
         this.quality.set(weapon, (this.quality.get(weapon) ?? 0) + WEAPON_GRADE_DAMAGE[pick.grade]);
       }
     }
+    return this.quality.get(kind) ?? 0;
+  }
+
+  private weaponDamage(kind: WeaponId, factor: number): number {
+    const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
     return this.sim.stats.damage * factor * SPECIAL_WEAPON_POWER[kind]
-      * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + (this.quality.get(kind) ?? 0));
+      * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
 
   private damage(kind: WeaponId, target: Target, factor: number): void {
-    this.onFusionHit(kind, target);
     const damage = this.weaponDamage(kind, factor);
     if ('id' in target) this.sim.damageEnemy(target, damage, kind);
     else this.sim.damageBoss(damage, kind);
   }
 
-  onFusionHit(kind: WeaponId, target: Target): void {
-    const now = this.sim.elapsed;
+  private enabled(kind: WeaponId): boolean {
+    return this.sim.stacks[kind] > 0 && !this.fusedIngredients.has(kind);
+  }
+
+  canFuse(id: FusionId): boolean {
+    return WEAPON_FUSIONS[id].pair.every((kind) => this.enabled(kind) && this.sim.stacks[kind] === WEAPON_MAX_RANK);
+  }
+
+  fuse(id: FusionId): boolean {
+    if (!this.canFuse(id)) return false;
+    this.activeFusions.add(id);
+    for (const kind of WEAPON_FUSIONS[id].pair) this.fusedIngredients.add(kind);
+    compact(this.devices, (device) => !this.fusedIngredients.has(device.kind));
+    compact(this.effects, (effect) => effect.variant === 'resonance' || !this.fusedIngredients.has(effect.kind));
+    if (id === 'tempest') {
+      this.blades.length = 0;
+      this.orbitHits.clear();
+    } else if (id === 'storm') {
+      this.marks.clear();
+    } else if (id === 'eclipse') {
+      this.infected.clear();
+      this.contagion.length = 0;
+    } else if (id === 'volley') {
+      this.echo = null;
+      this.previousShot = null;
+      compact(this.sim.playerShots, (shot) => shot.source !== 'echo');
+    } else if (id === 'bastion') {
+      this.mineFields.length = 0;
+    } else if (id === 'inferno') {
+      this.burns.clear();
+    }
+    return true;
+  }
+
+  private updateFusions(): void {
+    const { player, elapsed, reachBonus } = this.sim;
     for (const id of this.fusions) {
+      if (elapsed < (this.ready.get(id) ?? 0)) continue;
       const recipe = WEAPON_FUSIONS[id];
-      if (!recipe.pair.some((weapon) => kind === weapon)) continue;
-      const recent = this.fusionHits.get(target) ?? {};
-      const hit = recent[id];
-      if (hit && now - hit.at <= FUSION_HIT_WINDOW && hit.weapon !== kind) {
-        delete recent[id];
-        const { x, y } = target;
-        const player = this.sim.player;
-        const angle = x === player.x && y === player.y ? player.aim : Math.atan2(y - player.y, x - player.x);
-        const points = [{ x, y }];
-        const duration = RESONANCE_DURATION[id];
-        this.effects.push({ kind: id, variant: 'resonance', angle, points, radius: recipe.radius, life: duration, duration });
-        for (const nearby of this.targets()) {
-          if (dist(target.x, target.y, nearby.x, nearby.y) > recipe.radius + nearby.r) continue;
-          if (id === 'storm' && nearby !== target && points.length < 6) points.push({ x: nearby.x, y: nearby.y });
-          const damage = this.sim.stats.damage * recipe.damage;
-          if ('id' in nearby) this.sim.damageEnemy(nearby, damage, id);
-          else this.sim.damageBoss(damage, id);
+      const radius = recipe.radius + reachBonus * 0.08;
+      const range = id === 'tempest' ? radius : recipe.range + reachBonus * 0.85;
+      const target = this.nearest(player, range);
+      if (!target) continue;
+      this.ready.set(id, elapsed + recipe.interval * this.sim.relics.cooldownMultiplier);
+      if (this.sim.relics.onWeaponActivated()) this.ready.set(id, elapsed);
+      this.castFusion(id, id === 'tempest' ? player : target, radius);
+    }
+  }
+
+  private castFusion(id: FusionId, center: Point, radius: number): void {
+    const { sim } = this;
+    const { player: p, elapsed } = sim;
+    const { x, y } = center;
+    const angle = x === p.x && y === p.y ? p.aim : Math.atan2(y - p.y, x - p.x);
+    const points = [{ x, y }];
+    const recipe = WEAPON_FUSIONS[id];
+    const beamRange = recipe.range + sim.reachBonus * 0.85;
+    const beamEnd = id === 'volley' ? { x: p.x + Math.cos(angle) * beamRange, y: p.y + Math.sin(angle) * beamRange } : null;
+    if (beamEnd) points.push({ x: p.x, y: p.y }, beamEnd);
+    const grade = (this.gradeBonus(recipe.pair[0]) + this.gradeBonus(recipe.pair[1])) / 2;
+    const damage = sim.stats.damage * recipe.damage * (1 + grade) * sim.relics.fusionMultiplier(id);
+    const duration = RESONANCE_DURATION[id];
+    this.effects.push({ kind: id, variant: 'resonance', angle, points, radius, life: duration, duration });
+    for (const target of this.targets()) {
+      const inBurst = dist(x, y, target.x, target.y) <= radius + target.r;
+      const inBeam = beamEnd && distToSegment(target.x, target.y, p.x, p.y, beamEnd.x, beamEnd.y) <= 26 + target.r;
+      if (!inBurst && !inBeam) continue;
+      if (id === 'storm' && target !== center && points.length < 6) points.push({ x: target.x, y: target.y });
+      if ('id' in target) {
+        if (id === 'bastion') target.slowUntil = Math.max(target.slowUntil, elapsed + 1.15);
+        if (id === 'inferno') target.fireSlowUntil = Math.max(target.fireSlowUntil, elapsed + 1.0);
+        if (id === 'eclipse' && target.kind !== 'elite' && target.state !== 'dash') {
+          const pad = ARENA_CONFIG.wallPadding + target.r;
+          target.x = clamp(target.x + (x - target.x) * 0.3, pad, ARENA_CONFIG.width - pad);
+          target.y = clamp(target.y + (y - target.y) * 0.3, pad, ARENA_CONFIG.height - pad);
         }
+        sim.damageEnemy(target, damage, id);
       } else {
-        recent[id] = { weapon: kind, at: now };
+        sim.damageBoss(damage, id);
       }
-      this.fusionHits.set(target, recent);
     }
   }
 
@@ -166,7 +224,7 @@ export class WeaponSystem {
   }
 
   private available(kind: WeaponId, interval: number): boolean {
-    if (!this.sim.stacks[kind] || this.sim.elapsed < (this.ready.get(kind) ?? 0)) return false;
+    if (!this.enabled(kind) || this.sim.elapsed < (this.ready.get(kind) ?? 0)) return false;
     this.ready.set(kind, this.sim.elapsed + interval * this.sim.relics.cooldownMultiplier);
     // 불안정한 마력 코어: 25% 확률로 재사용 대기시간 즉시 초기화
     if (this.sim.relics.onWeaponActivated()) this.ready.set(kind, this.sim.elapsed);
@@ -184,17 +242,17 @@ export class WeaponSystem {
   }
 
   onDodge(): void {
-    if (this.sim.stacks.barrier || this.sim.relics.has('compass')) this.dodgeTrail = { x: this.sim.player.x, y: this.sim.player.y };
+    if (this.enabled('barrier') || this.sim.relics.has('compass')) this.dodgeTrail = { x: this.sim.player.x, y: this.sim.player.y };
   }
 
   onShot(): void {
-    if (!this.sim.stacks.echo) return;
+    if (!this.enabled('echo')) return;
     const { x, y, aim: angle } = this.sim.player;
     this.previousShot = { x, y, angle, at: this.sim.elapsed };
   }
 
   onBulletHit(target: Target): void {
-    if (!this.sim.stacks.mark) return;
+    if (!this.enabled('mark')) return;
     const hits = (this.marks.get(target) ?? 0) + 1;
     const bell = this.sim.relics.has('secondBell');
     if (!target.dead && hits < (bell ? 2 : 3)) {
@@ -203,7 +261,6 @@ export class WeaponSystem {
       return;
     }
     this.marks.delete(target);
-    if (target.dead) this.onFusionHit('mark', target);
     this.area('mark', target, (this.rankEffect('mark') + this.sim.reachBonus * 0.12) * (bell ? 0.75 : 1), 1.45);
   }
 
@@ -219,7 +276,7 @@ export class WeaponSystem {
     const now = sim.elapsed;
     compact(this.effects, (effect) => (effect.life -= dt) > 0);
 
-    if (sim.stacks.chain && now >= (this.ready.get('chain') ?? 0)) this.chain();
+    if (this.enabled('chain') && now >= (this.ready.get('chain') ?? 0)) this.chain();
     if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 96);
     if (this.available('turret', this.rankEffect('turret'))) {
       // 겨울 등불: 지속시간 −30%, 한 번에 2대
@@ -227,7 +284,7 @@ export class WeaponSystem {
         for (const side of [-1, 1]) this.device('turret', { x: p.x + side * 34, y: p.y }, 6 * 0.7, 340 + sim.reachBonus * 0.55);
       } else this.device('turret', p, 6, 340 + sim.reachBonus * 0.55);
     }
-    if (sim.stacks.flame && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
+    if (this.enabled('flame') && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
       this.trail = { x: p.x, y: p.y };
       this.device('flame', p, 2, this.rankEffect('flame'));
     }
@@ -235,11 +292,18 @@ export class WeaponSystem {
       const from = this.dodgeTrail;
       this.dodgeTrail = null;
       const angle = Math.atan2(p.y - from.y, p.x - from.x);
-      if (sim.stacks.barrier) this.device('barrier', from, 3.2, dist(p.x, p.y, from.x, from.y), angle);
-      if (sim.relics.has('compass')) this.device('mine', p, Infinity, 96).armAt = 0;
+      if (this.enabled('barrier')) this.device('barrier', from, 3.2, dist(p.x, p.y, from.x, from.y), angle);
+      if (sim.relics.has('compass')) {
+        if (this.fusions.has('bastion')) {
+          const radius = WEAPON_FUSIONS.bastion.radius + sim.reachBonus * 0.08;
+          if (this.nearest(p, radius)) this.castFusion('bastion', p, radius);
+        } else {
+          this.device('mine', p, Infinity, 96).armAt = 0;
+        }
+      }
     }
 
-    if ((sim.stacks.axe || sim.stacks.spear || sim.stacks.gravity) && (sim.target || sim.findTarget(540 + sim.reachBonus))) {
+    if ((this.enabled('axe') || this.enabled('spear') || this.enabled('gravity')) && (sim.target || sim.findTarget(540 + sim.reachBonus))) {
       if (this.available('axe', 2.0 * (sim.relics.has('returnRing') ? 1.2 : 1))) this.device('axe', p, 2.2, this.rankEffect('axe'), p.aim).baseR = this.rankEffect('axe');
       // 별자리 창끝: 조준 시간 +0.3초
       if (this.available('spear', 2.6)) this.device('spear', p, 0.38 + (sim.relics.has('constellation') ? 0.3 : 0), this.rankEffect('spear') + sim.reachBonus, p.aim);
@@ -257,8 +321,9 @@ export class WeaponSystem {
       this.echo = { ...shot, at: now + ECHO_DELAY };
       this.trace('echo', [shot, { x: shot.x + Math.cos(shot.angle) * 45, y: shot.y + Math.sin(shot.angle) * 45 }], 0, ECHO_DELAY, 'echoCharge');
     }
-    if (sim.stacks.orbit) this.orbit();
-    if (sim.stacks.infection) this.spread(now);
+    if (this.enabled('orbit')) this.orbit();
+    if (this.enabled('infection')) this.spread(now);
+    this.updateFusions();
 
     for (const device of this.devices) this.updateDevice(device, dt);
     compact(this.devices, (device) => device.age < device.duration);
@@ -285,7 +350,7 @@ export class WeaponSystem {
 
   /** 틈새의 거울: 잔영 탄으로 적을 처치하면 그 자리에서 잔영이 한 번 더 발동한다 (연쇄되지 않음). */
   onEchoKill(at: Point, angle: number): void {
-    if (!this.sim.relics.has('mirror') || !this.sim.stacks.echo) return;
+    if (!this.sim.relics.has('mirror') || !this.enabled('echo')) return;
     this.fireEcho(at.x, at.y, angle, true);
   }
 

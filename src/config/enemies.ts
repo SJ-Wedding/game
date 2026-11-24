@@ -143,6 +143,10 @@ export const ENEMY_CONFIG: {
  */
 export const ENEMY_SCALING = {
   hpPerMinute: 0.09,
+  resistanceAt: 480,
+  initialResistance: 0.15,
+  resistancePerMinute: 0.055,
+  maxResistance: 0.45,
   armorAt: 540,
   basicResistance: 0.30,
   damagePerMinute: 0.02,

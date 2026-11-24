@@ -273,6 +273,7 @@ it('상점 행운과 전투의 행운의 별을 모두 등급 확률에 반영�
   const weights = gradeWeights(sim.luck);
   expect(weights[0]).toBeLessThan(gradeWeights(0)[0]);
   expect(weights[3]).toBeGreaterThan(gradeWeights(0)[3]);
+  expect(gradeWeights(5)).toEqual([25, 45, 21, 9]);
   const firstRun = makeSim({ meta: { luck: 5 } });
   firstRun.gainXp(firstRun.xpNeeded);
   firstRun.step(IDLE_INPUT);

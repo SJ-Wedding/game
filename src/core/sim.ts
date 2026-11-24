@@ -1,9 +1,9 @@
-import { FUSION_IDS, WEAPON_FUSIONS, WEAPON_MAX_RANK } from '../config/weapons';
+import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
 import { OPENING_RELIC_LEVEL, validCarry, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
-import { ENEMY_CONFIG, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
+import { ENEMY_CONFIG, ENEMY_SCALING, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
 import { AUTO_COMBAT, COMBAT_REACH, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
@@ -580,7 +580,6 @@ export class GameSim {
         if (e.dead || s.hitIds?.has(e.id)) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
-          if (s.source === 'echo') this.weapons.onFusionHit('echo', e);
           this.damageEnemy(e, s.damage, shotAttack(s.source));
           if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx));
           if (s.pierceLeft) {
@@ -596,7 +595,6 @@ export class GameSim {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
           s.life = 0;
-          if (s.source === 'echo' && !bossInvulnerable(boss)) this.weapons.onFusionHit('echo', boss);
           this.damageBoss(s.damage, shotAttack(s.source));
         }
       }
@@ -625,7 +623,11 @@ export class GameSim {
   damageEnemy(e: Enemy, amount: number, source?: AttackId): void {
     if (e.dead) return;
     const basic = source === 'basic';
-    let damage = amount * this.relics.damageMultiplier(e, basic) * (basic ? 1 - e.basicResistance : 1);
+    const t = this.elapsed;
+    const { resistanceAt, initialResistance, resistancePerMinute, maxResistance } = ENEMY_SCALING;
+    const resistance = t < resistanceAt ? 0 : Math.min(maxResistance, initialResistance + (t - resistanceAt) / 60 * resistancePerMinute);
+    const effectiveResistance = source && Object.hasOwn(WEAPON_FUSIONS, source) ? resistance * (1 - FUSION_ARMOR_PIERCE) : resistance;
+    let damage = amount * this.relics.damageMultiplier(e, basic) * (1 - effectiveResistance) * (basic ? 1 - e.basicResistance : 1);
     if (basic && this.relics.executes(e)) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
@@ -756,8 +758,7 @@ export class GameSim {
   }
 
   private fusionChoices(): UpgradeChoice[] {
-    return FUSION_IDS.filter((id) => !this.weapons.fusions.has(id)
-      && WEAPON_FUSIONS[id].pair.every((weapon) => this.stacks[weapon] === WEAPON_MAX_RANK))
+    return FUSION_IDS.filter((id) => this.weapons.canFuse(id))
       .map((id) => ({ kind: 'fusion', id }));
   }
 
@@ -766,6 +767,7 @@ export class GameSim {
     const available = WEAPON_UPGRADES.filter((def) => this.stacks[def.id] < def.maxStacks);
     const featured = new Set<UpgradeId>();
     for (const id of FUSION_IDS) {
+      if (this.weapons.fusions.has(id)) continue;
       const [a, b] = WEAPON_FUSIONS[id].pair;
       if (this.stacks[a] > 0) featured.add(b);
       if (this.stacks[b] > 0) featured.add(a);
@@ -834,9 +836,10 @@ export class GameSim {
     } else {
       const rewardLevel = !this.armoryOpen && !this.bonusOpen && !this.startPickOpen ? this.pendingLevel : 0;
       if (c.kind === 'fusion') {
-        this.weapons.fusions.add(c.id);
+        if (!this.weapons.fuse(c.id)) return false;
         this.pickOrder.push(c.id);
       } else if (c.kind === 'upgrade') {
+        if (c.def.weapon && isFusionIngredient(this.weapons.fusions, c.def.weapon)) return false;
         if (!applyUpgrade(this.stacks, c.def.id)) return false;
         this.picks.push({ id: c.def.id, grade: c.grade });
         this.stats = computeStats(this.picks, this.meta);

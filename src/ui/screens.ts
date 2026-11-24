@@ -1,4 +1,4 @@
-import { FUSION_HIT_WINDOW, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
+import { FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
@@ -233,7 +233,8 @@ export class Screens {
           el('span', { class: 'cat', text: `특수 무기 합체 · Lv ${WEAPON_MAX_RANK}` }),
           el('strong', { class: 'name', text: recipe.name }),
           el('span', { class: 'desc', text: recipe.pair.map((id) => WEAPONS[id].name).join(' + ') }),
-          el('span', { class: 'desc', text: `${FUSION_HIT_WINDOW}초 안에 두 무기가 같은 적을 맞히면 반경 ${recipe.radius}px 공명 폭발` }),
+          el('span', { class: 'desc', text: recipe.effect }),
+          el('span', { class: 'desc', text: `재료 공격을 대체 · ${recipe.interval}초 주기 · 방어 ${FUSION_ARMOR_PIERCE * 100}% 관통` }),
         );
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
@@ -315,7 +316,7 @@ export class Screens {
             const ingredients = recipe.pair.map((weapon) => `${WEAPONS[weapon].name} Lv ${grouped.get(weapon)?.length ?? (opts.fusions.includes(id) ? WEAPON_MAX_RANK : 0)}`);
             return el('li', { text: `${recipe.name} · ${ingredients.join(' + ')}` });
           })),
-          el('small', { class: 'muted', text: `재료가 모두 Lv ${WEAPON_MAX_RANK}이면 일반 레벨업에서 선택할 수 있습니다.` }),
+          el('small', { class: 'muted', text: `두 재료가 모두 Lv ${WEAPON_MAX_RANK}이면 합체를 선택할 수 있습니다. 합체하면 재료 공격을 대체합니다.` }),
         ]);
     this.mount(
       'status',
@@ -442,7 +443,7 @@ export class Screens {
     const sources = new Set<AttackId>(['basic', ...(Object.keys(totals) as AttackId[]), ...(result.fusions ?? [])]);
     for (const { id } of result.upgrades) {
       const weapon = UPGRADE_BY_ID[id].weapon;
-      if (weapon) sources.add(weapon);
+      if (weapon && !isFusionIngredient(result.fusions ?? [], weapon)) sources.add(weapon);
     }
     const duration = result.combatTime ?? result.survivalTime;
     const rows = [...sources].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0)).map((source) => {

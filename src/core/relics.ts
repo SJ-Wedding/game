@@ -2,7 +2,7 @@ import { OPENING_RELICS, RELICS, RELIC_IDS, TRIPLE_CHOICE_COUNT, type RelicId, t
 import type { DropKind } from '../config/drops';
 import { ARENA_CONFIG } from '../config/arena';
 import { PLAYER_BODY } from '../config/player';
-import type { WeaponId } from '../config/weapons';
+import { FUSION_RELIC_DAMAGE_BONUS, WEAPON_FUSIONS, type FusionId, type WeaponId } from '../config/weapons';
 import { bossInvulnerable } from './boss';
 import { clamp, dist } from './math';
 import type { Rng } from './rng';
@@ -507,5 +507,15 @@ export class RelicEffects {
     if (this.now < this.alchemistUntil) multiplier *= 1.3;
     if (this.now < this.magnetUntil) multiplier *= 1.5;
     return multiplier;
+  }
+
+  fusionMultiplier(id: FusionId): number {
+    let bonus = 0;
+    const { pair } = WEAPON_FUSIONS[id];
+    for (const relicId of this.owned) {
+      const relic = RELICS[relicId];
+      if ('weapon' in relic && pair.some((weapon) => weapon === relic.weapon)) bonus += FUSION_RELIC_DAMAGE_BONUS;
+    }
+    return 1 + bonus;
   }
 }

@@ -222,44 +222,90 @@ describe('특수 무기 합체', () => {
     if (sim.phase === 'levelup') sim.choose(0); // 레벨 10 유물
     nextLevel();
     expect(sim.choices.some((c) => c.kind === 'fusion')).toBe(false);
+    expect(sim.choices.some((c) => c.kind === 'upgrade' && (c.def.id === 'chain' || c.def.id === 'mark'))).toBe(false);
   });
 
-  it('다른 재료 공격이 같은 적을 3초 안에 맞히면 주변에 공명 피해가 발생한다', () => {
-    const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 } });
-    sim.weapons.fusions.add('storm');
-    const first = sim.spawnEnemy('chaser', 900, 900);
-    const next = sim.spawnEnemy('chaser', 980, 900);
-    first.hp = next.hp = 1000;
-    sim.weapons.onFusionHit('chain', first);
-    sim.weapons.onFusionHit('chain', first);
-    expect(next.hp).toBe(1000);
-    sim.tick += 181;
-    sim.weapons.onFusionHit('mark', first);
-    expect(next.hp).toBe(1000);
-    sim.weapons.onFusionHit('chain', first);
-    expect(next.hp).toBeCloseTo(1000 - sim.stats.damage * 2.1);
-  });
-
-  it.each(FUSION_IDS)('%s 공명은 재료 적중 순서와 관계없이 같은 연출과 피해 범위를 사용한다', (id) => {
+  it.each(FUSION_IDS)('%s 합체는 재료 공격을 제거하고 주기적으로 합체 피해를 준다', (id) => {
     const recipe = WEAPON_FUSIONS[id];
     const [a, b] = recipe.pair;
-    for (const [first, second] of [[a, b], [b, a]]) {
-      const sim = makeSim();
-      sim.weapons.fusions.add(id);
-      const target = sim.spawnEnemy('chaser', 900, 900);
-      const nearby = sim.spawnEnemy('chaser', 900 + recipe.radius, 900);
-      const outside = sim.spawnEnemy('chaser', nearby.x + nearby.r + 1, nearby.y);
-      target.hp = nearby.hp = outside.hp = 1000;
-      sim.weapons.onFusionHit(first, target);
-      expect(sim.weapons.effects).toHaveLength(0);
-      sim.weapons.onFusionHit(second, target);
-      expect(sim.weapons.effects).toHaveLength(1);
-      const [effect] = sim.weapons.effects;
-      expect(effect).toMatchObject({ kind: id, variant: 'resonance', radius: recipe.radius });
-      expect(effect.points[0]).toEqual({ x: target.x, y: target.y });
-      expect(nearby.hp).toBeCloseTo(1000 - sim.stats.damage * recipe.damage);
-      expect(outside.hp).toBe(1000);
-    }
+    const sim = makeSim({ presetUpgrades: { [a]: 3, [b]: 3 } });
+    const { x, y } = sim.player;
+    const target = sim.spawnEnemy('chaser', x + 120, y);
+    const outside = sim.spawnEnemy('chaser', x + 120, y + recipe.radius + 50);
+    target.hp = outside.hp = 1000;
+    sim.weapons.update(1 / 60);
+    target.hp = outside.hp = 1000;
+    expect(sim.weapons.fuse(id)).toBe(true);
+    expect(sim.weapons.fuse(id)).toBe(false);
+    expect(sim.weapons.blades).toHaveLength(0);
+    expect(sim.weapons.infected.size).toBe(0);
+    expect(sim.weapons.devices).toHaveLength(0);
+    expect(sim.weapons.effects).toHaveLength(0);
+    const legacy = { ...sim.damageByAttack };
+    sim.weapons.onBulletHit(target);
+    sim.weapons.onShot();
+    sim.weapons.update(1 / 60);
+    expect(sim.weapons.effects[0]).toMatchObject({ kind: id, variant: 'resonance', radius: recipe.radius });
+    expect(target.hp).toBeCloseTo(1000 - sim.stats.damage * recipe.damage);
+    expect(outside.hp).toBe(1000);
+    const hp = target.hp;
+    sim.weapons.update(1 / 60);
+    expect(target.hp).toBe(hp);
+    sim.tick += Math.ceil(recipe.interval * 60) + 1;
+    sim.weapons.update(1 / 60);
+    expect(target.hp).toBeLessThan(hp);
+    expect(sim.damageByAttack[a]).toBe(legacy[a]);
+    expect(sim.damageByAttack[b]).toBe(legacy[b]);
+    expect(sim.weapons.devices).toHaveLength(0);
+    expect(sim.weapons.effects.every((effect) => effect.kind === id)).toBe(true);
+  });
+
+  it('잔영 관통포가 예약된 잔영과 이미 발사한 잔영탄을 교체하고 먼 적을 관통한다', () => {
+    const sim = makeSim({ presetUpgrades: { echo: 3, spear: 3 } });
+    const { x, y } = sim.player;
+    const first = sim.spawnEnemy('chaser', x + 120, y);
+    const distant = sim.spawnEnemy('chaser', x + 480, y);
+    first.hp = distant.hp = 1000;
+    sim.weapons.onShot();
+    sim.weapons.update(1 / 60);
+    expect(sim.weapons.effects.some((effect) => effect.variant === 'echoCharge')).toBe(true);
+    sim.playerShots.push({ x, y, vx: 620, vy: 0, r: 5, damage: 10, life: 1, source: 'echo' });
+    expect(sim.weapons.fuse('volley')).toBe(true);
+    expect(sim.playerShots).toHaveLength(0);
+    sim.tick += 30;
+    sim.weapons.update(1 / 60);
+    expect(sim.playerShots).toHaveLength(0);
+    expect(distant.hp).toBeLessThan(1000);
+  });
+
+  it('합체 피해는 두 재료의 등급 보너스 평균과 재료 유물을 반영한다', () => {
+    const sim = makeSim({ presetUpgrades: { chain: 3, mark: 3 } });
+    sim.picks.find((pick) => pick.id === 'chain')!.grade = 'legendary';
+    sim.relics.acquire('crown');
+    const target = sim.spawnEnemy('chaser', sim.player.x + 150, sim.player.y);
+    target.hp = 1000;
+    expect(sim.weapons.fuse('storm')).toBe(true);
+    sim.weapons.update(1 / 60);
+    expect(sim.damageByAttack.storm).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.storm.damage * 1.12 * 1.15);
+  });
+
+  it('빙결 지뢰진으로 합체하면 남은 지뢰 장판을 지우고 나침반 회피도 합체기로 발동한다', () => {
+    const sim = makeSim({ presetUpgrades: { mine: 3, turret: 3 }, carryRelics: ['fuse', 'compass'], god: true });
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 23, sim.player.y);
+    enemy.hp = enemy.maxHp = 2000;
+    enemy.speed = 0;
+    for (let i = 0; i < 28; i++) sim.step(IDLE_INPUT);
+    expect(sim.weapons.mineFields.length).toBeGreaterThan(0);
+    expect(sim.weapons.fuse('bastion')).toBe(true);
+    expect(sim.weapons.mineFields).toHaveLength(0);
+    const before = sim.damageByAttack.mine;
+    sim.step(IDLE_INPUT);
+    const firstBlast = sim.damageByAttack.bastion!;
+    sim.weapons.onDodge();
+    sim.step(IDLE_INPUT);
+    expect(sim.damageByAttack.bastion).toBeGreaterThan(firstBlast);
+    expect(sim.damageByAttack.mine).toBe(before);
+    expect(sim.weapons.devices).toHaveLength(0);
   });
 });
 
@@ -353,7 +399,9 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageEnemy(target, 1000, 'echo');
   sim.damageEnemy(target, 1000, 'chain');
   sim.damageBoss(1000, 'storm');
-  expect(sim.damageByAttack).toEqual({ basic: 7, echo: 1000 });
+  expect(sim.damageByAttack.basic).toBeCloseTo(3.85);
+  expect(sim.damageByAttack.echo).toBeCloseTo(550);
+  expect(Object.keys(sim.damageByAttack)).toEqual(['basic', 'echo']);
   const boss = sim.boss!;
   boss.state = 'idle';
   boss.hp = 100;
@@ -361,6 +409,6 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageBoss(1000, 'chain');
   sim.step(IDLE_INPUT);
   expect(boss.hp).toBe(0);
-  expect(sim.result?.damageByAttack).toEqual({ basic: 7, echo: 1000, storm: 200 });
+  expect(sim.result?.damageByAttack).toEqual({ basic: expect.closeTo(3.85), echo: 550, storm: 200 });
   expect(sim.result?.combatTime).toBeCloseTo(1 / 60);
 });

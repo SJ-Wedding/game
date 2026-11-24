@@ -98,8 +98,10 @@ function inferno({ ground, g, center, r, t, alpha, angle }: Frame): void {
   }
 }
 
-function volley({ ground, g, center, r, t, alpha, angle }: Frame): void {
+function volley({ ground, g, center, r, t, alpha, angle }: Frame, origin: Point, end: Point): void {
   ground.fillStyle(0x468f84, alpha * 0.14).fillCircle(center.x, center.y, r * (0.65 + t * 0.29));
+  g.lineStyle(16, 0x53f7db, alpha * 0.20).lineBetween(origin.x, origin.y, end.x, end.y);
+  g.lineStyle(2.8, 0xaaffed, alpha * 0.64).lineBetween(origin.x, origin.y, end.x, end.y);
   for (let i = -1; i <= 1; i++) {
     const shadow = i !== 0;
     const origin = polar(center, angle + Math.PI / 2, i * r * (0.15 + t * 0.29));
@@ -153,7 +155,7 @@ export function drawResonance(ground: Graphics, g: Graphics, fx: ResonanceEffect
     case 'bastion': bastion(frame); break;
     case 'tempest': tempest(frame); break;
     case 'inferno': inferno(frame); break;
-    case 'volley': volley(frame); break;
+    case 'volley': volley(frame, fx.points[1], fx.points[2]); break;
     case 'eclipse': eclipse(frame); break;
   }
 }

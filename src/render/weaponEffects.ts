@@ -157,12 +157,14 @@ export function drawGravityPull(g: Graphics, x: number, y: number, radius: numbe
   }
 }
 
-export function drawFlame(ground: Graphics, g: Graphics, x: number, y: number, radius: number, age: number, duration: number): void {
+export function drawFlame(ground: Graphics, g: Graphics, x: number, y: number, radius: number, age: number, duration: number, density = 1): void {
   const fade = Math.min(1, (duration - age) * 2.5);
-  ground.fillStyle(0xd54114, 0.16 * fade).fillEllipse(x, y, radius * 1.8, radius * 1.22);
-  for (let i = 0; i < 7; i++) {
+  const tongueCount = Math.ceil(7 * density);
+  const flameAlpha = fade * 7 * density / tongueCount;
+  ground.fillStyle(0xd54114, 0.16 * fade * density).fillEllipse(x, y, radius * 1.8, radius * 1.22);
+  for (let i = 0; i < tongueCount; i++) {
     const angle = i * 2.4;
-    const distance = Math.sqrt(i / 7) * radius * 0.85;
+    const distance = Math.sqrt(i / tongueCount) * radius * 0.85;
     const px = x + Math.cos(angle) * distance;
     const py = y + Math.sin(angle) * distance;
     const pulse = (age * (2.15 + noise(i) * 1.5) + noise(i + 3)) % 1;
@@ -170,7 +172,7 @@ export function drawFlame(ground: Graphics, g: Graphics, x: number, y: number, r
     const width = 5 + radius * 0.13;
     const lean = Math.sin(age * 15 + i * 5) * width * 0.43;
     const tongue = (h: number, w: number, color: number, alpha: number) => {
-      g.fillStyle(color, fade * alpha).fillPoints([
+      g.fillStyle(color, flameAlpha * alpha).fillPoints([
         { x: px - w, y: py }, { x: px - w * 0.87, y: py - h * 0.42 },
         { x: px - w * 0.28, y: py - h * 0.57 }, { x: px + lean, y: py - h },
         { x: px + w * 0.56 + lean * 0.48, y: py - h * 0.51 },
@@ -181,7 +183,7 @@ export function drawFlame(ground: Graphics, g: Graphics, x: number, y: number, r
     tongue(height * 0.76, width * 0.66, 0xffa035, 0.94);
     tongue(height * 0.46, width * 0.34, 0xffed9e, 0.95);
     const ember = (pulse + 0.31) % 1;
-    g.fillStyle(0xffba64, (1 - ember) * fade).fillRect(px + lean * ember, py - height * (0.55 + ember), 2, 2);
+    g.fillStyle(0xffba64, (1 - ember) * flameAlpha).fillRect(px + lean * ember, py - height * (0.55 + ember), 2, 2);
   }
 }
 
