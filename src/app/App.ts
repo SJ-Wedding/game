@@ -58,6 +58,8 @@ export class App {
   private resultShownAt = 0;
   private assistedCarry: RelicId[] = [];
   private assistedRelicDraft?: RelicId[];
+  /** 개발 옵션 판의 전판 유물 (저장하지 않음) */
+  private assistedPrevious: RelicId[] = [];
 
   constructor(deps: AppDeps) {
     this.save = deps.save;
@@ -151,7 +153,8 @@ export class App {
     }
     const carryRelics = retry ? this.sim?.options.carryRelics
       : assisted ? this.assistedCarry : this.save.relicCarry;
-    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, loadout });
+    const previousRelics = assisted ? this.assistedPrevious : this.save.previousRelics;
+    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, previousRelics, loadout });
     if (!retry && assisted) this.assistedCarry = [];
     else if (!retry && this.save.relicCarry?.length) {
       this.save = { ...this.save, relicCarry: [] };
@@ -309,6 +312,9 @@ export class App {
     const result = sim.result!;
     const { data, newRecords, tokens } = recordRun(this.save, result);
     this.save = data;
+    // 이번 판에 얻은 유물은 다음 판 시작 유물 선택지에 나오지 않는다 (승패 무관)
+    if (result.assisted) this.assistedPrevious = [...(result.relics ?? [])];
+    else this.save = { ...this.save, previousRelics: [...(result.relics ?? [])] };
     if (result.outcome === 'victory') {
       // 판 밖 성장에 영향을 주는 유물은 계승 후보에서 뺀다
       const draft = (result.relics ?? []).filter(carryable);

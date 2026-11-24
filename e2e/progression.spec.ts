@@ -321,4 +321,29 @@ test.describe('성장 시스템', () => {
     await expect(page.getByTestId('coin-notice')).toHaveCount(0);
   });
 
+  test('판이 끝나면 얻은 유물이 저장되고, 다음 판 시작 유물 선택지에서 빠진다', async ({ page }) => {
+    await startRun(page, '&seed=45');
+    await waitElapsed(page, 0.5);
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      for (const id of ['awl', 'anvil', 'catalyst', 'scatterSeal']) sim.relics.acquire(id);
+      sim.hurtPlayer(9999, '시험용 일격');
+    });
+    await expect.poll(async () => (await snap(page)).screen, { timeout: 10_000 }).toBe('result');
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('rift-arena/save')!).previousRelics);
+    expect(saved).toEqual(['awl', 'anvil', 'catalyst', 'scatterSeal']);
+    await page.reload();
+    await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
+    await expect.poll(async () => (await snap(page)).screen).toBe('playing');
+    const ids: string[] = await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      while (sim.level < 3) sim.gainXp(sim.xpNeeded);
+      sim.step({ moveX: 0, moveY: 0, aimX: 0, aimY: 0, fire: false, dodge: false });
+      while (sim.phase === 'levelup' && !(sim.choices[0].kind === 'relic' && sim.choices[0].source === 'opening')) sim.choose(0);
+      return sim.choices.map((c: any) => c.id);
+    });
+    expect(ids.sort()).toEqual(['bountyKnot', 'hawkLens']);
+  });
+
 });

@@ -13,12 +13,27 @@ import type { AttackId, Boss, Enemy, UpgradeChoice } from './types';
 type Target = Boss | Enemy;
 interface Point { x: number; y: number }
 
-export function rollRelics(source: RelicSource, rng: Rng, owned: ReadonlySet<RelicId>, loadout: Loadout = DEFAULT_LOADOUT): UpgradeChoice[] {
+/**
+ * 유물 후보 3개를 뽑는다.
+ * previous: 전판에 얻은 유물. 다음 판 시작 유물(레벨 3) 선택지에는 나오지 않는다.
+ * 제외하고 나서 후보가 하나도 없으면 제외 없이 뽑는다.
+ */
+export function rollRelics(
+  source: RelicSource,
+  rng: Rng,
+  owned: ReadonlySet<RelicId>,
+  loadout: Loadout = DEFAULT_LOADOUT,
+  previous: ReadonlySet<RelicId> = new Set(),
+): UpgradeChoice[] {
   const offered: readonly RelicId[] = source === 'opening' ? OPENING_RELICS : RELIC_IDS.filter((id) => RELICS[id].source === source);
-  const pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout));
+  let pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout));
   if (source === 'opening' && loadout.character !== 'ranger') {
     const extra = loadout.character === 'roan' ? ['swordScabbard', 'swordRhythm'] as const : ['swarm', 'bloodPrice'] as const;
     pool.push(...extra.filter((id) => !owned.has(id)));
+  }
+  if (source === 'opening' && previous.size) {
+    const fresh = pool.filter((id) => !previous.has(id));
+    if (fresh.length) pool = fresh;
   }
   const choices: UpgradeChoice[] = [];
   while (pool.length && choices.length < 3) {

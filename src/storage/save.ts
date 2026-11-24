@@ -35,6 +35,8 @@ export interface SaveData {
   meta: SaveMeta;
   relicCarry?: RelicId[];
   pendingRelicDraft?: RelicId[];
+  /** 전판에 얻은 유물. 다음 판 시작 유물 선택지에서 뺀다 */
+  previousRelics?: RelicId[];
 }
 
 export type LoadStatus = 'ok' | 'missing' | 'corrupt' | 'version' | 'unavailable';
@@ -104,6 +106,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   const carry = validCarry(migrated.relicCarry);
   if (carry.length) data.relicCarry = carry;
   if (Array.isArray(migrated.pendingRelicDraft)) data.pendingRelicDraft = validRelicIds(migrated.pendingRelicDraft);
+  if (Array.isArray(migrated.previousRelics)) data.previousRelics = validRelicIds(migrated.previousRelics);
   if (Number.isNaN(data.records.fastestWin)) data.records.fastestWin = null;
   return { data, status: 'ok' };
 }
