@@ -1,4 +1,5 @@
 import type { GameObjects } from 'phaser';
+import type { RoanDesign } from '../config/roan';
 import type { Projectile } from '../core/types';
 import type { WeaponEffect } from '../core/weapons';
 import { PALETTE } from './palette';
@@ -315,16 +316,23 @@ export function drawSpearStrike(g: Graphics, fx: WeaponEffect): void {
   }
 }
 
-export function drawDaggerThrust(g: Graphics, body: Point, angle: number, extension: number, progress: number, stiletto: boolean, alpha: number): void {
+export function daggerExtension(progress: number): number {
+  const forward = Math.min(1, progress / 0.32);
+  const recovery = Math.max(0, (progress - 0.32) / 0.68);
+  return (1 - 0.7 * (1 - forward) ** 2) * (1 - recovery ** 1.6);
+}
+
+export function drawDaggerThrust(g: Graphics, body: Point, angle: number, extension: number, progress: number, design: RoanDesign, alpha: number, offHand = false): void {
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
+  const hand = offHand ? -1 : 1;
   const point = (forward: number, side: number) => ({ x: body.x + dx * forward - dy * side, y: body.y + dy * forward + dx * side });
-  const shoulderSide = Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? -10 : -6) : (dx > 0 ? 4 : -4);
+  const shoulderSide = (Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? -10 : -6) : (dx > 0 ? 4 : -4)) * hand;
   const wristDistance = 14 + 24 * extension;
-  const wristSide = shoulderSide * (1 - extension) * 0.7;
+  const wristSide = shoulderSide * (1 - extension) * 0.7 + (design === 'twinblades' ? hand * 2 : 0);
   const arm = [
     point(6, shoulderSide),
-    point((6 + wristDistance) / 2, (shoulderSide + wristSide) / 2 + 7 * (1 - extension)),
+    point((6 + wristDistance) / 2, (shoulderSide + wristSide) / 2 + 7 * hand * (1 - extension)),
     point(wristDistance, wristSide),
   ];
   g.lineStyle(11, 0x101422, alpha).strokePoints(arm);
@@ -332,18 +340,18 @@ export function drawDaggerThrust(g: Graphics, body: Point, angle: number, extens
   g.lineStyle(4, 0xb3c7d5, alpha).strokePoints(arm.slice(1));
 
   const blade = (forward: number, side: number) => point(wristDistance + forward, wristSide + side);
-  const edge = stiletto ? 0xd8bbfa : 0xe3eff4;
-  const bladeShoulder = stiletto ? 3 : 4;
+  const edge = design === 'stiletto' ? 0xd8bbfa : 0xe3eff4;
+  const bladeShoulder = design === 'stiletto' ? 3 : 4;
   if (progress < 0.53) {
     const trail = [blade(-3, -5), blade(16, -7), blade(27, -3)];
     g.lineStyle(2, edge, alpha * 0.62 * (1 - progress / 0.53)).strokePoints(trail);
   }
   g.fillStyle(0x101422, alpha).fillPoints([blade(3, -6), blade(16, -5), blade(29, 0), blade(17, 5), blade(3, 6)], true);
   g.fillStyle(edge, alpha).fillPoints([blade(5, -bladeShoulder), blade(16, -3), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
-  g.fillStyle(stiletto ? 0x946cc2 : 0x8099ad, alpha).fillPoints([blade(5, 0), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+  g.fillStyle(design === 'stiletto' ? 0x946cc2 : 0x8099ad, alpha).fillPoints([blade(5, 0), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
   const guard = [blade(5, -5), blade(5, 5)];
   g.lineStyle(4, 0x101422, alpha).strokePoints(guard);
-  g.lineStyle(2, stiletto ? 0xb88de1 : 0xffcd77, alpha).strokePoints(guard);
+  g.lineStyle(2, design === 'twinblades' ? 0xea776c : design === 'stiletto' ? 0xb88de1 : 0xffcd77, alpha).strokePoints(guard);
   const fist = [blade(-4, -3), blade(1, -4), blade(3, 0), blade(1, 4), blade(-4, 3)];
   g.fillStyle(0x28384d, alpha).fillPoints(fist, true);
   g.fillStyle(0xd7e4ec, alpha).fillPoints([blade(-3, -2), blade(1, -3), blade(2, -1), blade(-1, 1)], true);

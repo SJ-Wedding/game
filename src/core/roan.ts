@@ -2,7 +2,8 @@ import { AUTO_COMBAT } from '../config/player';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
-  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
+  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, TWIN_BLADE_DAMAGE_FACTOR,
+  type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
 } from '../config/roan';
 import { bossInvulnerable } from './boss';
 import { compact, dist, distToSegment } from './math';
@@ -19,6 +20,7 @@ export interface SwordStrike {
   width: number;
   /** 직선 찌르기의 전체 폭(px) */
   lineWidth?: number;
+  offHand?: boolean;
   range: number;
   factor: number;
   armorPierce?: number;
@@ -36,6 +38,7 @@ export interface SwordSweep {
   angle: number;
   width: number;
   lineWidth?: number;
+  offHand?: boolean;
   range: number;
   at: number;
   kind: SwordStrike['kind'];
@@ -199,7 +202,7 @@ export class RoanCombat {
   }
 
   get lineWidth(): number | undefined {
-    if (this.design !== 'dagger' && this.design !== 'stiletto') return undefined;
+    if (this.design !== 'dagger' && this.design !== 'stiletto' && this.design !== 'twinblades') return undefined;
     return Math.min(DAGGER_THRUST.maxWidth, DAGGER_THRUST.width + DAGGER_THRUST.widthPerMastery * this.m('swordArc'));
   }
 
@@ -352,10 +355,16 @@ export class RoanCombat {
       this.flailStacks++;
       if (this.awakened) this.later(0.2, () => this.strike({ angle, width: Math.PI * 2, range: this.flailRadius, factor: 0.5 * bonus, center: at, kind: 'extra' }));
     } else if (this.motion === 'twin') {
-      const count = u === 'twinblades' ? (this.awakened ? 3 : 2) + (this.gear('shadowStrike') && this.swings % 5 === 0 ? 2 : 0) : 2;
-      const each = u === 'twinblades' ? 1 + 0.08 * this.m('twinCross') / 0.6 : 0.5;
+      const twinBlades = u === 'twinblades';
+      const count = twinBlades ? (this.awakened ? 3 : 2) + (this.gear('shadowStrike') && this.swings % 5 === 0 ? 2 : 0) : 2;
+      const each = twinBlades ? 1 + 0.08 * this.m('twinCross') / TWIN_BLADE_DAMAGE_FACTOR : 0.5;
       for (let i = 0; i < count; i++) {
-        const run = () => this.strike({ angle: angle + (i % 2 ? 0.18 : -0.18), width: this.angle * Math.PI / 180, range: this.range, factor: each * bonus, kind: i ? 'extra' : 'main' });
+        const offHand = i % 2 === 1;
+        const run = () => this.strike({
+          angle: twinBlades ? angle : angle + (offHand ? 0.18 : -0.18),
+          width: this.angle * Math.PI / 180, lineWidth: this.lineWidth, offHand: twinBlades ? offHand : undefined,
+          range: this.range, factor: each * bonus, kind: i ? 'extra' : 'main',
+        });
         if (i === 0) hits = run();
         else this.later(0.08 * i, run);
       }
@@ -534,7 +543,8 @@ export class RoanCombat {
       }
     }
     this.sweeps.push({
-      x, y, angle: s.angle, width: s.width, lineWidth, range: s.range, at: now, kind: s.kind, motion: s.thrust ? 'thrust' : this.motion,
+      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, range: s.range, at: now, kind: s.kind,
+      motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.motion,
       design: this.design, color: this.color, blocked, hits: hits.length,
     });
     return hits.length;

@@ -6,6 +6,7 @@
 
 export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
 export const DAGGER_THRUST = { damage: 0.35, range: 80, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
+export const TWIN_BLADE_DAMAGE_FACTOR = 0.6;
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
 
@@ -96,8 +97,9 @@ export const ROAN_UPGRADES = {
     effect: '베기 150°, 출혈 중인 적에게 직접 피해 +30%', awaken: '출혈 중인 적을 처치하면 출혈이 주변 2마리에 번짐',
   },
   twinblades: {
-    weapon: 'dagger', name: '쌍검', symbol: '⚔', damage: 0.27, interval: 0.55, range: 110, angle: 110, motion: 'twin',
-    effect: '매 공격 2연타(각 피해 60%), 출혈이 2배 빨리 쌓이고 최대 중첩 없음', awaken: '3연타',
+    weapon: 'dagger', name: '쌍검', symbol: '⚔', damage: DAGGER_THRUST.damage * TWIN_BLADE_DAMAGE_FACTOR,
+    interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'twin',
+    effect: `직선 찌르기 2연타 (거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px, 각 단검 피해 ${TWIN_BLADE_DAMAGE_FACTOR * 100}%). 출혈 2배 누적, 중첩 제한 해제.`, awaken: '직선 찌르기 3연타',
   },
   warmace: {
     weapon: 'mace', name: '메이스', symbol: '⚒', damage: 1.56, interval: 1.2, range: 125, angle: 140, motion: 'slam',

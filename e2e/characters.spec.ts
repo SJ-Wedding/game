@@ -118,7 +118,9 @@ test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 �
   await levelTo(12);
   await expect(page.getByRole('heading', { name: '상위 무기 선택 · Lv 12' })).toBeVisible();
   await expect(page.locator('[data-gear-stage="upgrade"]')).toHaveCount(3);
-  await page.locator('[data-sword-form="twinblades"]').click();
+  const twinblades = page.locator('[data-sword-form="twinblades"]');
+  await expect(twinblades).toContainText('직선 찌르기 2연타');
+  await twinblades.click();
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   await expect(page.getByTestId('hud-sword-forms')).toHaveText('무기 · 쌍검');
   expect(await page.evaluate(() => (window as any).__rift.sim.roan.design)).toBe('twinblades');
@@ -134,5 +136,7 @@ test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 �
   const forms = page.getByTestId('sword-forms');
   await expect(forms.getByRole('heading', { name: '로안 무기' })).toBeVisible();
   await expect(forms).toContainText('상위 무기 · 쌍검');
+  await expect(forms).toContainText('직선 찌르기 · 폭');
+  await expect(page.getByRole('rowheader', { name: '찌르기 거리' })).toBeVisible();
   expect(errors).toEqual([]);
 });

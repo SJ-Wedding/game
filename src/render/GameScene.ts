@@ -16,7 +16,7 @@ import { WEAPONS, weaponRankEffect } from '../config/weapons';
 import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
 import {
-  drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
+  daggerExtension, drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike, drawSwordCrush,
 } from './weaponEffects';
 import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
@@ -427,8 +427,7 @@ export class GameScene extends Phaser.Scene {
     const thrustAngle = stab?.angle ?? p.aim;
     const thrustX = Math.cos(thrustAngle);
     const thrustY = Math.sin(thrustAngle);
-    const release = Math.max(0, (stabProgress - 0.32) / 0.68);
-    const extension = stab ? (1 - 0.7 * (1 - Math.min(1, stabProgress / 0.32)) ** 2) * (1 - release ** 1.6) : 0;
+    const extension = stab ? daggerExtension(stabProgress) : 0;
     const bodyX = Math.round(p.x + thrustX * 9 * extension);
     const bodyY = Math.round(p.y + thrustY * 9 * extension);
     let facing = p.facing;
@@ -444,7 +443,19 @@ export class GameScene extends Phaser.Scene {
     else this.playerImage.clearTint();
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     this.drawRoanSwings(sim, t);
-    if (stab) drawDaggerThrust(this.weaponEffects, { x: bodyX, y: bodyY }, stab.angle, extension, stabProgress, stab.design === 'stiletto', blink ? 0.45 : 1);
+    if (stab) {
+      const body = { x: bodyX, y: bodyY };
+      const alpha = blink ? 0.45 : 1;
+      if (stab.design === 'twinblades') {
+        const previous = sim.swordSweeps.at(-2);
+        const previousProgress = previous?.design === 'twinblades' && previous.offHand !== stab.offHand
+          ? Math.min(1, (t - previous.at) / DAGGER_THRUST.duration) : 1;
+        const ready = previousProgress >= 1;
+        const angle = ready ? stab.angle + (stab.offHand ? 0.46 : -0.46) : stab.angle;
+        drawDaggerThrust(this.weaponEffects, body, angle, ready ? 0 : daggerExtension(previousProgress), previousProgress, stab.design, alpha * 0.85, !stab.offHand);
+      }
+      drawDaggerThrust(this.weaponEffects, body, stab.angle, extension, stabProgress, stab.design, alpha, stab.offHand);
+    }
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;

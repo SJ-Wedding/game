@@ -170,6 +170,25 @@ describe('무기 특화 기능', () => {
     expect(s.roan.bleeds.get(e)!.stacks).toBeGreaterThan(10);
   });
 
+  it.each([false, true])('쌍검: 각성 %s일 때도 같은 직선을 양손으로 번갈아 찌른다', (awaken) => {
+    const s = make('dagger', 'twinblades', { awaken });
+    const ahead = target(s, 45);
+    const beside = target(s, 70, 24);
+    const beyond = target(s, 95);
+    swing(s);
+    steps(s, 10);
+    const count = awaken ? 3 : 2;
+    expect(s.swordSweeps).toHaveLength(count);
+    for (const [i, strike] of s.swordSweeps.entries()) {
+      expect(strike).toMatchObject({ angle: 0, width: 0, lineWidth: 10, range: 80, motion: 'thrust', offHand: i % 2 === 1, hits: 1 });
+      expect(Math.round((strike.at - s.swordSweeps[0].at) * 60)).toBe(i * 5);
+    }
+    expect(ahead.maxHp - ahead.hp).toBeCloseTo(make('sword').roan.damage * 0.21 * count);
+    expect(s.roan.bleeds.get(ahead)?.stacks).toBe(2 * count);
+    expect(beside.hp).toBe(beside.maxHp);
+    expect(beyond.hp).toBe(beyond.maxHp);
+  });
+
   it('메이스: 일반 적을 기절시키고, 균열 수호자는 절반 확률, 보스는 기절하지 않는다', () => {
     let normal = 0;
     let elite = 0;
