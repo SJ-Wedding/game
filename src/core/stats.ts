@@ -1,3 +1,4 @@
+import { CHARACTER_MAX_HP, type CharacterId } from '../config/characters';
 import { GRADES, GRADE_INDEX, type GradeId } from '../config/grades';
 import { PLAYER_BASE_STATS, type PlayerStats, type StatKey } from '../config/player';
 import { ALL_UPGRADES, UPGRADE_BY_ID, type UpgradeEffect, type UpgradeId } from '../config/upgrades';
@@ -33,15 +34,19 @@ export function healOnPick(id: UpgradeId, grade: GradeId): number {
 }
 
 /** 시작 능력치 × 영구 강화 */
-export function metaStats(meta?: Pick<MetaBonus, 'statPct'>): PlayerStats {
-  const out = { ...PLAYER_BASE_STATS } as PlayerStats;
+export function baseStats(character: CharacterId = 'ranger'): PlayerStats {
+  return { ...PLAYER_BASE_STATS, maxHp: CHARACTER_MAX_HP[character] } as PlayerStats;
+}
+
+export function metaStats(meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId): PlayerStats {
+  const out = baseStats(character);
   if (!meta) return out;
   for (const [k, pct] of Object.entries(meta.statPct) as [StatKey, number][]) out[k] = out[k] * (1 + pct);
   return out;
 }
 
 /** 시작 능력치 → 영구 강화 → 이번 판 강화(등급) → 최종 능력치 */
-export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>): PlayerStats {
+export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId): PlayerStats {
   const add: Partial<Record<StatKey, number>> = {};
   const pct: Partial<Record<StatKey, number>> = {};
   const mul: Partial<Record<StatKey, number>> = {};
@@ -55,7 +60,7 @@ export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statP
       else mul[e.stat] = (mul[e.stat] ?? 1) * v;
     }
   }
-  const out = metaStats(meta);
+  const out = metaStats(meta, character);
   for (const key of Object.keys(out) as StatKey[]) {
     out[key] = (out[key] + (add[key] ?? 0)) * (1 + (pct[key] ?? 0)) * (mul[key] ?? 1);
   }
@@ -64,8 +69,8 @@ export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statP
 }
 
 /** 상태창용: 단계별 능력치 */
-export function statLayers(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>) {
-  return { base: { ...PLAYER_BASE_STATS } as PlayerStats, meta: metaStats(meta), final: computeStats(picks, meta) };
+export function statLayers(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId) {
+  return { base: baseStats(character), meta: metaStats(meta, character), final: computeStats(picks, meta, character) };
 }
 
 /** 같은 시작 강화만 반복한 프리셋 → 일반 등급 선택 목록 (개발·테스트용) */

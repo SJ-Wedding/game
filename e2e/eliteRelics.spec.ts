@@ -11,8 +11,9 @@ test('로안: 균열 수호자 유물을 모두 가지면 수호자의 정수 �
     const { sim } = (window as any).__rift;
     // 삼중 선택의 인장은 보너스 선택 화면을 열지 않도록 보유 목록에만 넣는다
     sim.relics.owned.add('tripleChoice');
-    for (const id of ['swordCircle', 'swordDuel', 'elitePact', 'swordWave', 'swordPulse', 'swordEcho', 'swordExecute',
-      'swordLong', 'swordWeight', 'swordQuake', 'swordWhirl', 'swordOath', 'swordMirror', 'swordDash', 'swordResolve']) sim.relics.acquire(id);
+    // 공격 타입을 고르기 전에는 타입 전용 유물이 나오지 않으므로 공용 유물만 모두 가진다
+    for (const id of ['swordCircle', 'swordDuel', 'elitePact', 'swordPulse', 'swordEcho',
+      'swordLong', 'swordOath', 'swordMirror', 'swordDash', 'swordResolve']) sim.relics.acquire(id);
     const elite = sim.spawnEnemy('elite', sim.player.x + 400, sim.player.y);
     sim.damageEnemy(elite, 1e9);
   });

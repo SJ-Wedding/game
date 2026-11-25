@@ -91,49 +91,41 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   expect(errors).toEqual([]);
 });
 
-test('로안: 6·12·18레벨에 고른 형태가 함께 발동하고 상태창에 표시된다', async ({ page }) => {
+test('로안: 6레벨에 공격 타입 5종 중 하나를 고르고, 검기 발사는 검기를 날린다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=553');
   await page.getByTestId('play').click();
   await page.getByTestId('character-roan').click();
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
-  const selections = [[6, 'swordCrush', 3], [12, 'swordGuard', 2], [18, 'swordCrescent', 1]] as const;
-  for (const [level, choice, count] of selections) {
-    await page.evaluate((targetLevel) => {
-      const { sim } = (window as any).__rift;
-      const noInput = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, fire: false, dodge: false };
-      while (sim.level < targetLevel) {
-        sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
-        sim.step(noInput);
-        while (sim.level < targetLevel && sim.phase === 'levelup') sim.choose(0);
-      }
-    }, level);
-    await expect(page.getByRole('heading', { name: `로안 공격 형태 · Lv ${level}` })).toBeVisible();
-    await expect(page.getByText('배운 형태는 한 번 공격할 때 함께 발동합니다.', { exact: false })).toBeVisible();
-    await expect(page.locator('[data-sword-form]')).toHaveCount(count);
-    await expect(page.getByTestId('reroll')).toHaveCount(0);
-    await page.locator(`[data-sword-form="${choice}"]`).click();
-    await expect.poll(async () => (await snap(page)).screen).toBe('playing');
-  }
-
-  await expect(page.getByTestId('hud-sword-forms')).toHaveText('검격 3종 동시 발동');
   await page.evaluate(() => {
     const { sim } = (window as any).__rift;
-    const target = sim.spawnEnemy('chaser', sim.player.x + 75, sim.player.y);
-    target.hp = target.maxHp = 1000;
+    const noInput = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, fire: false, dodge: false };
+    while (sim.level < 6) {
+      sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
+      sim.step(noInput);
+      while (sim.level < 6 && sim.phase === 'levelup') sim.choose(0);
+    }
+  });
+  await expect(page.getByRole('heading', { name: '로안 공격 타입 · Lv 6' })).toBeVisible();
+  await expect(page.getByText('이 타입의 유물만 나옵니다', { exact: false })).toBeVisible();
+  await expect(page.locator('[data-sword-form]')).toHaveCount(5);
+  await expect(page.locator('.cards.many')).toBeVisible();
+  await expect(page.getByTestId('reroll')).toHaveCount(0);
+  await page.keyboard.press('Digit4');
+  await expect.poll(async () => (await snap(page)).screen).toBe('playing');
+  expect(await page.evaluate(() => (window as any).__rift.sim.swordForms)).toEqual(['swordWave']);
+  await expect(page.getByTestId('hud-sword-forms')).toHaveText('공격 타입 · 검기 발사');
+
+  await page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    const target = sim.spawnEnemy('chaser', sim.player.x + 260, sim.player.y);
+    target.hp = target.maxHp = 5000;
     target.speed = 0;
   });
-  await expect.poll(() => page.evaluate(() => {
-    const { sim } = (window as any).__rift;
-    const firstStrikes = sim.swordSweeps.filter((sweep: { followup?: boolean }) => !sweep.followup);
-    return [firstStrikes.length, new Set(firstStrikes.map((sweep: { at: number }) => sweep.at)).size];
-  })).toEqual([3, 1]);
+  await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.hitsByAttack.sword ?? 0)).toBeGreaterThan(0);
   await page.keyboard.press('Tab');
   const forms = page.getByTestId('sword-forms');
-  await expect(forms.getByRole('heading', { name: '동시 발동하는 공격 형태' })).toBeVisible();
-  await expect(forms.locator('li')).toHaveCount(3);
-  for (const name of ['강철 파쇄', '근위 검무', '반월 연격']) {
-    await expect(forms.locator('li').filter({ hasText: name })).toBeVisible();
-  }
+  await expect(forms.getByRole('heading', { name: '로안 공격 타입' })).toBeVisible();
+  await expect(forms.locator('li')).toHaveText('검기 발사 · 검기');
   expect(errors).toEqual([]);
 });

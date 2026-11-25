@@ -130,6 +130,12 @@ export interface Projectile {
   echoVolley?: { repeated: boolean };
   /** 일반 적이 쏜 탄 (결전의 각오) */
   normal?: true;
+  /** 꿰뚫는 검기: 처음 피해와 관통 횟수 */
+  growBase?: number;
+  grown?: number;
+  /** 회귀 검기: 되돌아올 때의 수명·관통 (되돌아온 뒤 비움) */
+  returnLife?: number;
+  returnPierce?: number;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */

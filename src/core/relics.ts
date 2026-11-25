@@ -24,9 +24,16 @@ export function rollRelics(
   owned: ReadonlySet<RelicId>,
   loadout: Loadout = DEFAULT_LOADOUT,
   previous: ReadonlySet<RelicId> = new Set(),
+  forms: readonly string[] = [],
 ): UpgradeChoice[] {
   const offered: readonly RelicId[] = source === 'opening' ? OPENING_RELICS : RELIC_IDS.filter((id) => RELICS[id].source === source);
-  let pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout));
+  // 로안 공격 타입 전용 유물은 그 타입을 고른 뒤에만 나온다. 거대 검기는 35% 확률로만 후보에 든다.
+  const formAllowed = (id: RelicId) => {
+    const relic = RELICS[id];
+    if (!('form' in relic)) return true;
+    return forms.includes(relic.form) && (id !== 'swordGiant' || rng.next() < 0.35);
+  };
+  let pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout) && formAllowed(id));
   if (source === 'opening' && loadout.character !== 'ranger') {
     const extra = loadout.character === 'roan' ? ['swordScabbard', 'swordRhythm'] as const : ['swarm', 'bloodPrice'] as const;
     pool.push(...extra.filter((id) => !owned.has(id)));
@@ -92,6 +99,8 @@ export class RelicEffects {
   private cloakReady = 0;
   /** 약점 표식의 룬: 대상별 전용 무기 명중 수와 약점 종료 시각 */
   private readonly runeHits = new WeakMap<Target, { hits: number; until: number }>();
+  private readonly sundered = new WeakMap<Target, number>();
+  private bulwark: number[] = [];
 
   constructor(private readonly sim: GameSim) {}
 
@@ -194,6 +203,7 @@ export class RelicEffects {
   damageTaken(kind?: 'shot' | 'contact'): number {
     let multiplier = this.sim.stats.damageTaken * (this.has('bloodPrice') ? 1.25 : 1) * (this.has('greedDice') ? 1.2 : 1);
     if (this.has('lightningRod')) multiplier *= kind === 'shot' ? 0.7 : kind === 'contact' ? 1.2 : 1;
+    if (this.bulwark.length) multiplier *= 1 - 0.03 * this.bulwarkStacks;
     if (this.has('battleJoy')) {
       const p = this.sim.player;
       let count = 0;
@@ -367,9 +377,22 @@ export class RelicEffects {
     this.shield = Math.min(25, this.shield + hits);
   }
 
-  /** 처형자의 대검: 체력 20% 이하 일반 적은 베기에 즉사 */
-  swordExecutes(enemy: Enemy): boolean {
-    return this.has('swordExecute') && enemy.kind !== 'elite' && enemy.hp <= enemy.maxHp * 0.2;
+  /** 갑주 분쇄: seconds 동안 받는 피해 +15% */
+  sunder(target: Target, seconds: number): void {
+    this.sundered.set(target, this.now + seconds);
+  }
+
+  /** 철벽 검무: 맞힌 적 1마리당 2초간 받는 피해 −3%, 최대 −24% */
+  addBulwark(hits: number): void {
+    const now = this.now;
+    this.bulwark = this.bulwark.filter((until) => until > now);
+    for (let i = 0; i < hits; i++) this.bulwark.push(now + 2);
+    this.bulwark.sort((a, b) => b - a).splice(8);
+  }
+
+  private get bulwarkStacks(): number {
+    const now = this.now;
+    return this.bulwark.filter((until) => until > now).length;
   }
 
   /** 약점 표식의 룬: 전용 무기 명중 기록. 3번째 명중부터 4초간 약점 */
@@ -555,7 +578,7 @@ export class RelicEffects {
   damageMultiplier(target: Boss | Enemy, basic: boolean): number {
     const essence = 1 + 0.04 * this.sim.essences.power;
     if (!this.owned.size) return essence;
-    let multiplier = essence * (this.exposed(target) ? 1.15 : 1);
+    let multiplier = essence * (this.exposed(target) ? 1.15 : 1) * ((this.sundered.get(target) ?? -1) > this.now ? 1.15 : 1);
     multiplier *= this.has('oath') ? 1 + Math.min(8, Math.floor((this.sim.kills - this.oathKills) / 25)) * 0.04 : 1;
     for (const id of this.owned) {
       const relic = RELICS[id];
