@@ -1148,8 +1148,12 @@ export class GameSim {
     compact(this.gems, (g) => g.value > 0);
   }
 
+  get xpGainMultiplier(): number {
+    return this.stats.xpGain * this.relics.xpMultiplier;
+  }
+
   gainXp(amount: number): void {
-    const gained = amount * this.stats.xpGain * this.relics.xpMultiplier;
+    const gained = amount * this.xpGainMultiplier;
     this.xp += gained;
     this.emit('pickup', this.player.x, this.player.y, gained);
     while (this.xp >= this.xpFor(this.level)) {
