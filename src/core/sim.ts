@@ -372,9 +372,6 @@ export class GameSim {
     } else if (AUTO_COMBAT.enabled) {
       const range = this.loadout.character === 'roan' ? this.swordTargetRange : AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus;
       this.target = this.findTarget(range);
-      if (!this.target && this.loadout.character === 'roan' && this.relics.has('swordScabbard')) {
-        this.target = this.enemyShots.find((shot) => shot.life > 0 && dist(p.x, p.y, shot.x, shot.y) <= range + shot.r) ?? null;
-      }
       fire = this.target !== null;
       if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
       else if (len > 0.01) p.aim = Math.atan2(my, mx);
@@ -521,11 +518,9 @@ export class GameSim {
 
   private swingSword(): void {
     const p = this.player;
-    const range = this.swordTargetRange;
     // 이동이 끝난 위치에서 유효한 대상을 확인한 뒤 공격한다.
     if (AUTO_COMBAT.enabled) {
-      const target = this.findTarget(range) ?? (this.relics.has('swordScabbard')
-        ? this.enemyShots.find((shot) => shot.life > 0 && dist(p.x, p.y, shot.x, shot.y) <= range + shot.r) : undefined);
+      const target = this.findTarget(this.swordTargetRange);
       if (!target) return;
       p.aim = Math.atan2(target.y - p.y, target.x - p.x);
     }

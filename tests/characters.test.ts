@@ -173,6 +173,27 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.playerShots).toHaveLength(0);
   });
 
+  it('화살막이 검집은 투사체를 조준하지 않고 적을 벨 때 검격에 닿은 탄만 지운다', () => {
+    const sim = new GameSim({ seed: 25, god: true, loadout: roan, carryRelics: ['swordScabbard'] });
+    const outOfArc = makeShot(sim, 0, -26);
+    const inArc = makeShot(sim, 40, 0);
+    sim.enemyShots.push(outOfArc, inArc);
+
+    sim.step(IDLE_INPUT);
+    expect(sim.target).toBeNull();
+    expect(sim.swordSwings).toBe(0);
+    expect(sim.enemyShots).toEqual([outOfArc, inArc]);
+
+    const enemy = makeTarget(sim, 75);
+    sim.step(IDLE_INPUT);
+    expect(sim.target).toBe(enemy);
+    expect(sim.player.facing).toBe('east');
+    expect(sim.swordSwings).toBe(1);
+    expect(enemy.hp).toBeLessThan(enemy.maxHp);
+    expect(sim.enemyShots).toEqual([outOfArc]);
+    expect(sim.swordSweep?.blocked).toEqual([{ x: inArc.x, y: inArc.y }]);
+  });
+
   it('로안은 6·12·18레벨에 남은 형태만 고르고 모든 보유 형태로 동시에 공격한다', () => {
     const sim = new GameSim({ seed: 21, god: true, loadout: roan });
     makeTarget(sim, 65);
