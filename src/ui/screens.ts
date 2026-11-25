@@ -5,7 +5,7 @@ import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, 
 import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { weaponPreview } from './weaponPreview';
-import { ACTOR_TEXTURES, CHARACTER_SHEETS, characterTexture, WEAPON_TEXTURES } from '../render/textures';
+import { CHARACTER_SHEETS, characterTexture, WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
@@ -164,10 +164,9 @@ export class Screens {
 
   private characterCard(loadout: Loadout, title: string, description: string, testId: string,
     onClick: () => void, focus: boolean): HTMLButtonElement {
-    const key = characterTexture(loadout);
-    const url = key === 'player' ? ACTOR_TEXTURES.player : CHARACTER_SHEETS[key];
+    const url = CHARACTER_SHEETS[characterTexture(loadout)];
     const fx = loadout.character === 'lumen' ? loadout.weapon : loadout.character;
-    const portrait = el('span', { class: `character-pixel ${key === 'player' ? 'single' : ''}` });
+    const portrait = el('span', { class: 'character-pixel' });
     portrait.style.backgroundImage = `url("${url}")`;
     const effect = fx === 'chain' || fx === 'turret'
       ? el('img', { src: fx === 'chain' ? chainPreview : turretPreview, alt: '', class: 'character-attack sample' })

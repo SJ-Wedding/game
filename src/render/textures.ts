@@ -25,13 +25,14 @@ import gravity from '../assets/gravity.png';
 import infection from '../assets/infection.png';
 import weaponEffects from '../assets/weapon-effects.png';
 
-export const CHARACTER_SHEETS = { 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan };
-export function characterTexture(loadout: Loadout): 'player' | keyof typeof CHARACTER_SHEETS {
+export const CHARACTER_FRAME_SIZE = 40;
+export const CHARACTER_SHEETS = { player, 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan };
+export function characterTexture(loadout: Loadout): keyof typeof CHARACTER_SHEETS {
   return loadout.character === 'lumen' ? `lumen-${loadout.weapon}` : loadout.character === 'roan' ? 'roan' : 'player';
 }
 
 export const ARENA_TEXTURE = arena;
-export const ACTOR_TEXTURES = { player, chaser, charger, spitter, elite, boss };
+export const ACTOR_TEXTURES = { chaser, charger, spitter, elite, boss };
 
 export const WEAPON_TEXTURES = {
   chain, mine, orbit, axe, turret, flame, barrier, spear, mark, echo, gravity, infection,

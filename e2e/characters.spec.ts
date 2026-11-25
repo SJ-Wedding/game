@@ -3,6 +3,26 @@ import { collectErrors, snap } from './util';
 
 const starters = [['chain', '연쇄 번개'], ['turret', '서리 포탑']] as const;
 
+test('창 크기를 줄여도 균열 사수는 픽셀 렌더링과 방향별 스프라이트를 사용한다', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1013, height: 690 });
+  await page.goto('/?dev=1&god=1&seed=550');
+  await page.getByTestId('play').click();
+  await page.getByTestId('character-ranger').click();
+  const sprite = () => page.evaluate(() => {
+    const image = (window as any).__rift.app.scene.playerImage;
+    return [image.texture.key, Number(image.frame.name), image.frame.width, image.flipX];
+  });
+  await expect.poll(sprite).toEqual(['player', 1, 40, false]);
+  await expect(page.locator('canvas')).toHaveCSS('image-rendering', 'pixelated');
+  for (const [key, frame, flipped] of [['KeyW', 2, false], ['KeyA', 0, true], ['KeyD', 0, false], ['KeyS', 1, false]] as const) {
+    await page.keyboard.down(key);
+    await expect.poll(sprite).toEqual(['player', frame, 40, flipped]);
+    await page.keyboard.up(key);
+  }
+  expect(errors).toEqual([]);
+});
+
 for (const [weapon, name] of starters) {
   test(`마도공 루멘: 시작 무기로 ${name} 선택`, async ({ page }) => {
     const errors = collectErrors(page);

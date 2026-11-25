@@ -36,7 +36,6 @@ export interface Player {
   fireCd: number;
   /** 조준 각도(라디안) */
   aim: number;
-  facingLeft: boolean;
   facing: 'north' | 'south' | 'east' | 'west';
   /** 피격 연출용 */
   hurtFlash: number;

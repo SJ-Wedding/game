@@ -11,7 +11,7 @@ import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
-import { ARENA_TEXTURE, ACTOR_TEXTURES, CHARACTER_SHEETS, characterTexture, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
+import { ARENA_TEXTURE, ACTOR_TEXTURES, CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import {
   drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
@@ -60,7 +60,9 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     this.load.image('arena-slate', ARENA_TEXTURE);
     for (const [key, url] of Object.entries(ACTOR_TEXTURES)) this.load.image(key, url);
-    for (const [key, url] of Object.entries(CHARACTER_SHEETS)) this.load.spritesheet(key, url, { frameWidth: 32, frameHeight: 32 });
+    for (const [key, url] of Object.entries(CHARACTER_SHEETS)) {
+      this.load.spritesheet(key, url, { frameWidth: CHARACTER_FRAME_SIZE, frameHeight: CHARACTER_FRAME_SIZE });
+    }
     this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
     for (const [key, url] of Object.entries(WEAPON_SPRITES)) this.load.image(`weapon-${key}`, url);
   }
@@ -69,7 +71,7 @@ export class GameScene extends Phaser.Scene {
     this.drawFloor();
     this.groundEffects = this.add.graphics().setDepth(1);
     this.bossImage = this.add.image(0, 0, 'boss').setDepth(3).setVisible(false);
-    this.playerImage = this.add.image(0, 0, 'player').setDepth(5).setVisible(false);
+    this.playerImage = this.add.image(0, 0, 'player', 1).setDepth(5).setScale(2).setVisible(false);
     this.weaponEffects = this.add.graphics().setDepth(5.5);
     this.g = this.add.graphics().setDepth(6);
     const kb = this.input.keyboard!;
@@ -111,7 +113,7 @@ export class GameScene extends Phaser.Scene {
       this.handleEvents(events);
       // 시간이 멈춘 동안에는 파티클도 멈춘다
       if (sim.running) this.updateParticles(Math.min(deltaMs / 1000, 0.05));
-      this.cameras.main.centerOn(sim.player.x, sim.player.y);
+      this.cameras.main.centerOn(Math.round(sim.player.x), Math.round(sim.player.y));
     }
     this.draw(sim);
   }
@@ -405,21 +407,22 @@ export class GameScene extends Phaser.Scene {
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
     const texture = characterTexture(sim.loadout);
-    if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture);
-    if (texture !== 'player') this.playerImage.setFrame(p.facing === 'south' ? 1 : p.facing === 'north' ? 2 : 0);
-    this.playerImage.setPosition(p.x, p.y)
-      .setScale(2)
-      .setFlipX(texture === 'player' ? p.facingLeft : p.facing === 'west')
+    const frame = p.facing === 'south' ? 1 : p.facing === 'north' ? 2 : 0;
+    if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
+    else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
+    this.playerImage.setPosition(Math.round(p.x), Math.round(p.y))
+      .setFlipX(p.facing === 'west')
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
+    const aimMarker = CHARACTER_FRAME_SIZE + 2;
     if (sim.loadout.character !== 'lumen') g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
-      p.x + ax * (p.r + 18), p.y + ay * (p.r + 18),
-      p.x + ax * (p.r + 9) - ay * 4, p.y + ay * (p.r + 9) + ax * 4,
-      p.x + ax * (p.r + 9) + ay * 4, p.y + ay * (p.r + 9) - ax * 4,
+      p.x + ax * (aimMarker + 8), p.y + ay * (aimMarker + 8),
+      p.x + ax * aimMarker - ay * 4, p.y + ay * aimMarker + ax * 4,
+      p.x + ax * aimMarker + ay * 4, p.y + ay * aimMarker - ax * 4,
     );
     // 자동 조준 대상 표시 (청록 꺾쇠)
     const tg = sim.target;

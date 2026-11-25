@@ -233,7 +233,6 @@ export class GameSim {
       dodgeDy: 0,
       fireCd: 0,
       aim: -Math.PI / 2,
-      facingLeft: false,
       facing: 'south',
       hurtFlash: 0,
     };
@@ -399,7 +398,6 @@ export class GameSim {
     }
 
     const horizontal = p.dodgeTime > 0 ? p.dodgeDx : mx;
-    if (Math.abs(horizontal) > 0.08) p.facingLeft = horizontal < 0;
     const vertical = p.dodgeTime > 0 ? p.dodgeDy : my;
     if (Math.hypot(horizontal, vertical) > 0.08) this.facePlayer(horizontal, vertical);
 
