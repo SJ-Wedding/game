@@ -8,6 +8,38 @@ export const RELICS = {
   swordCircle: { source: 'elite', symbol: '◉', character: 'roan', name: '원형 검무의 인장', effect: '매 세 번째 공격의 첫 검격이 모두 360°를 벱니다. 각 검격은 원래 피해의 80%를 줍니다.' },
   swordRhythm: { source: 'level', symbol: 'ϟ', character: 'roan', name: '부러진 칼등', effect: '한 번 공격해 서로 다른 적 4마리 이상을 베면 다음 공격 대기시간이 35% 줄어듭니다.' },
   swordDuel: { source: 'elite', symbol: '⚔', character: 'roan', name: '결투자의 장갑', effect: '베기에 맞은 적이 한 마리면 해당 베기의 피해가 50% 증가합니다.' },
+  // ── 로안 균열 수호자 유물 (유물 기획안) ──
+  swordWave: { source: 'elite', symbol: '☽', character: 'roan', name: '검기 대검', effect: '적을 맞힌 베기마다 전방으로 검기를 날립니다. 사거리 260px, 적 3마리 관통, 피해는 베기의 45%. 베기 간격 +10%.' },
+  swordPulse: { source: 'elite', symbol: '♡', character: 'roan', name: '강철 맥박', effect: '베기에 맞은 적 1마리당 다음 베기 피해 +4%, 최대 +40%. 3초 동안 아무도 못 베면 초기화됩니다.' },
+  swordEcho: { source: 'elite', symbol: '≋', character: 'roan', name: '잔향 검흔', effect: '베기 0.6초 뒤 같은 궤적을 잔흔이 한 번 더 베어 피해 35%를 줍니다. 검 피해 −10%.' },
+  swordExecute: { source: 'elite', symbol: '⚰', character: 'roan', name: '처형자의 대검', effect: '체력 20% 이하 일반 적은 베기에 즉사합니다. 보스·균열 수호자는 체력 30% 이하일 때 베기 피해 +30%. 베기 각도 −15°.' },
+  swordLong: { source: 'elite', symbol: '⟷', character: 'roan', name: '긴 칼등', effect: '베기 거리 +15%, 최대 베기 거리 185px → 225px. 이동 속도 −8%.' },
+  swordWeight: { source: 'elite', symbol: '◑', character: 'roan', form: 'swordCrescent', name: '초승달의 추', effect: '반월 연격의 두 번째 베기가 뒤쪽도 함께 베며, 두 번 모두 맞은 적은 피해 +25%. 두 번째 베기 지연 +0.05초.' },
+  swordQuake: { source: 'elite', symbol: '⛏', character: 'roan', form: 'swordCrush', name: '지진 망치', effect: '강철 파쇄 끝 지점에 반경 90px 충격파(피해 70%)를 일으키고 일반 적을 0.5초 기절시킵니다. 강철 파쇄 간격 +10%.' },
+  swordWhirl: { source: 'elite', symbol: '౿', character: 'roan', form: 'swordGuard', name: '회오리 띠', effect: '근위 검무 뒤 1.5초간 칼바람이 몸 주위 110px를 돌며 0.3초마다 피해 20%를 줍니다. 근위 검무 피해 −10%.' },
+  swordOath: { source: 'elite', symbol: '⛊', character: 'roan', name: '수호자의 서약', effect: '베기에 맞은 적 1마리당 보호막 +1, 최대 25. 보호막이 피해를 먼저 받습니다. 최대 체력 −10%.' },
+  swordMirror: { source: 'elite', symbol: '⟲', character: 'roan', name: '반격의 거울검', effect: '베기 궤적에 닿은 적 탄을 최대 2개 되돌려 보냅니다. 되돌아간 탄은 공격력의 100% 피해를 줍니다.' },
+  swordDash: { source: 'elite', symbol: '⇥', character: 'roan', name: '돌진 베기의 갑주', effect: '회피가 끝나면 회피 방향으로 즉시 강화 베기(피해 150%, 각도 +40°)를 합니다. 회피 대기시간 +0.5초.' },
+  swordResolve: { source: 'elite', symbol: '⚑', character: 'roan', name: '결전의 각오', effect: '보스·균열 수호자가 300px 안에 있으면 베기 간격 −20%, 이동 속도 +10%. 일반 적에게 받는 피해 +10%.' },
+  // ── 루멘 균열 수호자 유물 (유물 기획안) ──
+  lumenCrystal: { source: 'elite', symbol: '⬖', character: 'lumen', name: '마력 증폭 수정', effect: '루멘 전용 강화 1점당 무기 피해 보너스 6% → 9%. 최대 체력 −10%.' },
+  lumenSight: { source: 'elite', symbol: '◬', character: 'lumen', name: '현자의 시야', effect: '전용 무기 사거리 +25% (연쇄: 첫 대상 탐색 거리, 포탑: 사격 거리).' },
+  lumenRune: { source: 'elite', symbol: 'ᛉ', character: 'lumen', name: '약점 표식의 룬', effect: '전용 무기에 3번 맞은 적은 4초간 받는 피해 +15%. 전용 무기 피해 −5%.' },
+  lumenCycle: { source: 'elite', symbol: '⟳', character: 'lumen', name: '마나 순환 고리', effect: '적 25마리를 처치할 때마다 전용 무기 대기시간이 즉시 초기화됩니다.' },
+  lumenCloak: { source: 'elite', symbol: '☍', character: 'lumen', name: '정전기 망토', effect: '피격 시 반경 160px 안의 적에게 전용 무기 1타의 60% 피해를 줍니다. 재사용 2초.' },
+  lumenStaff: { source: 'elite', symbol: '⚚', character: 'lumen', name: '집중의 지팡이', effect: '멈춰 있는 동안 전용 무기 피해 +20%. 이동 중에는 전용 무기 피해 −5%.' },
+  chainCloud: { source: 'elite', symbol: '☁', character: 'lumen', lumenWeapon: 'chain', name: '뇌운 병', effect: '연쇄 번개의 첫 대상 자리에 3초간 뇌운이 남아 1초마다 반경 100px에 낙뢰(첫 타격의 40%)를 떨어뜨립니다. 연쇄 발동 간격 +10%.' },
+  chainOverload: { source: 'elite', symbol: '⊕', character: 'lumen', lumenWeapon: 'chain', name: '과부하 축전지', effect: '한 번에 6회 이상 이어지면 마지막 대상 자리에서 반경 120px 폭발(첫 타격의 120%)이 일어납니다.' },
+  chainRebound: { source: 'elite', symbol: '↯', character: 'lumen', lumenWeapon: 'chain', name: '되튐 증폭기', effect: '되튐 피해 30%·25%·20% → 45%·40%·35%, 연쇄 감쇠 최소값 0.4 → 0.5. 연쇄 발동 간격 +10%.' },
+  chainDouble: { source: 'elite', symbol: '⫘', character: 'lumen', lumenWeapon: 'chain', name: '이중 방전 코일', effect: '25% 확률로 0.2초 뒤 연쇄 번개가 한 번 더 발동합니다(피해 60%).' },
+  chainRod: { source: 'elite', symbol: '⚡', character: 'lumen', lumenWeapon: 'chain', name: '피뢰 표식', effect: '연쇄에 맞은 적이 4초 안에 쓰러지면 주변 적 2마리에게 번개가 튀어 각각 첫 타격의 50% 피해를 줍니다. 첫 대상 피해 −10%.' },
+  chainConductor: { source: 'elite', symbol: '⌁', character: 'lumen', lumenWeapon: 'chain', name: '전도체 장갑', effect: '튐 거리 +40%, 분기 회로의 갈래 피해 50% → 65%.' },
+  turretPermafrost: { source: 'elite', symbol: '❅', character: 'lumen', lumenWeapon: 'turret', name: '영구 동토 핵', effect: '둔화 0.9초 → 1.5초. 둔화된 적이 다시 맞으면 0.4초 빙결(이동 정지, 보스 제외). 포탑 피해 −10%.' },
+  turretScope: { source: 'elite', symbol: '⊹', character: 'lumen', lumenWeapon: 'turret', name: '저격 망원경', effect: '사격 거리 +30%, 250px보다 먼 적에게 피해 +20%.' },
+  turretBlast: { source: 'elite', symbol: '✳', character: 'lumen', lumenWeapon: 'turret', name: '자폭 냉각기', effect: '포탑이 사라질 때 그 자리에 반경 120px 서리 폭발(포탑 1발 피해의 300%)이 일어납니다.' },
+  turretShotgun: { source: 'elite', symbol: '⋮', character: 'lumen', lumenWeapon: 'turret', name: '산탄 장전기', effect: '4발마다 3갈래 산탄을 발사합니다(각 60%). 포탑 사격 간격 +10%.' },
+  turretMobile: { source: 'elite', symbol: '⇢', character: 'lumen', lumenWeapon: 'turret', name: '이동식 포대', effect: '포탑이 플레이어를 초당 60px로 따라옵니다. 포탑 지속시간 −15%.' },
+  turretResonance: { source: 'elite', symbol: '≀', character: 'lumen', lumenWeapon: 'turret', name: '서리 공명기', effect: '포탑끼리 200px 안에 있으면 두 포탑의 사격 간격 −15%.' },
   tripleChoice: { source: 'elite', symbol: 'Ⅲ', name: '삼중 선택의 인장', effect: '판마다 처음 장착할 때 보너스 강화 선택이 3회 열립니다. 각 화면에서 강화 하나를 고릅니다.' },
   awl: { source: 'level', symbol: '↠', name: '철심 탄환', effect: '기본탄 한 발이 일반 적을 한 마리 더 관통합니다. 후반 관통과 중첩됩니다.' },
   anvil: { source: 'level', symbol: '▲', name: '무쇠 공이', effect: '기본 사격 속도 −25%, 기본탄 한 발 피해 +55%.' },
@@ -113,6 +145,7 @@ const FUSION_EFFECTS: Record<WeaponRelicId, string> = {
 
 export function relicDescription(id: RelicId, fusions: Iterable<FusionId> = []): string {
   const relic = RELICS[id];
+  if ('form' in relic) return `${relic.effect} 검술 형태를 익히지 않았으면 검 피해 +5%.`;
   if (!('weapon' in relic)) return relic.effect;
   const bonus = `융합 무기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.`;
   if (isFusionIngredient(fusions, relic.weapon)) return `${FUSION_EFFECTS[id as WeaponRelicId]} ${bonus}`;
@@ -127,7 +160,10 @@ const RANGED_RELICS = new Set<RelicId>([
 
 export function relicAllowed(id: RelicId, loadout: Loadout): boolean {
   const relic = RELICS[id];
-  if ('character' in relic) return loadout.character === relic.character;
+  if ('character' in relic) {
+    if (loadout.character !== relic.character) return false;
+    return !('lumenWeapon' in relic) || (loadout.character === 'lumen' && loadout.weapon === relic.lumenWeapon);
+  }
   if (loadout.character === 'ranger') return true;
   if ('weapon' in relic) return loadout.character === 'lumen' && loadout.weapon === relic.weapon;
   if (loadout.character === 'roan' && (id === 'heart' || id === 'catalyst' || id === 'unstableCore' || id === 'hourglass')) return false;
@@ -148,3 +184,13 @@ export function carryable(id: RelicId): boolean {
 export function validCarry(value: unknown): RelicId[] {
   return validRelicIds(value).filter(carryable).slice(0, CARRY_LIMIT);
 }
+
+/** 수호자의 정수: 균열 수호자 유물 후보가 3개보다 적을 때 빈칸을 채우는 대체 보상. 유물이 아니므로 다음 판으로 가져가지 않는다. */
+export const ESSENCES = {
+  power: { symbol: '✊', name: '수호자의 정수: 힘', effect: '모든 공격 피해 +4%.' },
+  life: { symbol: '✙', name: '수호자의 정수: 생명', effect: '최대 체력 +15, 즉시 15 회복.' },
+  swift: { symbol: '➠', name: '수호자의 정수: 신속', effect: '베기·기본 사격 속도 +5%.' },
+} as const;
+export type EssenceId = keyof typeof ESSENCES;
+export const ESSENCE_IDS = Object.keys(ESSENCES) as EssenceId[];
+export const ESSENCE_MAX_STACK = 5;

@@ -420,6 +420,13 @@ export function drawPlayerShot(g: Graphics, shot: Projectile): void {
   const speed = Math.hypot(vx, vy);
   const dx = speed ? vx / speed : 1;
   const dy = speed ? vy / speed : 0;
+  if (shot.source === 'swordWave') {
+    // 검기 대검: 진행 방향으로 휜 초승달 모양 검기
+    const a = Math.atan2(dy, dx);
+    g.lineStyle(9, 0xff9676, 0.35).beginPath().arc(x - dx * r, y - dy * r, r * 1.4, a - 1.1, a + 1.1).strokePath();
+    g.lineStyle(3, 0xfff2d5, 0.95).beginPath().arc(x - dx * r, y - dy * r, r * 1.4, a - 1.0, a + 1.0).strokePath();
+    return;
+  }
   const echo = shot.source === 'echo';
   const piercing = shot.pierceLeft !== undefined;
   const relic = shot.source === 'relic';

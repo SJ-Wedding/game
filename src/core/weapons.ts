@@ -23,6 +23,10 @@ interface Device extends Point {
   /** 귀환의 고리: 커지기 전 도끼 타격 반경 */
   baseR?: number;
   exposures?: Map<Target, number>;
+  /** 산탄 장전기: 포탑 사격 수 */
+  shots?: number;
+  /** 이동식 포대: 플레이어 기준 자리 */
+  offset?: Point;
 }
 interface EffectTiming {
   points: Point[];
@@ -91,6 +95,14 @@ export class WeaponSystem {
   /** 용광로의 신발끈: 화상 (대상 → 끝나는 시각, 다음 피해 시각) */
   private readonly burns = new Map<Target, { until: number; next: number; fusionDamage?: number }>();
 
+  /** 뇌운 병: 첫 대상 자리에 남은 뇌운 */
+  readonly clouds: (Point & { until: number; next: number; factor: number })[] = [];
+  /** 이중 방전 코일: 0.2초 뒤 다시 발동할 연쇄 */
+  private readonly recasts: number[] = [];
+  /** 피뢰 표식: 연쇄에 맞은 적 → 표식 종료 시각, 튈 때 피해 계수 */
+  private readonly rodMarks = new Map<Target, { until: number; factor: number }>();
+  private readonly rodBursts: (Point & { factor: number; from: Target })[] = [];
+
   constructor(private readonly sim: GameSim) {}
 
   private *targets(): Iterable<Target> {
@@ -132,7 +144,10 @@ export class WeaponSystem {
   private weaponDamage(kind: WeaponId, factor: number): number {
     const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
     const specialist = this.sim.loadout.character === 'lumen' && this.sim.loadout.weapon === kind;
-    const focus = specialist ? this.sim.starterDamageMultiplier : 1;
+    const { relics } = this.sim;
+    const focus = specialist
+      ? this.sim.starterDamageMultiplier * (relics.has('lumenRune') ? 0.95 : 1) * (relics.has('lumenStaff') ? (relics.still ? 1.2 : 0.95) : 1)
+      : 1;
     return this.sim.stats.damage * factor * SPECIAL_WEAPON_POWER[kind] * focus
       * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
@@ -141,6 +156,25 @@ export class WeaponSystem {
     const damage = this.weaponDamage(kind, factor);
     if ('id' in target) this.sim.damageEnemy(target, damage, kind);
     else this.sim.damageBoss(damage, kind);
+    const { loadout } = this.sim;
+    if (loadout.character === 'lumen' && loadout.weapon === kind) this.sim.relics.onLumenHit(target);
+  }
+
+  /** 루멘 전용 무기 1타 피해 (정전기 망토) */
+  specialistHitDamage(): number {
+    const { loadout } = this.sim;
+    if (loadout.character !== 'lumen') return 0;
+    return loadout.weapon === 'chain' ? this.weaponDamage('chain', 1.85) : this.weaponDamage('turret', this.turretFactor);
+  }
+
+  /** 마나 순환 고리: 루멘 전용 무기 대기시간 즉시 초기화 */
+  resetCooldown(): void {
+    const { loadout } = this.sim;
+    if (loadout.character === 'lumen') this.ready.set(loadout.weapon, this.sim.elapsed);
+  }
+
+  private get turretFactor(): number {
+    return 0.86 * turretMountDamage(this.sim.mastery('turretMount')) * (this.sim.relics.has('turretPermafrost') ? 0.9 : 1);
   }
 
   private enabled(kind: WeaponId): boolean {
@@ -429,6 +463,11 @@ export class WeaponSystem {
 
   onEnemyKilled(enemy: Enemy): void {
     if (this.infected.delete(enemy)) this.contagion.push({ x: enemy.x, y: enemy.y });
+    const rod = this.rodMarks.get(enemy);
+    if (rod) {
+      this.rodMarks.delete(enemy);
+      if (rod.until > this.sim.elapsed) this.rodBursts.push({ x: enemy.x, y: enemy.y, factor: rod.factor, from: enemy });
+    }
     this.marks.delete(enemy);
     this.orbitHits.delete(enemy);
   }
@@ -439,7 +478,10 @@ export class WeaponSystem {
     const now = sim.elapsed;
     compact(this.effects, (effect) => (effect.life -= dt) > 0);
 
-    if (this.enabled('chain') && now >= (this.ready.get('chain') ?? 0)) this.chain();
+    if (this.enabled('chain')) {
+      if (now >= (this.ready.get('chain') ?? 0)) this.chain();
+      this.updateChainRelics(now);
+    }
     if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 96);
     if (this.available('turret', this.rankEffect('turret') * (sim.loadout.character === 'lumen' && sim.relics.has('winterLantern') ? 0.7 : 1))) this.deployTurrets();
     if (this.enabled('flame') && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
@@ -583,53 +625,104 @@ export class WeaponSystem {
     }
   }
 
-  private chain(): void {
+  private chain(scale = 1, recast = false): void {
     const { player, relics, reachBonus } = this.sim;
     const specialist = this.sim.loadout.character === 'lumen';
-    const firstRange = specialist ? (390 + reachBonus * 0.65) * LUMEN_CHAIN.firstRange : 390;
+    const firstRange = specialist ? (390 + reachBonus * 0.65) * LUMEN_CHAIN.firstRange * (relics.has('lumenSight') ? 1.25 : 1) : 390;
     let target = this.nearest(player, firstRange);
     if (!target) return;
+    const now = this.sim.elapsed;
     const crown = relics.has('crown');
+    const rebound = relics.has('chainRebound');
+    const rod = relics.has('chainRod');
     const voltage = this.sim.mastery('chainVoltage');
     const branches = this.sim.mastery('chainFork') * 2;
-    const speed = chainDelay(this.sim.mastery('chainSpeed'));
-    const interval = specialist ? 1.7 * speed : 2.15;
-    this.ready.set('chain', this.sim.elapsed + Math.max(0.12, interval * relics.cooldownMultiplier));
-    if (relics.onWeaponActivated()) this.ready.set('chain', this.sim.elapsed);
+    if (!recast) {
+      const speed = chainDelay(this.sim.mastery('chainSpeed'));
+      const interval = (specialist ? 1.7 * speed : 2.15) * (relics.has('chainCloud') ? 1.1 : 1) * (rebound ? 1.1 : 1);
+      this.ready.set('chain', now + Math.max(0.12, interval * relics.cooldownMultiplier));
+      if (relics.onWeaponActivated()) this.ready.set('chain', now);
+      // 이중 방전 코일: 25% 확률로 0.2초 뒤 피해 60%로 한 번 더
+      if (relics.has('chainDouble') && this.sim.rngRelicFx.next() < 0.25) this.recasts.push(now + 0.2);
+    }
     const visits = new Map<Target, number>();
     const points: Point[] = [player];
     const reboundCounts = [0];
     const maxLinks = this.rankEffect('chain') + (crown ? 2 : 0) + this.sim.mastery('chainLinks');
-    const range = specialist ? (125 + reachBonus * 0.12) * LUMEN_CHAIN.jumpRange : 125;
+    const range = specialist ? (125 + reachBonus * 0.12) * LUMEN_CHAIN.jumpRange * (relics.has('chainConductor') ? 1.4 : 1) : 125;
+    const repeatTable = rebound ? [0.45, 0.40, 0.35] : LUMEN_CHAIN.repeatDamage;
+    let firstFactor = 0;
     const hit = (enemy: Target, at: Point, factor: number) => {
       const repeats = visits.get(enemy) ?? 0;
       visits.set(enemy, repeats + 1);
-      const repeatDamage = repeats > 0 ? LUMEN_CHAIN.repeatDamage[Math.min(repeats, LUMEN_CHAIN.repeatDamage.length) - 1] : 1;
+      const repeatDamage = repeats > 0 ? repeatTable[Math.min(repeats, repeatTable.length) - 1] : 1;
+      // 피뢰 표식: 4초 안에 쓰러지면 주변 적 2마리에게 첫 타격의 50%
+      if (rod) this.rodMarks.set(enemy, { until: now + 4, factor: firstFactor * 0.5 });
       this.damage('chain', enemy, factor * repeatDamage * (crown ? 0.75 : 1));
-      if (crown) this.area('chain', at, 54, 0.75 * repeatDamage);
+      if (crown) this.area('chain', at, 54, 0.75 * repeatDamage * scale);
       return repeats;
     };
     let firstBranch: { target: Target; point: Point } | undefined;
+    let links = 0;
+    let last: Point = player;
     for (let link = 0; target && link < maxLinks; link++) {
       const at = { x: target.x, y: target.y };
       points.push(at);
       const voltageFactor = link === 0 ? 1 + 0.45 * voltage : 0.85 ** voltage;
-      const falloff = specialist ? Math.max(0.4, 0.76 ** link) : 0.76 ** link;
-      reboundCounts.push(hit(target, at, 1.85 * falloff * voltageFactor));
+      const falloff = specialist ? Math.max(rebound ? 0.5 : 0.4, 0.76 ** link) : 0.76 ** link;
+      const factor = 1.85 * falloff * voltageFactor * scale * (link === 0 && rod ? 0.9 : 1);
+      if (link === 0) {
+        firstFactor = factor;
+        // 뇌운 병: 첫 대상 자리에 3초간 뇌운, 1초마다 첫 타격의 40%
+        if (relics.has('chainCloud')) this.clouds.push({ ...at, until: now + 3 + 1e-6, next: now + 1, factor: factor * 0.4 });
+      }
+      reboundCounts.push(hit(target, at, factor));
+      links++;
+      last = at;
       if (link === 2) firstBranch = { target, point: at };
       target = this.nextChainTarget(at, target, range, visits, specialist);
     }
     this.trace('chain', points, 0, specialist ? 0.38 : 0.32).reboundCounts = reboundCounts;
+    // 과부하 축전지: 6회 이상 이어지면 마지막 대상 자리에서 폭발
+    if (links >= 6 && relics.has('chainOverload')) this.area('chain', last, 120, firstFactor * 1.2);
     if (!firstBranch || !branches) return;
     const branched = new Set<Target>();
+    const forkFactor = relics.has('chainConductor') ? 0.65 : 0.5;
     for (let branch = 0; branch < branches; branch++) {
       const extra = this.nextChainTarget(firstBranch.point, firstBranch.target, range, visits, specialist, branched);
       if (!extra) break;
       branched.add(extra);
       const at = { x: extra.x, y: extra.y };
-      const repeats = hit(extra, at, 1.85 * 0.5);
+      const repeats = hit(extra, at, 1.85 * forkFactor * scale);
       this.trace('chain', [firstBranch.point, at], 0, 0.38).reboundCounts = [0, repeats];
     }
+  }
+
+  /** 뇌운 병·이중 방전 코일·피뢰 표식 */
+  private updateChainRelics(now: number): void {
+    while (this.recasts.length && now + 1e-6 >= this.recasts[0]) {
+      this.recasts.shift();
+      this.chain(0.6, true);
+    }
+    for (const cloud of this.clouds) {
+      if (now + 1e-6 < cloud.next || cloud.next > cloud.until) continue;
+      cloud.next += 1;
+      this.area('chain', cloud, 100, cloud.factor);
+    }
+    compact(this.clouds, (cloud) => cloud.next <= cloud.until);
+    const bursts = this.rodBursts.splice(0);
+    const range = (125 + this.sim.reachBonus * 0.12) * LUMEN_CHAIN.jumpRange * (this.sim.relics.has('chainConductor') ? 1.4 : 1);
+    for (const burst of bursts) {
+      const skip = new Set<Target>([burst.from]);
+      for (let i = 0; i < 2; i++) {
+        const next = this.nearest(burst, range, skip);
+        if (!next) break;
+        skip.add(next);
+        this.trace('chain', [burst, next], 0, 0.3);
+        this.damage('chain', next, burst.factor);
+      }
+    }
+    if (this.rodMarks.size > 64) for (const [target, mark] of this.rodMarks) if (mark.until <= now || target.dead) this.rodMarks.delete(target);
   }
 
   private nextChainTarget(
@@ -658,15 +751,17 @@ export class WeaponSystem {
   private deployTurrets(): void {
     const { player, relics, loadout, reachBonus } = this.sim;
     const winter = relics.has('winterLantern');
-    const duration = 6 * (winter ? 0.7 : 1);
+    const duration = 6 * (winter ? 0.7 : 1) * (relics.has('turretMobile') ? 0.85 : 1);
     const count = 1 + Number(winter) + this.sim.mastery('turretMount');
-    const range = 340 + reachBonus * 0.55;
+    const range = (340 + reachBonus * 0.55) * (relics.has('lumenSight') ? 1.25 : 1) * (relics.has('turretScope') ? 1.3 : 1);
     if (loadout.character !== 'lumen') {
       if (winter) {
         for (const side of [-1, 1]) this.device('turret', { x: player.x + side * 34, y: player.y }, duration, range);
       } else this.device('turret', player, duration, range);
       return;
     }
+    // 자폭 냉각기: 새 포탑으로 교체되며 사라지는 포탑도 폭발한다
+    for (const device of this.devices) if (device.kind === 'turret' && device.age < device.duration) this.turretExpired(device);
     compact(this.devices, (device) => device.kind !== 'turret');
     for (let i = 0; i < count; i++) {
       const angle = Math.PI * 2 * i / count;
@@ -674,33 +769,85 @@ export class WeaponSystem {
       const pad = ARENA_CONFIG.wallPadding + 10;
       const x = clamp(player.x + Math.cos(angle) * spacing, pad, ARENA_CONFIG.width - pad);
       const y = clamp(player.y + Math.sin(angle) * spacing, pad, ARENA_CONFIG.height - pad);
-      this.device('turret', { x, y }, duration, range);
+      this.device('turret', { x, y }, duration, range).offset = { x: x - player.x, y: y - player.y };
     }
+  }
+
+  /** 자폭 냉각기: 포탑이 사라질 때 반경 120px 서리 폭발(포탑 1발의 300%) */
+  private turretExpired(turret: Device): void {
+    if (!this.sim.relics.has('turretBlast') || this.sim.loadout.character !== 'lumen') return;
+    this.area('turret', turret, 120, this.turretFactor * 3);
+    this.trace('turret', [turret], 120, 0.4, 'frostBurst');
+  }
+
+  /** 이동식 포대: 초당 60px로 플레이어를 따라간다 */
+  private moveTurret(turret: Device, dt: number): void {
+    const p = this.sim.player;
+    const offset = turret.offset ?? { x: 0, y: 0 };
+    const tx = p.x + offset.x;
+    const ty = p.y + offset.y;
+    const d = dist(turret.x, turret.y, tx, ty);
+    if (d < 1) return;
+    const step = Math.min(d, 60 * dt);
+    turret.x += (tx - turret.x) / d * step;
+    turret.y += (ty - turret.y) / d * step;
   }
 
   private fireTurret(turret: Device, target: Target): void {
     const { relics, elapsed } = this.sim;
     const speed = turretDelay(this.sim.mastery('turretSpeed'));
-    turret.next = turret.age + Math.max(0.09, 0.48 * relics.periodicHitMultiplier * speed);
+    // 서리 공명기: 다른 포탑이 200px 안에 있으면 사격 간격 −15%
+    const resonance = relics.has('turretResonance') && this.devices.some((d) => d !== turret && d.kind === 'turret'
+      && d.age < d.duration && dist(d.x, d.y, turret.x, turret.y) <= 200);
+    const interval = 0.48 * relics.periodicHitMultiplier * speed * (relics.has('turretShotgun') ? 1.1 : 1) * (resonance ? 0.85 : 1);
+    turret.next = turret.age + Math.max(0.09, interval);
     const angle = Math.atan2(target.y - turret.y, target.x - turret.x);
     turret.angle = angle;
-    const factor = 0.86 * turretMountDamage(this.sim.mastery('turretMount'));
-    const pierce = this.sim.mastery('turretPierce');
+    const factor = this.turretFactor;
+    const permafrost = relics.has('turretPermafrost');
+    const scope = relics.has('turretScope');
+    const strike = (t: Target, scale: number) => {
+      if ('id' in t) {
+        // 영구 동토 핵: 이미 둔화된 적이 다시 맞으면 0.4초 빙결
+        if (permafrost && t.slowUntil > elapsed) t.rootedUntil = Math.max(t.rootedUntil, elapsed + 0.4);
+        t.slowUntil = Math.max(t.slowUntil, elapsed + (permafrost ? 1.5 : 0.9));
+      }
+      const far = scope && dist(turret.x, turret.y, t.x, t.y) > 250 ? 1.2 : 1;
+      this.damage('turret', t, factor * scale * far);
+    };
     const targets = [target];
-    if (pierce > 0) {
-      const ux = Math.cos(angle);
-      const uy = Math.sin(angle);
-      const depth = (t: Point) => (t.x - turret.x) * ux + (t.y - turret.y) * uy;
-      const end = { x: turret.x + ux * turret.r, y: turret.y + uy * turret.r };
-      const extra = [...this.targets()].filter((t) => t !== target && depth(t) >= depth(target)
-        && distToSegment(t.x, t.y, turret.x, turret.y, end.x, end.y) <= t.r + 8);
-      extra.sort((a, b) => depth(a) - depth(b));
-      targets.push(...extra.slice(0, pierce));
-    }
-    this.trace('turret', [turret, targets[targets.length - 1]], 0, 0.26);
-    for (const t of targets) {
-      if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.9);
-      this.damage('turret', t, factor);
+    turret.shots = (turret.shots ?? 0) + 1;
+    if (relics.has('turretShotgun') && turret.shots % 4 === 0) {
+      // 산탄 장전기: 4발마다 3갈래 산탄(각 60%)
+      for (const offset of [-0.3, 0.3]) {
+        const a = angle + offset;
+        const end = { x: turret.x + Math.cos(a) * turret.r, y: turret.y + Math.sin(a) * turret.r };
+        let pellet: Target | null = null;
+        let best = Infinity;
+        for (const t of this.targets()) {
+          if (targets.includes(t) || distToSegment(t.x, t.y, turret.x, turret.y, end.x, end.y) > t.r + 8) continue;
+          const d = dist(turret.x, turret.y, t.x, t.y);
+          if (d < best) { best = d; pellet = t; }
+        }
+        this.trace('turret', [turret, pellet ?? end], 0, 0.26);
+        if (pellet) targets.push(pellet);
+      }
+      this.trace('turret', [turret, target], 0, 0.26);
+      for (const t of targets) strike(t, 0.6);
+    } else {
+      const pierce = this.sim.mastery('turretPierce');
+      if (pierce > 0) {
+        const ux = Math.cos(angle);
+        const uy = Math.sin(angle);
+        const depth = (t: Point) => (t.x - turret.x) * ux + (t.y - turret.y) * uy;
+        const end = { x: turret.x + ux * turret.r, y: turret.y + uy * turret.r };
+        const extra = [...this.targets()].filter((t) => t !== target && depth(t) >= depth(target)
+          && distToSegment(t.x, t.y, turret.x, turret.y, end.x, end.y) <= t.r + 8);
+        extra.sort((a, b) => depth(a) - depth(b));
+        targets.push(...extra.slice(0, pierce));
+      }
+      this.trace('turret', [turret, targets[targets.length - 1]], 0, 0.26);
+      for (const t of targets) strike(t, 1);
     }
     const frost = this.sim.mastery('turretFrost');
     if (!frost) return;
@@ -810,7 +957,12 @@ export class WeaponSystem {
         }
         break;
       case 'turret': {
-        if (finished || d.age < d.next) break;
+        if (finished) {
+          if (previous < d.duration) this.turretExpired(d);
+          break;
+        }
+        if (this.sim.relics.has('turretMobile') && this.sim.loadout.character === 'lumen') this.moveTurret(d, dt);
+        if (d.age < d.next) break;
         const target = this.nearest(d, d.r);
         if (!target) break;
         this.fireTurret(d, target);

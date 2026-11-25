@@ -1,6 +1,6 @@
 import type { Loadout, SwordFormId } from '../config/characters';
 import type { FusionId, WeaponId } from '../config/weapons';
-import type { RelicId, RelicSource } from '../config/relics';
+import type { EssenceId, RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
 import type { DropKind } from '../config/drops';
 import type { GradeId } from '../config/grades';
@@ -128,6 +128,8 @@ export interface Projectile {
   echoRepeat?: boolean;
   /** 같은 메아리 발동에서 나온 탄들이 공유하는 틈새의 거울 발동 여부. */
   echoVolley?: { repeated: boolean };
+  /** 일반 적이 쏜 탄 (결전의 각오) */
+  normal?: true;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */
@@ -196,6 +198,7 @@ export type UpgradeChoice =
   | { kind: 'swordForm'; id: SwordFormId }
   | { kind: 'relic'; id: RelicId; source: RelicSource }
   | { kind: 'coin'; id: 'flip' | 'pass' }
+  | { kind: 'essence'; id: EssenceId }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
 export type AttackId = 'basic' | 'sword' | 'bomb' | 'relic' | WeaponId | FusionId;

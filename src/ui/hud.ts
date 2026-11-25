@@ -149,7 +149,8 @@ export class Hud {
     }
 
     c.style(this.hpFill, 'hp', 'width', `${(100 * p.hp) / maxHp}%`);
-    c.text(this.hpText, 'hp', `체력 ${Math.ceil(p.hp)} / ${Math.round(maxHp)}`);
+    const shield = Math.floor(sim.relics.shield);
+    c.text(this.hpText, 'hp', `체력 ${Math.ceil(p.hp)} / ${Math.round(maxHp)}${shield > 0 ? ` · 보호막 ${shield}` : ''}`);
     c.toggle(this.hpFill, 'hpLow', 'low', p.hp / maxHp < 0.3);
 
     const need = sim.xpNeeded;

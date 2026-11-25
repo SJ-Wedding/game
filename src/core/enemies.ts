@@ -130,7 +130,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
           e.timer -= dt;
           if (e.timer <= 0) {
             const a = Math.atan2(p.y - e.y, p.x - e.x);
-            sim.spawnEnemyShot(e.x, e.y, a, c.projectileSpeed, c.projectileDamage * e.dmgMul, c.projectileRadius, c.attackNames.shot);
+            sim.spawnEnemyShot(e.x, e.y, a, c.projectileSpeed, c.projectileDamage * e.dmgMul, c.projectileRadius, c.attackNames.shot, true);
             e.state = 'move';
             e.cd = c.fireInterval;
           }
@@ -197,7 +197,7 @@ export function updateEnemies(sim: GameSim, dt: number): void {
     e.y = clamp(e.y, pad, ARENA_CONFIG.height - pad);
 
     if (dist(e.x, e.y, p.x, p.y) < e.r + p.r) {
-      sim.hurtPlayer(contactDamage * e.dmgMul, contactSource, 'contact');
+      sim.hurtPlayer(contactDamage * e.dmgMul, contactSource, 'contact', e.kind !== 'elite');
     }
   }
   separate(sim);

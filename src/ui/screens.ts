@@ -2,7 +2,7 @@ import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, SWORD_FORMS, SWOR
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type echoGrowth, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
-import { CARRY_LIMIT, RELICS, relicDescription, type RelicId } from '../config/relics';
+import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, type EssenceId, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { weaponPreview } from './weaponPreview';
 import { CHARACTER_SHEETS, characterTexture, WEAPON_TEXTURES } from '../render/textures';
@@ -263,16 +263,17 @@ export class Screens {
     fusions: Iterable<FusionId>;
     bonusChoices: number;
     notice?: string | null;
+    essences?: Readonly<Record<EssenceId, number>>;
     onChoose: (i: number) => void;
     onReroll: () => void;
   }): void {
     const coin = opts.choices[0]?.kind === 'coin';
-    const reward = opts.choices[0]?.kind === 'relic' || coin;
+    const reward = opts.choices.some((c) => c.kind === 'relic' || c.kind === 'essence') || coin;
     const formChoice = opts.choices[0]?.kind === 'swordForm';
     const cards = opts.choices.map((c, i) => {
       const grade = c.kind === 'upgrade' ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
-        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : c.kind === 'coin' ? 'relic-card coin-card' : c.kind === 'swordForm' ? 'sword-form-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
+        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : c.kind === 'coin' ? 'relic-card coin-card' : c.kind === 'essence' ? 'relic-card essence-card' : c.kind === 'swordForm' ? 'sword-form-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
         'data-grade': grade?.id ?? '',
       });
@@ -327,6 +328,15 @@ export class Screens {
           el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: relic.symbol }),
           el('strong', { class: 'name', text: relic.name }),
           el('span', { class: 'desc', text: relicDescription(c.id, opts.fusions) }),
+        );
+      } else if (c.kind === 'essence') {
+        const essence = ESSENCES[c.id];
+        const stacks = opts.essences?.[c.id] ?? 0;
+        btn.append(
+          el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: essence.symbol }),
+          el('strong', { class: 'name', text: essence.name }),
+          el('span', { class: 'desc', text: essence.effect }),
+          el('span', { class: 'stack', text: `대체 보상 · ${stacks} → ${stacks + 1} / 최대 ${ESSENCE_MAX_STACK}중첩 · 다음 판 계승 불가` }),
         );
       } else if (c.kind === 'coin') {
         btn.append(
