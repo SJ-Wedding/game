@@ -2,7 +2,7 @@ import { AUTO_COMBAT } from '../config/player';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
-  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, SCIMITAR_THRUST_BONUSES, TWIN_BLADE_DAMAGE_FACTOR,
+  DAGGER_BLEED_CHAIN, DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, SCIMITAR_CRESCENT, SCIMITAR_THRUST_BONUSES, TWIN_BLADE_DAMAGE_FACTOR,
   type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
 } from '../config/roan';
 import { bossInvulnerable } from './boss';
@@ -27,6 +27,10 @@ export interface SwordStrike {
   /** 판정 중심 (기본: 로안 위치). 플레일은 타격 지점 */
   center?: Point;
   kind: 'main' | 'combo' | 'extra' | 'shock';
+  /** 단검 계열 출혈 중첩 (기본: 쌍검 2, 그 외 1) */
+  bleed?: number;
+  /** 시미터 각성 초승달 검기 (로안 몸이 아닌 처치 지점에서 날아감) */
+  wave?: true;
   /** 찌르기 판정 (할버드 찌르기 연계) */
   thrust?: true;
   blocks?: number;
@@ -39,6 +43,7 @@ export interface SwordSweep {
   width: number;
   lineWidth?: number;
   offHand?: boolean;
+  wave?: true;
   range: number;
   at: number;
   kind: SwordStrike['kind'];
@@ -512,7 +517,7 @@ export class RoanCombat {
       if (t.dead) continue;
       // 단검 계열: 출혈
       if (this.family('dagger') && s.kind !== 'shock') {
-        this.addBleed(t, (this.upgrade === 'twinblades' ? 2 : 1) + (this.gear('bloodHook') && bleeding ? 1 : 0));
+        this.addBleed(t, (s.bleed ?? (this.upgrade === 'twinblades' ? 2 : 1)) + (this.gear('bloodHook') && bleeding ? 1 : 0));
       }
       // 메이스 계열: 기절
       if (enemy && this.family('mace')) {
@@ -546,7 +551,7 @@ export class RoanCombat {
       }
     }
     this.sweeps.push({
-      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, range: s.range, at: now, kind: s.kind,
+      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, wave: s.wave, range: s.range, at: now, kind: s.kind,
       motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.motion,
       design: this.design, color: this.color, blocked, hits: hits.length,
     });
@@ -662,7 +667,6 @@ export class RoanCombat {
     b.until = Math.max(b.until, now + duration);
     this.bleeds.set(t, b);
     if (Number.isFinite(max) && before < max && b.stacks >= max) {
-      if (this.gear('bloodBurst')) this.blast(t, 60, this.damage * 0.8, false);
       if (this.upgrade === 'stiletto' && this.awakened) {
         const burst = b.stacks * this.bleedPerStack(t) * Math.max(0, b.until - now);
         this.bleeds.delete(t);
@@ -708,10 +712,38 @@ export class RoanCombat {
     if (this.gear('crescentEdge')) {
       this.later(0.15, () => this.strike({ angle: this.sim.player.aim, width: 0, lineWidth: this.lineWidth, range: this.range, factor: 1, kind: 'extra' }));
     }
+    this.bleedChain(e, bleed);
     if (this.upgrade === 'scimitar' && this.awakened) {
-      const near = this.sim.enemies.filter((o) => !o.dead && o !== e).sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y)).slice(0, 2);
-      for (const o of near) if (dist(e.x, e.y, o.x, o.y) < 160) this.addBleed(o, Math.max(1, Math.floor(bleed.stacks)));
+      const at = { x: e.x, y: e.y };
+      const aim = this.sim.player.aim;
+      this.strike({
+        angle: aim, width: 0, lineWidth: SCIMITAR_CRESCENT.width, range: SCIMITAR_CRESCENT.range, center: at,
+        factor: SCIMITAR_CRESCENT.damage, kind: 'extra', bleed: SCIMITAR_CRESCENT.bleedStacks, wave: true,
+      });
     }
+  }
+
+  /** 단검 계열 출혈 연쇄: 가까운 적에게 출혈 절반이 옮고, 남은 출혈 피해가 터진다 */
+  private bleedChain(e: Enemy, bleed: Bleed): void {
+    if (!this.family('dagger')) return;
+    const { spreadTargets, spreadRadius, burstRadius, burstRadiusRelic, burstMinSeconds } = DAGGER_BLEED_CHAIN;
+    const now = this.now;
+    const stacks = bleed.stacks;
+    const near = this.sim.enemies
+      .filter((o) => !o.dead && o !== e && dist(e.x, e.y, o.x, o.y) < spreadRadius + o.r)
+      .sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y))
+      .slice(0, spreadTargets);
+    const burst = stacks * this.bleedPerStack(e) * Math.max(burstMinSeconds, bleed.until - now);
+    for (const o of near) this.addBleed(o, Math.ceil(stacks / 2));
+    const radius = this.gear('bloodBurst') ? burstRadiusRelic : burstRadius;
+    const sim = this.sim;
+    for (const o of sim.enemies) {
+      if (o === e || o.dead || dist(e.x, e.y, o.x, o.y) >= radius + o.r) continue;
+      sim.damageEnemy(o, burst, 'bleed');
+    }
+    const b = sim.boss;
+    if (b && !b.dead && !bossInvulnerable(b) && dist(e.x, e.y, b.x, b.y) < radius + b.r) sim.damageBoss(burst, 'bleed');
+    sim.weapons.trace('mine', [e], radius, 0.3, 'bleedBurst');
   }
 
   onHurt(): void {

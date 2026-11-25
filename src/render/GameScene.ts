@@ -20,6 +20,7 @@ import {
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
 } from './weaponEffects';
 import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
+import { CRESCENT_WAVE_DURATION, drawCrescentWave } from './roanCrescent';
 import { drawFlailTrail, drawMaceImpact, drawMaceQuake, drawMaceWeapon, maceLean } from './roanMaceEffects';
 
 interface Particle {
@@ -422,7 +423,8 @@ export class GameScene extends Phaser.Scene {
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
-    const latestSweep = sim.swordSweep;
+    let latestSweep: GameSim['swordSweep'] = null;
+    for (const sweep of sim.swordSweeps) if (!sweep.wave) latestSweep = sweep;
     const sweepAge = latestSweep ? t - latestSweep.at : SWORD.sweepDuration;
     const stabProgress = sweepAge / DAGGER_THRUST.duration;
     const stab = latestSweep?.lineWidth !== undefined && stabProgress < 1 ? latestSweep : undefined;
@@ -533,6 +535,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
+    if (sweep.wave) {
+      drawCrescentWave(this.groundEffects, this.weaponEffects, sweep, (now - sweep.at) / CRESCENT_WAVE_DURATION);
+      return;
+    }
     const progress = (now - sweep.at) / SWORD.sweepDuration;
     if (progress >= 1 || sweep.lineWidth !== undefined) return;
     const g = this.weaponEffects;
@@ -614,6 +620,17 @@ export class GameScene extends Phaser.Scene {
             const age = fx.duration - fx.life;
             const delay = fx.variant === 'maceQuake' ? 0.08 : 0;
             if (age >= delay) drawMaceQuake(ground, g, fx.points[0], fx.radius, (age - delay) / (fx.duration - delay), fx.variant === 'maceScar');
+          } else if (fx.variant === 'bleedBurst') {
+            const { x, y } = fx.points[0];
+            const alpha = fx.life / fx.duration;
+            const t = 1 - alpha;
+            ground.fillStyle(0x8a0f2a, alpha * 0.22).fillCircle(x, y, fx.radius * (0.4 + 0.6 * t));
+            g.lineStyle(2, 0xff3d5e, alpha * 0.8).strokeCircle(x, y, fx.radius * (0.5 + 0.5 * t));
+            for (let i = 0; i < 8; i++) {
+              const angle = i * Math.PI / 4 + 0.3;
+              const r = fx.radius * (0.3 + 0.65 * t);
+              g.fillStyle(0xd61f45, alpha * 0.9).fillCircle(x + Math.cos(angle) * r, y + Math.sin(angle) * r, 2.5);
+            }
           } else drawExplosion(ground, g, fx);
           continue;
         }
