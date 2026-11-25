@@ -242,7 +242,7 @@ export class App {
       maxHp: sim.relics.maxHp,
       dodgeCooldown: sim.relics.dodgeCooldown,
       fireRate: sim.relics.fireRate,
-      xpGain: sim.stats.xpGain * sim.relics.xpMultiplier,
+      xpGain: sim.xpGainMultiplier,
       damageTaken: sim.relics.damageTaken(),
       luck: sim.luck,
       projectileRange: sim.stats.projectileRange + sim.reachBonus + sim.relics.basicReachBonus,

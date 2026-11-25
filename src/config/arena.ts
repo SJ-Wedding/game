@@ -5,7 +5,7 @@ export const ARENA_CONFIG = {
   height: 1800,
   /** 벽 두께. 플레이어·적은 이 안쪽으로만 움직인다. */
   wallPadding: 40,
-  /** 적이 생성되는 플레이어 기준 거리 범위. 화면(대각선 절반 ≈ 734px) 밖에서 나타나게 한다. */
+  /** 적이 생성되는 플레이어 기준 거리 범위. 보통 화면 가장자리 너머에서 접근한다. */
   spawnDistance: [760, 920] as [number, number],
   /** 벽 때문에 위치가 보정됐을 때 플레이어와 최소한 이만큼은 떨어져 있어야 한다. */
   minSpawnDistance: 620,
@@ -15,4 +15,5 @@ export const ARENA_CONFIG = {
 export const VIEW_CONFIG = {
   width: 1280,
   height: 720,
+  zoom: 0.84,
 } as const;

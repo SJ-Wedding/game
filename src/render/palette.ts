@@ -4,14 +4,10 @@
  *  - 적: 종류마다 다른 색과 실루엣의 스프라이트
  *  - 적 투사체: 진분홍 테두리 + 흰 중심 (배경·적과 겹쳐도 보이도록)
  *  - 공격 예고: 반투명 빨강 영역 + 밝은 빨강 테두리
- *  - 경험치: 초록 마름모
+ *  - 경험치: 획득량에 따라 색이 달라지는 마름모
  */
 export const PALETTE = {
   bg: 0x10161c,
-  rune: 0x517080,
-  wall: 0x141e25,
-  wallTrim: 0x222f37,
-  wallEdge: 0x4d626c,
 
   player: 0x4de8ff,
   playerOutline: 0xffffff,
@@ -30,6 +26,5 @@ export const PALETTE = {
   telegraphEdge: 0xff6070,
 
   gem: 0x45f08a,
-  gemBig: 0xb8ff4d,
   hit: 0xffffff,
 } as const;

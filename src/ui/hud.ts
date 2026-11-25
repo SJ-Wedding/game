@@ -3,6 +3,7 @@ import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/w
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
+import { xpVisual } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { ALL_UPGRADES } from '../config/upgrades';
 import { formatTime } from '../core/math';
@@ -203,6 +204,7 @@ export class Hud {
     }
     if (this.xpBatch && now >= this.xpBatchAt) {
       this.xpGainText.textContent = `+${Number(this.xpBatch.toFixed(1))} XP`;
+      this.xpGainText.style.color = `#${xpVisual(this.xpBatch).color.toString(16).padStart(6, '0')}`;
       this.xpBatch = 0;
       this.xpHideAt = now + 1100;
     } else if (now >= this.xpHideAt && this.xpGainText.textContent) {

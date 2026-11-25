@@ -25,3 +25,16 @@ export const PROGRESSION_CONFIG = {
     heal: 30,
   },
 } as const;
+
+const XP_VISUALS = [
+  { min: 40, color: 0xffd474, size: 11 },
+  { min: 10, color: 0xff9ecb, size: 9 },
+  { min: 4, color: 0xc3a3ff, size: 8 },
+  { min: 3, color: 0x79c9ff, size: 7 },
+] as const;
+const XP_DEFAULT_VISUAL = { color: 0x7cf4aa, size: 6 } as const;
+
+export function xpVisual(amount: number): { color: number; size: number } {
+  for (const tier of XP_VISUALS) if (amount >= tier.min) return tier;
+  return XP_DEFAULT_VISUAL;
+}
