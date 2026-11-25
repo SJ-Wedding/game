@@ -1,4 +1,5 @@
-import type { Loadout, SwordFormId } from '../config/characters';
+import type { Loadout } from '../config/characters';
+import type { RoanGearChoice } from '../config/roan';
 import type { FusionId, WeaponId } from '../config/weapons';
 import type { EssenceId, RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
@@ -130,12 +131,10 @@ export interface Projectile {
   echoVolley?: { repeated: boolean };
   /** 일반 적이 쏜 탄 (결전의 각오) */
   normal?: true;
-  /** 꿰뚫는 검기: 처음 피해와 관통 횟수 */
-  growBase?: number;
-  grown?: number;
-  /** 회귀 검기: 되돌아올 때의 수명·관통 (되돌아온 뒤 비움) */
+  /** 투척 도끼: 되돌아올 때의 수명·관통·피해 배율 (되돌아온 뒤 비움) */
   returnLife?: number;
   returnPierce?: number;
+  returnScale?: number;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */
@@ -201,13 +200,13 @@ export interface SimEvent {
 export type UpgradeChoice =
   | { kind: 'upgrade'; def: UpgradeDef; grade: GradeId; nextStack: number }
   | { kind: 'fusion'; id: FusionId }
-  | { kind: 'swordForm'; id: SwordFormId }
+  | { kind: 'roanGear'; gear: RoanGearChoice }
   | { kind: 'relic'; id: RelicId; source: RelicSource }
   | { kind: 'coin'; id: 'flip' | 'pass' }
   | { kind: 'essence'; id: EssenceId }
   | { kind: 'fallback'; id: string; name: string; description: string; heal: number };
 
-export type AttackId = 'basic' | 'sword' | 'bomb' | 'relic' | WeaponId | FusionId;
+export type AttackId = 'basic' | 'sword' | 'bleed' | 'bomb' | 'relic' | WeaponId | FusionId;
 
 export type RunOutcome = 'victory' | 'defeat';
 export type RunEndCause = 'boss' | 'death' | 'timeout';

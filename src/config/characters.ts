@@ -22,29 +22,6 @@ export const SWORD = {
   overflowRangePer20: 0.05, overflowRangeMax: 0.30,
 } as const;
 
-/** 6레벨에 공격 타입 5종 중 1종만 고른다 */
-export const SWORD_FORM_LEVELS: readonly number[] = [6];
-export const SWORD_FORMS = {
-  swordCrescent: { name: '반월 연격', symbol: '☾', color: 0x85e8d7, damage: 0.60, angle: SWORD.angle, followupDamage: 0.55, followupDelay: 0.15 },
-  swordCrush: { name: '강철 파쇄', symbol: '◆', color: 0xffb16d, damage: 2.00, angle: 70, maxAngle: 150, armorPierce: 0.25 },
-  swordGuard: { name: '근위 검무', symbol: '◔', color: 0xbe9bff, damage: 0.80, angle: 270, range: 1.00 },
-  swordWave: {
-    name: '검기 발사', symbol: '☽', color: 0x9fd6ff, damage: 0.80, angle: SWORD.angle, interval: 1.1,
-    wave: { range: 300, width: 28, pierce: 3, damage: 0.90, speed: 620 },
-  },
-  swordExecute: { name: '처형 베기', symbol: '⚰', color: 0xff6f7d, damage: 1.40, angle: 200, threshold: 0.25, strongThreshold: 0.30, strongBonus: 1.3 },
-} as const;
-export type SwordFormId = keyof typeof SWORD_FORMS;
-export const SWORD_FORM_IDS = Object.keys(SWORD_FORMS) as SwordFormId[];
-
-export const SWORD_FORM_DESCRIPTIONS: Record<SwordFormId, string> = {
-  swordCrescent: '전방을 두 번 벱니다. 첫 베기 피해 60%, 0.15초 뒤 두 번째 베기 피해 55%.',
-  swordCrush: '전방 70°를 내려찍습니다. 피해 200%, 몬스터 피해 저항 25% 무시.',
-  swordGuard: '몸 주위 270°를 휩씁니다. 피해 80%.',
-  swordWave: '베기(피해 80%)마다 전방으로 검기를 날립니다. 사거리 300px, 두께 28px, 적 3마리 관통, 피해 90%. 공격 간격 +10%.',
-  swordExecute: '전방 200°를 벱니다. 피해 140%. 체력 25% 이하 일반 적은 즉사, 보스·균열 수호자는 체력 30% 이하일 때 피해 +30%.',
-};
-
 // 첫 효과는 카드 수치와 일치하고, 높은 중첩에서도 발동 간격이 한 틱으로 수렴하지 않는다.
 export const chainDelay = (n: number) => 0.35 + 0.65 * (1 - 0.12 / 0.65) ** n;
 export const turretDelay = (n: number) => 0.42 + 0.58 * (1 - 0.15 / 0.58) ** n;
@@ -61,14 +38,50 @@ export const CHARACTER_UPGRADES = {
   turretFrost: { path: 'turret', name: '빙결 탄두', text: (n: number) => `폭발 피해 ${pct(0.35 * n)}% · 폭발 반경 ${Math.round(frostRadius(n))}px · 둔화 ${(n * 0.8).toFixed(1)}초` },
   turretPierce: { path: 'turret', name: '철갑 노즐', count: true, text: (n: number) => `포탑탄 관통 +${n}마리` },
   swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}%` },
-  swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 검격 거리 +${pct(0.12 * n)}% (기준 거리 최대 ${SWORD.maxRange}px)` },
-  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `검격 각도 +${20 * n}° (한도를 넘친 20°당 거리 +5%) · 검기 발사는 검기 두께 +${pct(0.2 * n)}%` },
+  swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 공격 거리 +${pct(0.12 * n)}% (무기 기본 거리의 최대 148%)` },
+  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 찌르기는 폭 +${6 * n}°` },
   swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
   swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
-  swordWavePierce: { path: 'roan', form: 'swordWave', name: '검기 관통', count: true, text: (n: number) => `검기 관통 +${n}마리` },
-  swordWaveRange: { path: 'roan', form: 'swordWave', name: '먼 검기', text: (n: number) => `검기 사거리 +${pct(0.15 * n)}%` },
-  swordExecuteLine: { path: 'roan', form: 'swordExecute', name: '처형선', text: (n: number) => `즉사 기준 +${pct(Math.min(0.15, 0.03 * n))}%p (최대 +15%p)` },
-  swordExecuteBlast: { path: 'roan', form: 'swordExecute', name: '처형 여파', text: (n: number) => `처형한 자리 반경 60px에 피해 ${pct(0.3 * n)}%` },
+  // ── 로안 기본 무기 전용 (6레벨에 고른 무기) ──
+  swordComboDamage: { path: 'roan', form: 'sword', name: '칼날 벌리기', text: (n: number) => `연격 추가 베기 피해 +${pct(0.15 * n)}%p` },
+  swordComboCycle: { path: 'roan', form: 'sword', name: '맥을 잇는 검', count: true, text: (n: number) => `연격 주기 −${n}타 (최소 2타)` },
+  swordParry: { path: 'roan', form: 'sword', name: '칼날 막기', count: true, text: (n: number) => `베기에 닿은 적 탄 최대 ${n}개 지움` },
+  daggerBleed: { path: 'roan', form: 'dagger', name: '깊은 자상', text: (n: number) => `출혈 피해 +${pct(0.2 * n)}%` },
+  daggerPoison: { path: 'roan', form: 'dagger', name: '독 바르기', text: (n: number) => `출혈 지속 +${(n).toFixed(1).replace(/\.0$/, '')}초` },
+  daggerSpeed: { path: 'roan', form: 'dagger', name: '손놀림', text: (n: number) => `공격 간격 −${pct(1 - 0.9 ** n)}%` },
+  maceStun: { path: 'roan', form: 'mace', name: '묵직한 머리', text: (n: number) => `기절 확률 +${pct(0.08 * n)}%p` },
+  maceDaze: { path: 'roan', form: 'mace', name: '충격 여운', text: (n: number) => `기절 시간 +${(0.2 * n).toFixed(2).replace(/0$/, '')}초` },
+  maceArmor: { path: 'roan', form: 'mace', name: '갑주 가르기', text: (n: number) => `몬스터 피해 저항 무시 +${pct(0.1 * n)}%p` },
+  axeArc: { path: 'roan', form: 'waraxe', name: '넓은 날', text: (n: number) => `베기 각도 +${Math.round(20 * n)}°` },
+  axeWound: { path: 'roan', form: 'waraxe', name: '벌목꾼', text: (n: number) => `깊은 상처 최대 보너스 +${pct(0.15 * n)}%p` },
+  axeSpeed: { path: 'roan', form: 'waraxe', name: '휘두르기 가속', text: (n: number) => `공격 간격 −${pct(1 - 0.92 ** n)}%` },
+  // ── 로안 상위 무기 전용 (12레벨에 고른 상위 무기) ──
+  onehandSpeed: { path: 'roan', form: 'onehand', name: '가벼운 손목', text: (n: number) => `공격 간격 −${pct(1 - 0.94 ** n)}%` },
+  onehandArc: { path: 'roan', form: 'onehand', name: '넓은 연격', text: (n: number) => `연격 추가 베기 각도 +${Math.round(30 * n)}°` },
+  greatswordWeight: { path: 'roan', form: 'greatsword', name: '무게 싣기', text: (n: number) => `피해 +${pct(0.12 * n)}%` },
+  greatswordReach: { path: 'roan', form: 'greatsword', name: '긴 칼날', text: (n: number) => `거리 +${pct(0.08 * n)}%` },
+  rapierCrit: { path: 'roan', form: 'rapier', name: '급소 찌르기', text: (n: number) => `치명타 확률 +${pct(0.06 * n)}%p` },
+  rapierPierce: { path: 'roan', form: 'rapier', name: '관통 숙련', count: true, text: (n: number) => `찌르기 관통 +${n}마리` },
+  stilettoStacks: { path: 'roan', form: 'stiletto', name: '출혈 심화', count: true, text: (n: number) => `출혈 최대 중첩 +${2 * n}` },
+  stilettoVenom: { path: 'roan', form: 'stiletto', name: '칼끝 독', text: (n: number) => `출혈 피해 +${pct(0.15 * n)}%` },
+  scimitarArc: { path: 'roan', form: 'scimitar', name: '휘어진 날', text: (n: number) => `베기 각도 +${Math.round(20 * n)}°` },
+  scimitarScent: { path: 'roan', form: 'scimitar', name: '피 냄새', text: (n: number) => `출혈 중인 적 직접 피해 +${pct(0.1 * n)}%p` },
+  twinCross: { path: 'roan', form: 'twinblades', name: '교차 베기', text: (n: number) => `연타 한 번 피해 +${pct(0.08 * n)}%p` },
+  twinChain: { path: 'roan', form: 'twinblades', name: '피의 연쇄', text: (n: number) => `출혈 지속 +${(0.5 * n).toFixed(2).replace(/\.?0+$/, '')}초` },
+  warmaceWeight: { path: 'roan', form: 'warmace', name: '철퇴 무게', text: (n: number) => `기절 확률 +${pct(0.06 * n)}%p` },
+  warmaceSkull: { path: 'roan', form: 'warmace', name: '머리 강타', text: (n: number) => `기절 시간 +${(0.15 * n).toFixed(2).replace(/\.?0+$/, '')}초` },
+  morningSpikes: { path: 'roan', form: 'morningstar', name: '가시 늘리기', count: true, text: (n: number) => `파편 +${n}개` },
+  morningSharp: { path: 'roan', form: 'morningstar', name: '날카로운 가시', text: (n: number) => `파편 피해 +${pct(0.1 * n)}%p` },
+  flailChain: { path: 'roan', form: 'flail', name: '긴 사슬', text: (n: number) => `회전 반경 +${pct(0.1 * n)}%` },
+  flailSpin: { path: 'roan', form: 'flail', name: '가속 회전', text: (n: number) => `연속 공격 반경 보너스 최대 +${pct(0.15 * n)}%p` },
+  maulQuake: { path: 'roan', form: 'maul', name: '대지 울림', text: (n: number) => `충격파 반경 +${Math.round(15 * n)}px` },
+  maulCrush: { path: 'roan', form: 'maul', name: '짓이기기', text: (n: number) => `충격파 피해 +${pct(0.15 * n)}%` },
+  greataxeEdge: { path: 'roan', form: 'greataxe', name: '육중한 날', text: (n: number) => `베기 각도 +${Math.round(20 * n)}°` },
+  greataxeInstinct: { path: 'roan', form: 'greataxe', name: '처형 본능', text: (n: number) => `깊은 상처 최대 보너스 +${pct(0.15 * n)}%p` },
+  halberdPole: { path: 'roan', form: 'halberd', name: '긴 자루', text: (n: number) => `거리 +${pct(0.1 * n)}%` },
+  halberdPush: { path: 'roan', form: 'halberd', name: '밀어내기', text: (n: number) => `밀쳐내는 거리 +${pct(0.3 * n)}%` },
+  throwSpin: { path: 'roan', form: 'throwingaxe', name: '회전력', text: (n: number) => `투척 피해 +${pct(0.15 * n)}%p` },
+  throwReturn: { path: 'roan', form: 'throwingaxe', name: '빠른 회수', count: true, text: (n: number) => `투척 주기 −${n}타 (최소 매 공격)` },
 } as const satisfies Record<string, { path: LumenWeapon | 'roan'; name: string; text: (n: number) => string; count?: true; minLevel?: number; form?: string }>;
 
 export type CharacterUpgradeId = keyof typeof CHARACTER_UPGRADES;

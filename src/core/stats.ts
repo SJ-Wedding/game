@@ -34,19 +34,28 @@ export function healOnPick(id: UpgradeId, grade: GradeId): number {
 }
 
 /** 시작 능력치 × 영구 강화 */
-export function baseStats(character: CharacterId = 'ranger'): PlayerStats {
-  return { ...PLAYER_BASE_STATS, maxHp: CHARACTER_MAX_HP[character] } as PlayerStats;
+/** 로안 무기의 기본 능력치 (최대 체력·이동 속도·회피 대기시간) */
+export interface StatOverrides { maxHp?: number; moveSpeedMul: number; dodgeCooldown?: number }
+
+export function baseStats(character: CharacterId = 'ranger', overrides?: StatOverrides): PlayerStats {
+  const out = { ...PLAYER_BASE_STATS, maxHp: CHARACTER_MAX_HP[character] } as PlayerStats;
+  if (overrides) {
+    if (overrides.maxHp !== undefined) out.maxHp = overrides.maxHp;
+    if (overrides.dodgeCooldown !== undefined) out.dodgeCooldown = overrides.dodgeCooldown;
+    out.moveSpeed *= overrides.moveSpeedMul;
+  }
+  return out;
 }
 
-export function metaStats(meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId): PlayerStats {
-  const out = baseStats(character);
+export function metaStats(meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId, overrides?: StatOverrides): PlayerStats {
+  const out = baseStats(character, overrides);
   if (!meta) return out;
   for (const [k, pct] of Object.entries(meta.statPct) as [StatKey, number][]) out[k] = out[k] * (1 + pct);
   return out;
 }
 
 /** 시작 능력치 → 영구 강화 → 이번 판 강화(등급) → 최종 능력치 */
-export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId): PlayerStats {
+export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId, overrides?: StatOverrides): PlayerStats {
   const add: Partial<Record<StatKey, number>> = {};
   const pct: Partial<Record<StatKey, number>> = {};
   const mul: Partial<Record<StatKey, number>> = {};
@@ -60,7 +69,7 @@ export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statP
       else mul[e.stat] = (mul[e.stat] ?? 1) * v;
     }
   }
-  const out = metaStats(meta, character);
+  const out = metaStats(meta, character, overrides);
   for (const key of Object.keys(out) as StatKey[]) {
     out[key] = (out[key] + (add[key] ?? 0)) * (1 + (pct[key] ?? 0)) * (mul[key] ?? 1);
   }
@@ -69,8 +78,8 @@ export function computeStats(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statP
 }
 
 /** 상태창용: 단계별 능력치 */
-export function statLayers(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId) {
-  return { base: baseStats(character), meta: metaStats(meta, character), final: computeStats(picks, meta, character) };
+export function statLayers(picks: UpgradePick[], meta?: Pick<MetaBonus, 'statPct'>, character?: CharacterId, overrides?: StatOverrides) {
+  return { base: baseStats(character, overrides), meta: metaStats(meta, character, overrides), final: computeStats(picks, meta, character, overrides) };
 }
 
 /** 같은 시작 강화만 반복한 프리셋 → 일반 등급 선택 목록 (개발·테스트용) */

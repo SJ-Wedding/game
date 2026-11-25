@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SWORD, SWORD_FORMS, SWORD_FORM_IDS, type Loadout, type SwordFormId } from '../src/config/characters';
-import { MASTERY_UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../src/config/upgrades';
+import { SWORD, type Loadout } from '../src/config/characters';
+import { UPGRADE_BY_ID, type UpgradeId } from '../src/config/upgrades';
 import { rollRelics } from '../src/core/relics';
 import { Rng } from '../src/core/rng';
 import { GameSim } from '../src/core/sim';
-import { IDLE_INPUT, type Projectile } from '../src/core/types';
-import { upgradeAvailable } from '../src/core/upgrades';
+import { IDLE_INPUT } from '../src/core/types';
 
 const roan: Loadout = { character: 'roan' };
 const chain: Loadout = { character: 'lumen', weapon: 'chain' };
@@ -16,10 +15,6 @@ function makeTarget(sim: GameSim, dx: number, dy = 0) {
   enemy.hp = enemy.maxHp = 1000;
   enemy.speed = 0;
   return enemy;
-}
-
-function makeShot(sim: GameSim, dx: number, dy: number): Projectile {
-  return { x: sim.player.x + dx, y: sim.player.y + dy, vx: 0, vy: 0, r: 3, life: 1, damage: 5, source: '적 탄' };
 }
 
 describe('캐릭터와 중첩 강화', () => {
@@ -65,7 +60,7 @@ describe('캐릭터와 중첩 강화', () => {
 
   it('같은 전용 강화는 여러 차례 선택되고 등급별 효과가 함께 누적된다', () => {
     const sim = new GameSim({ seed: 12, god: true, loadout: roan });
-    const baseRange = sim.swordRange;
+    const baseRange = sim.roan.range;
     const id: UpgradeId = 'swordRange';
     sim.grantBonusChoices(4);
     sim.step(IDLE_INPUT);
@@ -75,7 +70,7 @@ describe('캐릭터와 중첩 강화', () => {
     }
     expect(sim.stacks[id]).toBe(4);
     expect(sim.mastery(id)).toBe(6.5);
-    expect(sim.swordRange).toBe(Math.min(SWORD.maxRange, baseRange * (1 + 0.12 * 6.5)));
+    expect(sim.roan.range).toBe(Math.min(SWORD.maxRange, baseRange * (1 + 0.12 * 6.5)));
     expect(sim.picks.map((pick) => pick.grade)).toEqual(['common', 'common', 'rare', 'legendary']);
   });
 
@@ -150,152 +145,12 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.playerShots).toHaveLength(0);
   });
 
-  it('로안은 검 궤적의 탄만 최대 세 개 지우고 세 번째 베기는 뒤쪽도 때린다', () => {
-    const sim = new GameSim({ seed: 15, god: true, loadout: roan, carryRelics: ['swordScabbard', 'swordCircle', 'swordRhythm'] });
-    for (const x of [65, 80, 90, 100]) makeTarget(sim, x);
-    const behind = makeTarget(sim, -90);
-    const frontShots = [30, 40, 50, 55].map((x) => makeShot(sim, x, 0));
-    const rearShot = makeShot(sim, -50, 0);
-    sim.enemyShots.push(...frontShots, rearShot);
-
-    sim.step(IDLE_INPUT);
-    expect(sim.hitsByAttack.sword).toBe(4);
-    expect(behind.hp).toBe(1000);
-    expect(sim.enemyShots).toEqual([frontShots[3], rearShot]);
-    expect(sim.player.fireCd).toBeCloseTo(sim.swordInterval * 0.65, 1);
-    for (let i = 0; i < 2; i++) {
-      sim.player.fireCd = 0;
-      sim.step(IDLE_INPUT);
-    }
-    expect(sim.swordSweep?.width).toBe(Math.PI * 2);
-    expect(behind.hp).toBeLessThan(1000);
-    expect(sim.enemyShots).not.toContain(rearShot);
-    expect(sim.playerShots).toHaveLength(0);
-  });
-
-  it('화살막이 검집은 투사체를 조준하지 않고 적을 벨 때 검격에 닿은 탄만 지운다', () => {
-    const sim = new GameSim({ seed: 25, god: true, loadout: roan, carryRelics: ['swordScabbard'] });
-    const outOfArc = makeShot(sim, 0, -26);
-    const inArc = makeShot(sim, 40, 0);
-    sim.enemyShots.push(outOfArc, inArc);
-
-    sim.step(IDLE_INPUT);
-    expect(sim.target).toBeNull();
-    expect(sim.swordSwings).toBe(0);
-    expect(sim.enemyShots).toEqual([outOfArc, inArc]);
-
-    const enemy = makeTarget(sim, 75);
-    sim.step(IDLE_INPUT);
-    expect(sim.target).toBe(enemy);
-    expect(sim.player.facing).toBe('east');
-    expect(sim.swordSwings).toBe(1);
-    expect(enemy.hp).toBeLessThan(enemy.maxHp);
-    expect(sim.enemyShots).toEqual([outOfArc]);
-    expect(sim.swordSweep?.blocked).toEqual([{ x: inArc.x, y: inArc.y }]);
-  });
-
-  it('로안은 6레벨에 공격 타입 5종 중 하나만 고르고, 12·18레벨에는 형태 선택이 없다', () => {
-    const sim = new GameSim({ seed: 21, god: true, loadout: roan });
-    makeTarget(sim, 65);
-    const swing = (forms: (SwordFormId | undefined)[]) => {
-      sim.player.fireCd = 0;
-      sim.step(IDLE_INPUT);
-      const current = sim.swordSweeps.filter((sweep) => sweep.at === sim.elapsed);
-      expect(current.map((sweep) => sweep.form)).toEqual(forms);
-      expect(sim.player.fireCd).toBeCloseTo(sim.swordInterval);
-    };
-    const levelTo = (level: number, pick: (c: GameSim['choices']) => number = () => 0) => {
-      sim.player.fireCd = Infinity;
-      while (sim.level < level) {
-        sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
-        sim.step(IDLE_INPUT);
-        while (sim.phase === 'levelup') {
-          if (sim.choices[0]?.kind === 'swordForm') {
-            expect(sim.pendingLevel).toBe(6);
-            expect(sim.choices).toEqual(SWORD_FORM_IDS.map((id) => ({ kind: 'swordForm', id })));
-            expect(sim.reroll()).toBe(false);
-            expect(sim.choose(pick(sim.choices))).toBe(true);
-          } else expect(sim.choose(0)).toBe(true);
-        }
-      }
-    };
-
-    swing([undefined]);
-    levelTo(6, (choices) => choices.findIndex((c) => c.kind === 'swordForm' && c.id === 'swordCrush'));
-    expect(sim.swordForms).toEqual(['swordCrush']);
-    swing(['swordCrush']);
-    levelTo(19);
-    expect(sim.swordForms).toEqual(['swordCrush']);
-    swing(['swordCrush']);
-    expect(sim.playerShots).toHaveLength(0);
-  });
-
-  it('반월 연격의 되베기는 이동한 로안의 위치에서 적중하며 별도 공격 횟수를 쓰지 않는다', () => {
-    const sim = new GameSim({ seed: 22, god: true, loadout: roan, presetLevel: 6 });
-    const first = makeTarget(sim, 72);
-    sim.step(IDLE_INPUT);
-    const hp = first.hp;
-    expect(hp).toBeLessThan(first.maxHp);
-    sim.player.x += 280;
-    const second = makeTarget(sim, 76);
-    for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
-    expect(sim.swordSweep?.x).toBe(sim.player.x);
-    expect(sim.swordSweep?.followup).toBe(true);
-    expect(first.hp).toBe(hp);
-    expect(second.maxHp - second.hp).toBeCloseTo(sim.swordDamage * SWORD_FORMS.swordCrescent.followupDamage);
-    expect(sim.swordSwings).toBe(1);
-  });
-
-  it('공통 검 강화는 고른 타입에 적용되고, 각도 한도를 넘친 각도는 거리로 바뀐다', () => {
-    const sim = new GameSim({ seed: 23, god: true, loadout: roan,
-      presetUpgrades: { swordRange: 30, swordArc: 6, swordDamage: 1, swordSpeed: 1 } });
-    expect(sim.swordRange).toBe(SWORD.maxRange);
-    // 기본 베기 130° + 120° = 250°, 한도 안
-    expect(sim.strikeRange()).toBe(SWORD.maxRange);
-    const forms = (sim as unknown as { learnedSwordForms: SwordFormId[] }).learnedSwordForms;
-    forms.push('swordGuard');
-    // 270° + 120° = 390° → 360°, 넘친 30° → 거리 +7.5%
-    expect(sim.swordAngle('swordGuard')).toBe(360);
-    expect(sim.strikeRange('swordGuard')).toBeCloseTo(SWORD.maxRange * SWORD_FORMS.swordGuard.range * 1.075);
-    // 강철 파쇄 70° + 120° = 190° → 150°, 넘친 40° → 거리 +10%
-    expect(sim.swordAngle('swordCrush')).toBe(150);
-    expect(sim.strikeRange('swordCrush')).toBeCloseTo(SWORD.maxRange * 1.1);
-    // 검기 발사: 넓은 베기는 각도 대신 두께
-    expect(sim.swordAngle('swordWave')).toBe(SWORD_FORMS.swordWave.angle);
-    expect(sim.strikeRange('swordWave')).toBe(SWORD.maxRange);
-
-    const near = makeTarget(sim, 65);
-    sim.step(IDLE_INPUT);
-    expect(sim.swordSweeps.map((sweep) => sweep.form)).toEqual(['swordGuard']);
-    expect(sim.swordDamage).toBeCloseTo(sim.stats.damage * SWORD.damage * 1.30);
-    expect(near.maxHp - near.hp).toBeCloseTo(sim.swordDamage * SWORD_FORMS.swordGuard.damage);
-    expect(sim.player.fireCd).toBeCloseTo(SWORD.interval / sim.relics.fireRate * 0.9 * 1.03);
-    const shared = MASTERY_UPGRADES.filter((def) => upgradeAvailable(roan, def, sim.level));
-    expect(shared.map((def) => def.id)).toEqual(['swordSpeed', 'swordRange', 'swordArc', 'swordDamage', 'swordPierce']);
-    const wave = MASTERY_UPGRADES.filter((def) => upgradeAvailable(roan, def, sim.level, ['swordWave']));
-    expect(wave.map((def) => def.id)).toEqual([...shared.map((def) => def.id), 'swordWavePierce', 'swordWaveRange']);
-  });
-
-  it('반월 연격의 되베기는 투사체 차단 한도를 공격 단위로 계산한다', () => {
-    const sim = new GameSim({ seed: 24, god: true, loadout: roan, presetLevel: 6, carryRelics: ['swordScabbard', 'swordRhythm'] });
-    expect(sim.swordForms).toEqual(['swordCrescent']);
-    makeTarget(sim, 65);
-    const shots = [makeShot(sim, 30, 0), makeShot(sim, 40, 0), makeShot(sim, 50, 0), makeShot(sim, 55, 0), makeShot(sim, -40, 0)];
-    sim.enemyShots.push(...shots);
-    sim.step(IDLE_INPUT);
-    for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
-    expect(sim.hitsByAttack.sword).toBe(2);
-    expect(sim.swordSweeps.flatMap((sweep) => sweep.blocked)).toHaveLength(3);
-    expect(sim.enemyShots).toEqual([shots[3], shots[4]]);
-    expect(sim.player.fireCd).toBeCloseTo(sim.swordInterval - 0.15);
-  });
-
   it('캐릭터와 무기에 맞는 유물만 등장하고 이전 판에서 계승된다', () => {
-    const sim = new GameSim({ seed: 16, loadout: chain, carryRelics: ['swordScabbard', 'winterLantern', 'crown'] });
+    const sim = new GameSim({ seed: 16, loadout: chain, carryRelics: ['chargeStance', 'winterLantern', 'crown'] });
     expect([...sim.relics.owned]).toEqual(['crown']);
     const rng = new Rng(16);
     const rewards = Array.from({ length: 20 }, () => rollRelics('elite', rng, new Set(), roan)).flat();
-    expect(rewards.some((c) => c.kind === 'relic' && c.id === 'swordCircle')).toBe(true);
+    expect(rewards.some((c) => c.kind === 'relic' && c.id === 'weaponThrow')).toBe(true);
     expect(rewards.some((c) => c.kind === 'relic' && (c.id === 'crown' || c.id === 'winterLantern'))).toBe(false);
   });
 });

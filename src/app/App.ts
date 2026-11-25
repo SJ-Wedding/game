@@ -202,7 +202,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = reward?.kind === 'swordForm' ? `로안 공격 타입 · Lv ${sim.pendingLevel}`
+    const title = reward?.kind === 'roanGear' ? `${reward.gear.stage === 'weapon' ? '로안 무기 선택' : reward.gear.stage === 'upgrade' ? '상위 무기 선택' : '무기 각성'} · Lv ${sim.pendingLevel}`
       : reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'essence' ? '중간 보스 유물'
       : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
@@ -214,7 +214,6 @@ export class App {
       fusions: sim.weapons.fusions,
       rerollsLeft: sim.rerollsLeft,
       armory: sim.armoryOpen,
-      swordForms: sim.swordForms,
       specialist: sim.loadout.character !== 'ranger',
       masteryValue: (id) => sim.mastery(id),
       bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
@@ -237,7 +236,7 @@ export class App {
     this.statusReturn = this.screen;
     sim.setPaused(true);
     this.screen = 'status';
-    const layers = statLayers(sim.picks, sim.meta, sim.loadout.character);
+    const layers = statLayers(sim.picks, sim.meta, sim.loadout.character, sim.loadout.character === 'roan' ? sim.roan.baseOverrides : undefined);
     layers.meta.luck = sim.meta.luck;
     layers.final = {
       ...layers.final,
@@ -263,14 +262,15 @@ export class App {
       }
       layers.final.damage = sim.swordDamage;
       layers.final.fireRate = 1 / sim.swordInterval;
-      layers.final.projectileRange = sim.swordRange;
+      layers.final.projectileRange = sim.roan.range;
     }
     this.screens.showStatus({
       level: sim.level,
       loadout,
       starterRank: loadout.character === 'lumen' ? sim.stacks[loadout.weapon] : undefined,
-      swordAngle: loadout.character === 'roan' && !sim.swordForms.length ? sim.swordAngle() : undefined,
-      swordForms: sim.swordForms.map((id) => ({ id, angle: sim.swordAngle(id) })),
+      roan: loadout.character === 'roan'
+        ? { weapon: sim.roan.weapon, upgrade: sim.roan.upgrade, awakened: sim.roan.awakened, angle: sim.roan.angle, range: sim.roan.range }
+        : undefined,
       echo: sim.stacks.echo > 0 ? { growth: sim.weapons.echoStats, luck: sim.luck } : undefined,
       layers,
       picks: sim.picks,

@@ -89,9 +89,9 @@ describe('레벨업 선택지 새로고침', () => {
     sim.gainXp(100);
     sim.step(IDLE_INPUT);
     expect(sim.phase).toBe('levelup');
-    const before = sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id));
+    const before = sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.kind === 'roanGear' ? c.gear.id : c.id));
     expect(sim.reroll()).toBe(true);
-    const after = sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id));
+    const after = sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.kind === 'roanGear' ? c.gear.id : c.id));
     for (const id of after) if (!UPGRADE_BY_ID[id as 'power']?.weapon) expect(before).not.toContain(id);
     expect(sim.rerollsLeft).toBe(PROGRESSION_CONFIG.baseRerolls - 1);
     expect(sim.reroll()).toBe(true);

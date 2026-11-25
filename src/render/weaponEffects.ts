@@ -1,5 +1,4 @@
 import type { GameObjects } from 'phaser';
-import { SWORD_FORMS } from '../config/characters';
 import type { Projectile } from '../core/types';
 import type { WeaponEffect } from '../core/weapons';
 import { PALETTE } from './palette';
@@ -316,9 +315,8 @@ export function drawSpearStrike(g: Graphics, fx: WeaponEffect): void {
   }
 }
 
-export function drawSwordCrush(ground: Graphics, g: Graphics, strike: Point & { angle: number; width: number; range: number }, progress: number): void {
+export function drawSwordCrush(ground: Graphics, g: Graphics, strike: Point & { angle: number; width: number; range: number }, progress: number, color = 0xffb16d): void {
   const { x, y, angle, width, range } = strike;
-  const color = SWORD_FORMS.swordCrush.color;
   const hot = 0xffefd5;
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
@@ -420,6 +418,22 @@ export function drawPlayerShot(g: Graphics, shot: Projectile): void {
   const speed = Math.hypot(vx, vy);
   const dx = speed ? vx / speed : 1;
   const dy = speed ? vy / speed : 0;
+  if (shot.source === 'thrownAxe' || shot.source === 'weaponThrow' || shot.source === 'smallAxe') {
+    // 회전하며 날아가는 도끼·무기
+    const spin = (x + y) * 0.08;
+    const len = shot.source === 'smallAxe' ? r * 1.4 : r * 1.8;
+    g.lineStyle(3, 0x8a5a33, 1).lineBetween(x - Math.cos(spin) * len, y - Math.sin(spin) * len, x + Math.cos(spin) * len, y + Math.sin(spin) * len);
+    g.fillStyle(0xe8eef2, 1).fillTriangle(
+      x + Math.cos(spin) * len, y + Math.sin(spin) * len,
+      x + Math.cos(spin + 0.9) * len * 0.8, y + Math.sin(spin + 0.9) * len * 0.8,
+      x + Math.cos(spin - 0.5) * len * 0.6, y + Math.sin(spin - 0.5) * len * 0.6,
+    );
+    return;
+  }
+  if (shot.source === 'shard') {
+    g.fillStyle(0xdfe6ee, 1).fillTriangle(x + dx * r * 1.6, y + dy * r * 1.6, x - dy * r, y + dx * r, x + dy * r, y - dx * r);
+    return;
+  }
   if (shot.source === 'swordWave') {
     // 검기 대검: 진행 방향으로 휜 초승달 모양 검기
     const a = Math.atan2(dy, dx);

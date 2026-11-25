@@ -91,41 +91,48 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   expect(errors).toEqual([]);
 });
 
-test('로안: 6레벨에 공격 타입 5종 중 하나를 고르고, 검기 발사는 검기를 날린다', async ({ page }) => {
+test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 공격이 바뀐다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=553');
   await page.getByTestId('play').click();
   await page.getByTestId('character-roan').click();
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
-  await page.evaluate(() => {
+  const levelTo = (level: number) => page.evaluate((target) => {
     const { sim } = (window as any).__rift;
     const noInput = { moveX: 0, moveY: 0, aimX: 0, aimY: 0, fire: false, dodge: false };
-    while (sim.level < 6) {
+    while (sim.level < target) {
       sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
       sim.step(noInput);
-      while (sim.level < 6 && sim.phase === 'levelup') sim.choose(0);
+      while (sim.level < target && sim.phase === 'levelup') sim.choose(0);
     }
-  });
-  await expect(page.getByRole('heading', { name: '로안 공격 타입 · Lv 6' })).toBeVisible();
-  await expect(page.getByText('이 타입의 유물만 나옵니다', { exact: false })).toBeVisible();
-  await expect(page.locator('[data-sword-form]')).toHaveCount(5);
-  await expect(page.locator('.cards.many')).toBeVisible();
+  }, level);
+  await levelTo(6);
+  await expect(page.getByRole('heading', { name: '로안 무기 선택 · Lv 6' })).toBeVisible();
+  await expect(page.locator('[data-gear-stage="weapon"]')).toHaveCount(4);
+  await expect(page.locator('.gear-sprite')).toHaveCount(4);
   await expect(page.getByTestId('reroll')).toHaveCount(0);
-  await page.keyboard.press('Digit4');
+  await page.keyboard.press('Digit2');
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
-  expect(await page.evaluate(() => (window as any).__rift.sim.swordForms)).toEqual(['swordWave']);
-  await expect(page.getByTestId('hud-sword-forms')).toHaveText('공격 타입 · 검기 발사');
+  await expect(page.getByTestId('hud-sword-forms')).toHaveText('무기 · 단검');
+
+  await levelTo(12);
+  await expect(page.getByRole('heading', { name: '상위 무기 선택 · Lv 12' })).toBeVisible();
+  await expect(page.locator('[data-gear-stage="upgrade"]')).toHaveCount(3);
+  await page.locator('[data-sword-form="twinblades"]').click();
+  await expect.poll(async () => (await snap(page)).screen).toBe('playing');
+  await expect(page.getByTestId('hud-sword-forms')).toHaveText('무기 · 쌍검');
+  expect(await page.evaluate(() => (window as any).__rift.sim.roan.design)).toBe('twinblades');
 
   await page.evaluate(() => {
     const { sim } = (window as any).__rift;
-    const target = sim.spawnEnemy('chaser', sim.player.x + 260, sim.player.y);
-    target.hp = target.maxHp = 5000;
+    const target = sim.spawnEnemy('chaser', sim.player.x + 70, sim.player.y);
+    target.hp = target.maxHp = 50000;
     target.speed = 0;
   });
-  await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.hitsByAttack.sword ?? 0)).toBeGreaterThan(0);
+  await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.hitsByAttack.bleed ?? 0)).toBeGreaterThan(0);
   await page.keyboard.press('Tab');
   const forms = page.getByTestId('sword-forms');
-  await expect(forms.getByRole('heading', { name: '로안 공격 타입' })).toBeVisible();
-  await expect(forms.locator('li')).toHaveText('검기 발사 · 검기');
+  await expect(forms.getByRole('heading', { name: '로안 무기' })).toBeVisible();
+  await expect(forms).toContainText('상위 무기 · 쌍검');
   expect(errors).toEqual([]);
 });
