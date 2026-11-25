@@ -111,7 +111,7 @@ describe('로안 무기 선택', () => {
     const over = new GameSim({ seed: 1, god: true, loadout: roan, roanGear: gear('waraxe', 'greataxe'), presetUpgrades: { swordArc: 9 } });
     // 220 + 180 = 400° → 360°, 넘친 40° → 거리 +10%
     expect(over.roan.angle).toBe(360);
-    expect(over.roan.range).toBeCloseTo(125 * 1.1);
+    expect(over.roan.range).toBeCloseTo(ROAN_UPGRADES.greataxe.range * 1.1);
   });
 });
 
