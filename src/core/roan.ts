@@ -566,7 +566,7 @@ export class RoanCombat {
     this.strike({ angle: 0, width: Math.PI * 2, range: radius, factor, center: at, kind: 'shock' });
   }
 
-  private blast(at: Point, radius: number, damage: number, stun: boolean): void {
+  private blast(at: Point, radius: number, damage: number, stun: boolean, maceQuake = false): void {
     const sim = this.sim;
     for (const e of sim.enemies) {
       if (e.dead || dist(at.x, at.y, e.x, e.y) >= radius + e.r) continue;
@@ -575,7 +575,7 @@ export class RoanCombat {
     }
     const b = sim.boss;
     if (b && !b.dead && !bossInvulnerable(b) && dist(at.x, at.y, b.x, b.y) < radius + b.r) sim.damageBoss(damage, 'sword');
-    sim.weapons.trace('mine', [at], radius, 0.35);
+    sim.weapons.trace('mine', [at], radius, maceQuake ? 0.43 : 0.35, maceQuake ? 'maceQuake' : undefined);
   }
 
   private maulShock(at: Point): void {
@@ -583,14 +583,14 @@ export class RoanCombat {
     const damage = this.damage * 0.5 * (1 + 0.15 * this.m('maulCrush'));
     const stunExtra = this.gear('earthFury') ? 0.4 : 0;
     const once = (scale: number) => {
-      this.blast(at, radius, damage * scale, this.awakened);
+      this.blast(at, radius, damage * scale, this.awakened, true);
       if (stunExtra) for (const e of this.sim.enemies) if (!e.dead && e.rootedUntil > this.now && dist(at.x, at.y, e.x, e.y) < radius + e.r) e.rootedUntil += stunExtra;
     };
     once(1);
     if (this.gear('quakeWave')) this.later(1, () => once(0.5));
     if (this.gear('crushScar')) {
       this.zones.push({ x: at.x, y: at.y, until: this.now + 2, next: this.now + 0.5 });
-      this.sim.weapons.trace('mine', [at], 70, 2);
+      this.sim.weapons.trace('mine', [at], 70, 2, 'maceScar');
     }
   }
 

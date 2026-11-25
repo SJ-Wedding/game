@@ -17,9 +17,10 @@ import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, ROAN_WEAPON_F
 import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
 import {
   daggerExtension, drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
-  drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike, drawSwordCrush,
+  drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
 } from './weaponEffects';
 import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
+import { drawFlailTrail, drawMaceImpact, drawMaceQuake, drawMaceWeapon, maceLean } from './roanMaceEffects';
 
 interface Particle {
   x: number;
@@ -422,17 +423,22 @@ export class GameScene extends Phaser.Scene {
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
     const latestSweep = sim.swordSweep;
-    const stabProgress = latestSweep ? (t - latestSweep.at) / DAGGER_THRUST.duration : 1;
+    const sweepAge = latestSweep ? t - latestSweep.at : SWORD.sweepDuration;
+    const stabProgress = sweepAge / DAGGER_THRUST.duration;
     const stab = latestSweep?.lineWidth !== undefined && stabProgress < 1 ? latestSweep : undefined;
-    const thrustAngle = stab?.angle ?? p.aim;
-    const thrustX = Math.cos(thrustAngle);
-    const thrustY = Math.sin(thrustAngle);
+    const maceProgress = sweepAge / SWORD.sweepDuration;
+    const mace = latestSweep && latestSweep.kind !== 'shock' && maceProgress < 1
+      && (latestSweep.motion === 'slam' || latestSweep.motion === 'spin') ? latestSweep : undefined;
+    const attack = stab ?? mace;
+    const attackX = Math.cos(attack?.angle ?? p.aim);
+    const attackY = Math.sin(attack?.angle ?? p.aim);
     const extension = stab ? daggerExtension(stabProgress) : 0;
-    const bodyX = Math.round(p.x + thrustX * 9 * extension);
-    const bodyY = Math.round(p.y + thrustY * 9 * extension);
+    const lean = mace ? mace.motion === 'spin' ? 3 * (1 - maceProgress) : maceLean(maceProgress) : 9 * extension;
+    const bodyX = Math.round(p.x + attackX * lean);
+    const bodyY = Math.round(p.y + attackY * lean);
     let facing = p.facing;
-    if (stab) facing = Math.abs(thrustX) >= Math.abs(thrustY) ? (thrustX < 0 ? 'west' : 'east') : (thrustY < 0 ? 'north' : 'south');
-    const texture = stab ? 'roan-thrust' : sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
+    if (attack) facing = Math.abs(attackX) >= Math.abs(attackY) ? (attackX < 0 ? 'west' : 'east') : (attackY < 0 ? 'north' : 'south');
+    const texture = attack ? 'roan-thrust' : sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
     const frame = facing === 'south' ? 1 : facing === 'north' ? 2 : 0;
     if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
     else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
@@ -456,10 +462,11 @@ export class GameScene extends Phaser.Scene {
       }
       drawDaggerThrust(this.weaponEffects, body, stab.angle, extension, stabProgress, stab.design, alpha, stab.offHand);
     }
+    if (mace) drawMaceWeapon(this.weaponEffects, { x: bodyX, y: bodyY }, p, mace, maceProgress, sweepAge, blink ? 0.45 : 1);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;
-    if (sim.loadout.character !== 'lumen' && !stab) g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
+    if (sim.loadout.character !== 'lumen' && !attack) g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
       p.x + ax * (aimMarker + 8), p.y + ay * (aimMarker + 8),
       p.x + ax * aimMarker - ay * 4, p.y + ay * aimMarker + ax * 4,
       p.x + ax * aimMarker + ay * 4, p.y + ay * aimMarker - ax * 4,
@@ -492,7 +499,7 @@ export class GameScene extends Phaser.Scene {
   private drawRoanSwings(sim: GameSim, now: number): void {
     const live = new Set<object>();
     for (const sweep of sim.swordSweeps) {
-      if (sweep.kind === 'shock' || sweep.lineWidth !== undefined) continue;
+      if (sweep.kind === 'shock' || sweep.lineWidth !== undefined || sweep.motion === 'slam' || sweep.motion === 'spin') continue;
       const progress = (now - sweep.at) / SWORD.sweepDuration;
       if (progress >= 1) continue;
       live.add(sweep);
@@ -513,8 +520,6 @@ export class GameScene extends Phaser.Scene {
         const reach = range * 0.45 * Math.sin(Math.PI * s);
         px += Math.cos(angle) * reach;
         py += Math.sin(angle) * reach;
-      } else if (sweep.motion === 'slam' && width < Math.PI * 2 - 1e-6) {
-        a = angle - 1.6 + 1.6 * ease * ease;
       } else {
         a = angle - width / 2 + width * ease;
       }
@@ -537,8 +542,10 @@ export class GameScene extends Phaser.Scene {
     if (kind === 'shock') {
       this.groundEffects.fillStyle(color, fade * 0.16).fillCircle(x, y, range);
       g.lineStyle(3, color, fade * 0.8).strokeCircle(x, y, range * (0.6 + 0.4 * progress));
-    } else if (motion === 'slam' && width < Math.PI * 2 - 1e-6) {
-      drawSwordCrush(this.groundEffects, g, sweep, progress, color);
+    } else if (motion === 'slam') {
+      drawMaceImpact(this.groundEffects, g, sweep, progress);
+    } else if (motion === 'spin') {
+      drawFlailTrail(this.groundEffects, sweep, now - sweep.at, progress);
     } else {
       const start = angle - width / 2;
       const point = (a: number, r: number) => ({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
@@ -603,7 +610,11 @@ export class GameScene extends Phaser.Scene {
           continue;
         }
         if (fx.kind === 'mine' || fx.kind === 'gravity') {
-          drawExplosion(ground, g, fx);
+          if (fx.variant === 'maceQuake' || fx.variant === 'maceScar') {
+            const age = fx.duration - fx.life;
+            const delay = fx.variant === 'maceQuake' ? 0.08 : 0;
+            if (age >= delay) drawMaceQuake(ground, g, fx.points[0], fx.radius, (age - delay) / (fx.duration - delay), fx.variant === 'maceScar');
+          } else drawExplosion(ground, g, fx);
           continue;
         }
         if (fx.kind === 'mark' || (fx.kind === 'chain' && !fx.radius)) {
