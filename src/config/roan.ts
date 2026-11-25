@@ -5,6 +5,7 @@
  */
 
 export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
+export const DAGGER_THRUST = { damage: 0.35, range: 80, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
 
@@ -37,10 +38,10 @@ export const ROAN_WEAPONS = {
     description: '균형 잡힌 검. 거리 125px, 각도 130°.',
   },
   dagger: {
-    name: '단검', symbol: '⸸', color: 0xc78cff, damage: 0.45, interval: 0.55, range: 110, angle: 110,
+    name: '단검', symbol: '⸸', color: 0xc78cff, damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0,
     maxHp: 150, damageTaken: 1.05, moveSpeed: 1.12, dodgeCooldown: 2.4, motion: 'thrust',
     special: '출혈: 맞은 적에게 3초간 초당 검 피해 15%, 최대 5중첩',
-    description: '빠르고 가벼운 단검. 피해 45%, 공격 간격 55%, 거리 110px. 체력 150, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.',
+    description: `빠른 직선 찌르기. 피해 ${DAGGER_THRUST.damage * 100}%, 공격 간격 55%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px. 체력 150, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.`,
   },
   mace: {
     name: '메이스(한손)', symbol: '⚒', color: 0xffc06e, damage: 1.2, interval: 1.2, range: 125, angle: 110,
@@ -87,7 +88,7 @@ export const ROAN_UPGRADES = {
     effect: '찌르기(30°, 거리 +60%), 공격 간격 −40%, 적 3마리 관통, 치명타 25%(피해 2배)', awaken: '치명타 40%, 치명타 시 추가 찌르기(피해 50%)',
   },
   stiletto: {
-    weapon: 'dagger', name: '단검', symbol: '⸸', damage: 0.45, interval: 0.55, range: 110, angle: 110, motion: 'thrust',
+    weapon: 'dagger', name: '단검', symbol: '⸸', damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'thrust',
     effect: '출혈 최대 5 → 8중첩, 출혈 피해 +50%', awaken: '출혈이 최대 중첩에 닿으면 남은 출혈 피해를 한 번에 줌',
   },
   scimitar: {

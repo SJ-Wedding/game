@@ -2,6 +2,7 @@ import type { Loadout } from '../config/characters';
 import lumenChain from '../assets/lumen-chain.png';
 import lumenTurret from '../assets/lumen-turret.png';
 import roan from '../assets/roan.png';
+import roanThrust from '../assets/roan-thrust.png';
 import type { WeaponId } from '../config/weapons';
 import player from '../assets/player.png';
 
@@ -29,7 +30,7 @@ const ROAN_SHEETS = Object.fromEntries(
 );
 
 export const CHARACTER_FRAME_SIZE = 40;
-export const CHARACTER_SHEETS: Record<string, string> = { player, 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan, ...ROAN_SHEETS };
+export const CHARACTER_SHEETS: Record<string, string> = { player, 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan, 'roan-thrust': roanThrust, ...ROAN_SHEETS };
 
 export function roanTexture(design: RoanDesign): string {
   return design === 'base' ? 'roan' : `roan-${design}`;

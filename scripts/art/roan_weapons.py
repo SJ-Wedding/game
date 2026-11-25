@@ -1,5 +1,5 @@
 """로안 무기별 스프라이트 생성: 기존 roan.png 에서 검을 지운 몸체에 무기 픽셀 아트를 쥐어 준다.
-python3 scripts/art/roan_weapons.py  → src/assets/roan/*.png, src/assets/roan-weapons.png
+python3 scripts/art/roan_weapons.py  → src/assets/roan/*.png, src/assets/roan-weapons.png, src/assets/roan-thrust.png
 """
 from PIL import Image
 import os, sys
@@ -214,6 +214,7 @@ DESIGNS = ['dagger', 'mace', 'waraxe', 'onehand', 'greatsword', 'rapier', 'stile
 def main():
     src = Image.open(SRC).convert('RGBA')
     body = sheet_without_sword(src)
+    body.save(os.path.join(ROOT, 'src/assets/roan-thrust.png'))
     for d in DESIGNS:
         img = src.copy() if d == 'sword' else compose(body, src, d)
         img.save(os.path.join(OUT, f'{d}.png'))

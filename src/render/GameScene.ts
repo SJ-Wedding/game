@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ARENA_CONFIG, VIEW_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
 import { SWORD } from '../config/characters';
+import { DAGGER_THRUST } from '../config/roan';
 import { DROP_CONFIG } from '../config/drops';
 import { ENEMY_CONFIG } from '../config/enemies';
 import { xpVisual } from '../config/progression';
@@ -15,7 +16,7 @@ import { WEAPONS, weaponRankEffect } from '../config/weapons';
 import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
 import {
-  drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
+  drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike, drawSwordCrush,
 } from './weaponEffects';
 import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
@@ -420,21 +421,34 @@ export class GameScene extends Phaser.Scene {
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
-    const texture = sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
-    const frame = p.facing === 'south' ? 1 : p.facing === 'north' ? 2 : 0;
+    const latestSweep = sim.swordSweep;
+    const stabProgress = latestSweep ? (t - latestSweep.at) / DAGGER_THRUST.duration : 1;
+    const stab = latestSweep?.lineWidth !== undefined && stabProgress < 1 ? latestSweep : undefined;
+    const thrustAngle = stab?.angle ?? p.aim;
+    const thrustX = Math.cos(thrustAngle);
+    const thrustY = Math.sin(thrustAngle);
+    const release = Math.max(0, (stabProgress - 0.32) / 0.68);
+    const extension = stab ? (1 - 0.7 * (1 - Math.min(1, stabProgress / 0.32)) ** 2) * (1 - release ** 1.6) : 0;
+    const bodyX = Math.round(p.x + thrustX * 9 * extension);
+    const bodyY = Math.round(p.y + thrustY * 9 * extension);
+    let facing = p.facing;
+    if (stab) facing = Math.abs(thrustX) >= Math.abs(thrustY) ? (thrustX < 0 ? 'west' : 'east') : (thrustY < 0 ? 'north' : 'south');
+    const texture = stab ? 'roan-thrust' : sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
+    const frame = facing === 'south' ? 1 : facing === 'north' ? 2 : 0;
     if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
     else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
-    this.playerImage.setPosition(Math.round(p.x), Math.round(p.y))
-      .setFlipX(p.facing === 'west')
+    this.playerImage.setPosition(bodyX, bodyY)
+      .setFlipX(facing === 'west')
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     this.drawRoanSwings(sim, t);
+    if (stab) drawDaggerThrust(this.weaponEffects, { x: bodyX, y: bodyY }, stab.angle, extension, stabProgress, stab.design === 'stiletto', blink ? 0.45 : 1);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;
-    if (sim.loadout.character !== 'lumen') g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
+    if (sim.loadout.character !== 'lumen' && !stab) g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
       p.x + ax * (aimMarker + 8), p.y + ay * (aimMarker + 8),
       p.x + ax * aimMarker - ay * 4, p.y + ay * aimMarker + ax * 4,
       p.x + ax * aimMarker + ay * 4, p.y + ay * aimMarker - ax * 4,
@@ -467,7 +481,7 @@ export class GameScene extends Phaser.Scene {
   private drawRoanSwings(sim: GameSim, now: number): void {
     const live = new Set<object>();
     for (const sweep of sim.swordSweeps) {
-      if (sweep.kind === 'shock') continue;
+      if (sweep.kind === 'shock' || sweep.lineWidth !== undefined) continue;
       const progress = (now - sweep.at) / SWORD.sweepDuration;
       if (progress >= 1) continue;
       live.add(sweep);
@@ -504,7 +518,7 @@ export class GameScene extends Phaser.Scene {
 
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
     const progress = (now - sweep.at) / SWORD.sweepDuration;
-    if (progress >= 1) return;
+    if (progress >= 1 || sweep.lineWidth !== undefined) return;
     const g = this.weaponEffects;
     const fade = (1 - progress) ** 1.6;
     const { x, y, angle, width, range, motion, kind } = sweep;

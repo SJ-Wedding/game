@@ -269,7 +269,8 @@ export class App {
       loadout,
       starterRank: loadout.character === 'lumen' ? sim.stacks[loadout.weapon] : undefined,
       roan: loadout.character === 'roan'
-        ? { weapon: sim.roan.weapon, upgrade: sim.roan.upgrade, awakened: sim.roan.awakened, angle: sim.roan.angle, range: sim.roan.range }
+        ? { weapon: sim.roan.weapon, upgrade: sim.roan.upgrade, awakened: sim.roan.awakened, angle: sim.roan.angle,
+          range: sim.roan.range, lineWidth: sim.roan.lineWidth }
         : undefined,
       echo: sim.stacks.echo > 0 ? { growth: sim.weapons.echoStats, luck: sim.luck } : undefined,
       layers,

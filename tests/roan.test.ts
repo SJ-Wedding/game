@@ -141,6 +141,28 @@ describe('무기 특화 기능', () => {
     expect((s.damageByAttack.bleed ?? 0) - before).toBeGreaterThan(swordDamage * 0.15 * 5 * 0.9);
   });
 
+  it.each([undefined, 'stiletto'] as const)('단검 %s은 사거리 80px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
+    const s = make('dagger', upgrade);
+    const ahead = target(s, 36);
+    const edge = target(s, 80, 17);
+    const beside = target(s, 60, 25);
+    const beyond = target(s, 94);
+    const behind = target(s, -60);
+    swing(s);
+    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 10, hits: 2 });
+    for (const enemy of [ahead, edge]) expect(enemy.maxHp - enemy.hp).toBeCloseTo(make('sword').roan.damage * 0.35);
+    for (const enemy of [beside, beyond, behind]) expect(enemy.hp).toBe(enemy.maxHp);
+  });
+
+  it('단검의 넓은 베기 강화는 직선 폭만 최대 24px까지 넓힌다', () => {
+    const s = new GameSim({ seed: 41, god: true, loadout: roan, roanGear: gear('dagger'), presetUpgrades: { swordArc: 9 } });
+    target(s, 42);
+    const edge = target(s, 72, 24);
+    swing(s);
+    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 24, hits: 2 });
+    expect(edge.hp).toBeLessThan(edge.maxHp);
+  });
+
   it('쌍검: 출혈 중첩에 한도가 없다', () => {
     const s = make('dagger', 'twinblades');
     const e = target(s, 60);

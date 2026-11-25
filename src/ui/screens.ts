@@ -393,7 +393,7 @@ export class Screens {
     level: number;
     loadout: Loadout;
     starterRank?: number;
-    roan?: { weapon: RoanWeaponId | null; upgrade: RoanUpgradeId | null; awakened: boolean; angle: number; range: number };
+    roan?: { weapon: RoanWeaponId | null; upgrade: RoanUpgradeId | null; awakened: boolean; angle: number; range: number; lineWidth?: number };
     echo?: { growth: ReturnType<typeof echoGrowth>; luck: number };
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
@@ -411,7 +411,8 @@ export class Screens {
       || (key !== 'projectileCount' && (opts.loadout.character !== 'lumen' || (key !== 'fireRate' && key !== 'projectileRange'))));
     const rows = statRows.map(([key, label, f]) =>
       el('tr', { 'data-stat': key }, [
-        el('th', { text: opts.loadout.character === 'roan' && key === 'projectileRange' ? '베기 거리' : label }),
+        el('th', { text: opts.loadout.character === 'roan' && key === 'projectileRange'
+          ? (opts.roan?.lineWidth === undefined ? '베기 거리' : '찌르기 거리') : label }),
         el('td', { text: f(base[key]) }),
         el('td', { text: f(meta[key]) }),
         el('td', { class: 'final', 'data-testid': `stat-${key}`, text: f(final[key]) }),
@@ -521,7 +522,8 @@ export class Screens {
     const items: string[] = [];
     if (roan.weapon) items.push(`무기 · ${ROAN_WEAPONS[roan.weapon].name}: ${ROAN_WEAPONS[roan.weapon].special}`);
     if (roan.upgrade) items.push(`상위 무기 · ${ROAN_UPGRADES[roan.upgrade].name}${roan.awakened ? ' (각성)' : ''}: ${ROAN_UPGRADES[roan.upgrade].effect}`);
-    items.push(`각도 ${Math.round(roan.angle)}° · 거리 ${Math.round(roan.range)}px`);
+    const shape = roan.lineWidth === undefined ? `각도 ${Math.round(roan.angle)}°` : `직선 찌르기 · 폭 ${roan.lineWidth}px`;
+    items.push(`${shape} · 거리 ${Math.round(roan.range)}px`);
     return el('section', { class: 'sword-forms', 'data-testid': 'sword-forms' }, [
       el('h3', { text: '로안 무기' }),
       roan.weapon ? el('ul', {}, items.map((text) => el('li', { text })))

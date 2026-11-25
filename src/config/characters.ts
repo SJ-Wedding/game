@@ -1,4 +1,5 @@
 import { GRADES, GRADE_INDEX, type GradeId } from './grades';
+import { DAGGER_THRUST } from './roan';
 
 export const CHARACTERS = {
   ranger: { name: '균열 사수', color: '#75d9ff', description: '자동 사격과 여러 특수 무기를 조합합니다.' },
@@ -39,7 +40,7 @@ export const CHARACTER_UPGRADES = {
   turretPierce: { path: 'turret', name: '철갑 노즐', count: true, text: (n: number) => `포탑탄 관통 +${n}마리` },
   swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}%` },
   swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 공격 거리 +${pct(0.12 * n)}% (무기 기본 거리의 최대 148%)` },
-  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 찌르기는 폭 +${6 * n}°` },
+  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 레이피어·할버드 찌르기 +${6 * n}° · 단검 폭 +${DAGGER_THRUST.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
   swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
   swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
   // ── 로안 기본 무기 전용 (6레벨에 고른 무기) ──

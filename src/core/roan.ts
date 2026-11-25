@@ -2,7 +2,7 @@ import { AUTO_COMBAT } from '../config/player';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
-  ROAN_UPGRADES, ROAN_WEAPONS, type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
+  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
 } from '../config/roan';
 import { bossInvulnerable } from './boss';
 import { compact, dist, distToSegment } from './math';
@@ -17,6 +17,8 @@ export interface SwordStrike {
   angle: number;
   /** 부채꼴 폭 (라디안). 2π면 원 */
   width: number;
+  /** 직선 찌르기의 전체 폭(px) */
+  lineWidth?: number;
   range: number;
   factor: number;
   armorPierce?: number;
@@ -33,6 +35,7 @@ export interface SwordSweep {
   y: number;
   angle: number;
   width: number;
+  lineWidth?: number;
   range: number;
   at: number;
   kind: SwordStrike['kind'];
@@ -195,8 +198,14 @@ export class RoanCombat {
     return (30 + 6 * this.m('swordArc')) * (this.upgrade === 'halberd' && this.awakened ? 2 : 1);
   }
 
+  get lineWidth(): number | undefined {
+    if (this.design !== 'dagger' && this.design !== 'stiletto') return undefined;
+    return Math.min(DAGGER_THRUST.maxWidth, DAGGER_THRUST.width + DAGGER_THRUST.widthPerMastery * this.m('swordArc'));
+  }
+
   /** 베기 각도 (도). 찌르기 무기는 찌르기 폭 */
   get angle(): number {
+    if (this.lineWidth !== undefined) return 0;
     if (this.upgrade === 'rapier') return this.thrustWidth;
     if (this.motion === 'spin') return 360;
     return Math.min(360, this.rawAngle);
@@ -204,7 +213,7 @@ export class RoanCombat {
 
   /** 넓은 베기가 360°를 넘친 20°당 거리 +5%, 최대 +30% */
   private get overflow(): number {
-    if (this.upgrade === 'rapier' || this.motion === 'spin') return 1;
+    if (this.lineWidth !== undefined || this.upgrade === 'rapier' || this.motion === 'spin') return 1;
     const excess = Math.max(0, this.rawAngle - 360);
     return 1 + Math.min(SWORD.overflowRangeMax, excess / 20 * SWORD.overflowRangePer20);
   }
@@ -359,6 +368,7 @@ export class RoanCombat {
       const armor = this.family('mace') ? 0.3 + 0.1 * this.m('maceArmor') : 0;
       hits = this.strike({
         angle, width: this.angle * Math.PI / 180, range: this.range, factor: bonus, armorPierce: armor, kind: 'main',
+        lineWidth: this.lineWidth,
         thrust: u === 'rapier' ? true : undefined, blocks: this.family('sword') ? this.m('swordParry') : 0,
       });
     }
@@ -407,9 +417,18 @@ export class RoanCombat {
     const sim = this.sim;
     const origin = s.center ?? sim.player;
     const { x, y } = origin;
-    const inSector = (t: { x: number; y: number; r: number }) => {
+    const { lineWidth } = s;
+    const aimX = Math.cos(s.angle);
+    const aimY = Math.sin(s.angle);
+    const intersects = (t: { x: number; y: number; r: number }) => {
       const dx = t.x - x;
       const dy = t.y - y;
+      if (lineWidth !== undefined) {
+        const forward = dx * aimX + dy * aimY;
+        if (forward < 0 || forward > s.range + t.r) return false;
+        const side = Math.abs(dy * aimX - dx * aimY);
+        return Math.hypot(Math.max(0, forward - s.range), Math.max(0, side - lineWidth / 2)) <= t.r;
+      }
       if (Math.hypot(dx, dy) > s.range + t.r) return false;
       if (s.width >= Math.PI * 2 - 1e-6) return true;
       const delta = Math.atan2(Math.sin(Math.atan2(dy, dx) - s.angle), Math.cos(Math.atan2(dy, dx) - s.angle));
@@ -417,9 +436,9 @@ export class RoanCombat {
       const edge = s.angle + Math.sign(delta) * s.width / 2;
       return distToSegment(t.x, t.y, x, y, x + Math.cos(edge) * s.range, y + Math.sin(edge) * s.range) <= t.r;
     };
-    let hits: Target[] = sim.enemies.filter((e) => !e.dead && inSector(e));
+    let hits: Target[] = sim.enemies.filter((e) => !e.dead && intersects(e));
     const boss = sim.boss;
-    if (boss && !boss.dead && !bossInvulnerable(boss) && inSector(boss)) hits.push(boss);
+    if (boss && !boss.dead && !bossInvulnerable(boss) && intersects(boss)) hits.push(boss);
     // 레이피어: 가까운 순으로 관통 수까지
     if (this.upgrade === 'rapier' && s.kind !== 'shock') {
       const limit = 4 + this.m('rapierPierce');
@@ -508,14 +527,14 @@ export class RoanCombat {
     if (blocks > 0) {
       for (const shot of sim.enemyShots) {
         if (blocks <= 0) break;
-        if (shot.life <= 0 || !inSector(shot)) continue;
+        if (shot.life <= 0 || !intersects(shot)) continue;
         shot.life = 0;
         blocked.push({ x: shot.x, y: shot.y });
         blocks--;
       }
     }
     this.sweeps.push({
-      x, y, angle: s.angle, width: s.width, range: s.range, at: now, kind: s.kind, motion: s.thrust ? 'thrust' : this.motion,
+      x, y, angle: s.angle, width: s.width, lineWidth, range: s.range, at: now, kind: s.kind, motion: s.thrust ? 'thrust' : this.motion,
       design: this.design, color: this.color, blocked, hits: hits.length,
     });
     return hits.length;

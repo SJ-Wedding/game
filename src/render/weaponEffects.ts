@@ -315,6 +315,40 @@ export function drawSpearStrike(g: Graphics, fx: WeaponEffect): void {
   }
 }
 
+export function drawDaggerThrust(g: Graphics, body: Point, angle: number, extension: number, progress: number, stiletto: boolean, alpha: number): void {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const point = (forward: number, side: number) => ({ x: body.x + dx * forward - dy * side, y: body.y + dy * forward + dx * side });
+  const shoulderSide = Math.abs(dy) > Math.abs(dx) ? (dy > 0 ? -10 : -6) : (dx > 0 ? 4 : -4);
+  const wristDistance = 14 + 24 * extension;
+  const wristSide = shoulderSide * (1 - extension) * 0.7;
+  const arm = [
+    point(6, shoulderSide),
+    point((6 + wristDistance) / 2, (shoulderSide + wristSide) / 2 + 7 * (1 - extension)),
+    point(wristDistance, wristSide),
+  ];
+  g.lineStyle(11, 0x101422, alpha).strokePoints(arm);
+  g.lineStyle(8, 0x62788d, alpha).strokePoints(arm);
+  g.lineStyle(4, 0xb3c7d5, alpha).strokePoints(arm.slice(1));
+
+  const blade = (forward: number, side: number) => point(wristDistance + forward, wristSide + side);
+  const edge = stiletto ? 0xd8bbfa : 0xe3eff4;
+  const bladeShoulder = stiletto ? 3 : 4;
+  if (progress < 0.53) {
+    const trail = [blade(-3, -5), blade(16, -7), blade(27, -3)];
+    g.lineStyle(2, edge, alpha * 0.62 * (1 - progress / 0.53)).strokePoints(trail);
+  }
+  g.fillStyle(0x101422, alpha).fillPoints([blade(3, -6), blade(16, -5), blade(29, 0), blade(17, 5), blade(3, 6)], true);
+  g.fillStyle(edge, alpha).fillPoints([blade(5, -bladeShoulder), blade(16, -3), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+  g.fillStyle(stiletto ? 0x946cc2 : 0x8099ad, alpha).fillPoints([blade(5, 0), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+  const guard = [blade(5, -5), blade(5, 5)];
+  g.lineStyle(4, 0x101422, alpha).strokePoints(guard);
+  g.lineStyle(2, stiletto ? 0xb88de1 : 0xffcd77, alpha).strokePoints(guard);
+  const fist = [blade(-4, -3), blade(1, -4), blade(3, 0), blade(1, 4), blade(-4, 3)];
+  g.fillStyle(0x28384d, alpha).fillPoints(fist, true);
+  g.fillStyle(0xd7e4ec, alpha).fillPoints([blade(-3, -2), blade(1, -3), blade(2, -1), blade(-1, 1)], true);
+}
+
 export function drawSwordCrush(ground: Graphics, g: Graphics, strike: Point & { angle: number; width: number; range: number }, progress: number, color = 0xffb16d): void {
   const { x, y, angle, width, range } = strike;
   const hot = 0xffefd5;
