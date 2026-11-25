@@ -75,7 +75,7 @@ export class Bot {
 
   /** 후보가 마음에 들지 않으면 새로고침할지 (남은 횟수가 있을 때) */
   wantsReroll(sim: GameSim): boolean {
-    if (sim.armoryOpen || sim.bonusOpen || sim.choices.some((choice) => choice.kind === 'relic' || choice.kind === 'essence' || choice.kind === 'fusion' || choice.kind === 'coin' || choice.kind === 'swordForm')) return false;
+    if (sim.armoryOpen || sim.bonusOpen || sim.choices.some((choice) => choice.kind === 'relic' || choice.kind === 'essence' || choice.kind === 'fusion' || choice.kind === 'coin' || choice.kind === 'roanGear')) return false;
     if (sim.rerollsLeft <= 0) return false;
     const best = Math.max(
       ...sim.choices.map((c) =>

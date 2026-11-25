@@ -1,11 +1,12 @@
-import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, SWORD_FORMS, SWORD_FORM_DESCRIPTIONS, SWORD_FORM_LEVELS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon, type SwordFormId } from '../config/characters';
+import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
+import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, type RoanUpgradeId, type RoanWeaponId } from '../config/roan';
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type echoGrowth, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, type EssenceId, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { weaponPreview } from './weaponPreview';
-import { CHARACTER_SHEETS, characterTexture, WEAPON_TEXTURES } from '../render/textures';
+import { CHARACTER_SHEETS, characterTexture, roanTexture, WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
@@ -257,7 +258,6 @@ export class Screens {
     choices: UpgradeChoice[];
     rerollsLeft: number;
     armory: boolean;
-    swordForms: readonly SwordFormId[];
     specialist: boolean;
     masteryValue: (id: CharacterUpgradeId) => number;
     fusions: Iterable<FusionId>;
@@ -269,11 +269,13 @@ export class Screens {
   }): void {
     const coin = opts.choices[0]?.kind === 'coin';
     const reward = opts.choices.some((c) => c.kind === 'relic' || c.kind === 'essence') || coin;
-    const formChoice = opts.choices[0]?.kind === 'swordForm';
+    const first = opts.choices[0];
+    const gearStage = first?.kind === 'roanGear' ? first.gear.stage : null;
+    const formChoice = gearStage !== null;
     const cards = opts.choices.map((c, i) => {
       const grade = c.kind === 'upgrade' ? GRADES[GRADE_INDEX[c.grade]] : null;
       const btn = el('button', {
-        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : c.kind === 'coin' ? 'relic-card coin-card' : c.kind === 'essence' ? 'relic-card essence-card' : c.kind === 'swordForm' ? 'sword-form-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
+        class: `card ${c.kind === 'upgrade' ? c.def.category : c.kind === 'relic' ? 'relic-card' : c.kind === 'fusion' ? 'fusion-card' : c.kind === 'coin' ? 'relic-card coin-card' : c.kind === 'essence' ? 'relic-card essence-card' : c.kind === 'roanGear' ? 'sword-form-card' : 'fallback'}${grade ? ` grade-${grade.id}` : ''}`,
         'data-testid': `choice-${i}`,
         'data-grade': grade?.id ?? '',
       });
@@ -312,16 +314,34 @@ export class Screens {
           el('span', { class: 'desc', text: `재료 공격을 대체 · ${recipe.interval}초 주기 · 방어 ${FUSION_ARMOR_PIERCE * 100}% 관통` }),
           ...(c.id === 'volley' ? [el('small', { class: 'mastery-bonus', text: '메아리의 처치 피해·발동 간격 보너스 50% 계승' })] : []),
         );
-      } else if (c.kind === 'swordForm') {
-        const form = SWORD_FORMS[c.id];
-        btn.style.setProperty('--form-color', `#${form.color.toString(16)}`);
-        btn.dataset.swordForm = c.id;
-        btn.append(
-          el('span', { class: 'cat', text: '공격 타입' }),
-          el('span', { class: 'sword-form-symbol', 'aria-hidden': 'true', text: form.symbol }),
-          el('strong', { class: 'name', text: form.name }),
-          el('span', { class: 'desc', text: SWORD_FORM_DESCRIPTIONS[c.id] }),
-        );
+      } else if (c.kind === 'roanGear') {
+        const { gear } = c;
+        btn.dataset.swordForm = gear.id;
+        btn.dataset.gearStage = gear.stage;
+        const sprite = el('span', { class: 'gear-sprite', 'aria-hidden': 'true' });
+        sprite.style.backgroundImage = `url("${CHARACTER_SHEETS[roanTexture(gear.id)]}")`;
+        btn.append(sprite);
+        if (gear.stage === 'weapon') {
+          const w = ROAN_WEAPONS[gear.id];
+          btn.style.setProperty('--form-color', `#${w.color.toString(16)}`);
+          btn.append(
+            el('span', { class: 'cat', text: '무기' }),
+            el('span', { class: 'sword-form-symbol', 'aria-hidden': 'true', text: w.symbol }),
+            el('strong', { class: 'name', text: w.name }),
+            el('span', { class: 'desc', text: w.description }),
+            el('small', { class: 'mastery-bonus', text: w.special }),
+          );
+        } else {
+          const u = ROAN_UPGRADES[gear.id];
+          btn.style.setProperty('--form-color', `#${ROAN_WEAPONS[u.weapon].color.toString(16)}`);
+          btn.append(
+            el('span', { class: 'cat', text: gear.stage === 'upgrade' ? '상위 무기' : '무기 각성' }),
+            el('span', { class: 'sword-form-symbol', 'aria-hidden': 'true', text: u.symbol }),
+            el('strong', { class: 'name', text: gear.stage === 'upgrade' ? u.name : `${u.name} 각성` }),
+            el('span', { class: 'desc', text: gear.stage === 'upgrade' ? u.effect : u.awaken }),
+            ...(gear.stage === 'upgrade' ? [el('small', { class: 'mastery-bonus', text: `18레벨 각성: ${u.awaken}` })] : []),
+          );
+        }
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
         btn.append(
@@ -361,7 +381,7 @@ export class Screens {
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
         ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
-        el('p', { class: 'muted', text: formChoice ? '공격 타입 하나를 고르세요 (클릭 또는 1~5). 이번 판 동안 이 타입으로만 공격하고, 이 타입의 유물만 나옵니다.' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('p', { class: 'muted', text: gearStage === 'weapon' ? `무기 하나를 고르세요 (클릭 또는 1~${opts.choices.length}). 이번 판 동안 이 무기로 싸우고, 무기마다 체력·속도·회피가 다릅니다.` : gearStage === 'upgrade' ? `상위 무기를 고르세요 (클릭 또는 1~${opts.choices.length}). 이 상위 무기의 전용 강화와 유물이 나옵니다.` : gearStage === 'awaken' ? '고른 상위 무기를 각성합니다 (클릭 또는 1).' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: cards.length > 3 ? 'cards many' : 'cards' }, cards),
         ...(formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
@@ -373,8 +393,7 @@ export class Screens {
     level: number;
     loadout: Loadout;
     starterRank?: number;
-    swordAngle?: number;
-    swordForms: readonly { id: SwordFormId; angle: number }[];
+    roan?: { weapon: RoanWeaponId | null; upgrade: RoanUpgradeId | null; awakened: boolean; angle: number; range: number };
     echo?: { growth: ReturnType<typeof echoGrowth>; luck: number };
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
@@ -458,8 +477,7 @@ export class Screens {
           el('thead', {}, [el('tr', {}, [el('th', { text: '능력치' }), el('th', { text: '시작' }), el('th', { text: '영구 강화' }), el('th', { text: '현재' })])]),
           el('tbody', {}, rows),
         ]),
-        ...(opts.swordAngle ? [el('small', { class: 'muted', text: `검 타격 각도 ${opts.swordAngle}°` })] : []),
-        ...(opts.loadout.character === 'roan' ? [this.swordStatus(opts.swordForms)] : []),
+        ...(opts.roan ? [this.roanStatus(opts.roan)] : []),
         el('h3', { text: '이번 판 강화 스택 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
         ...(opts.echo ? [this.echoStatus(opts.echo.growth, opts.echo.luck, opts.fusions.includes('volley'))] : []),
@@ -499,11 +517,15 @@ export class Screens {
     ]));
   }
 
-  private swordStatus(forms: readonly { id: SwordFormId; angle: number }[]): HTMLElement {
+  private roanStatus(roan: NonNullable<Parameters<Screens['showStatus']>[0]['roan']>): HTMLElement {
+    const items: string[] = [];
+    if (roan.weapon) items.push(`무기 · ${ROAN_WEAPONS[roan.weapon].name}: ${ROAN_WEAPONS[roan.weapon].special}`);
+    if (roan.upgrade) items.push(`상위 무기 · ${ROAN_UPGRADES[roan.upgrade].name}${roan.awakened ? ' (각성)' : ''}: ${ROAN_UPGRADES[roan.upgrade].effect}`);
+    items.push(`각도 ${Math.round(roan.angle)}° · 거리 ${Math.round(roan.range)}px`);
     return el('section', { class: 'sword-forms', 'data-testid': 'sword-forms' }, [
-      el('h3', { text: '로안 공격 타입' }),
-      forms.length ? el('ul', {}, forms.map(({ id, angle }) => el('li', { text: `${SWORD_FORMS[id].name} · ${id === 'swordWave' ? '검기' : `${angle}°`}` })))
-        : el('p', { class: 'muted', text: `기본 베기 · Lv ${SWORD_FORM_LEVELS[0]}에 공격 타입 선택` }),
+      el('h3', { text: '로안 무기' }),
+      roan.weapon ? el('ul', {}, items.map((text) => el('li', { text })))
+        : el('p', { class: 'muted', text: `기본 베기 · Lv ${ROAN_GEAR_LEVELS.weapon}에 무기 선택` }),
     ]);
   }
 

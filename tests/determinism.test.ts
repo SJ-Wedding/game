@@ -43,7 +43,7 @@ describe('시드 재현성', () => {
         runTicks(sim, 0);
         sim.step(IDLE_INPUT);
         while (sim.phase === 'levelup') {
-          seen.push(sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id)).join('/'));
+          seen.push(sim.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.kind === 'roanGear' ? c.gear.id : c.id)).join('/'));
           sim.choose(0);
         }
       }

@@ -137,7 +137,8 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 /* 레벨업 카드 */
 .levelup h2 { font-size: 2em; color: var(--gold); }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; width: 100%; }
-.cards.many { grid-template-columns: repeat(5, 1fr); gap: 0.6em; font-size: 0.86em; }
+.cards.many { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.6em; font-size: 0.86em; }
+.gear-sprite { position: absolute; right: 0.4em; top: 1.6em; width: 64px; height: 64px; background-size: 192px 64px; background-position: -64px 0; image-rendering: pixelated; opacity: 0.95; }
 .cards.many .card { padding: 0.8em; }
 .card {
   position: relative; display: grid; gap: 0.45em; align-content: start; text-align: left;

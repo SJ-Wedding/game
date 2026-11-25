@@ -1,4 +1,4 @@
-import { SWORD_FORMS } from '../config/characters';
+import { ROAN_UPGRADES, ROAN_WEAPONS } from '../config/roan';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
@@ -163,9 +163,12 @@ export class Hud {
     c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
     c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
 
-    const form = sim.swordForms[0];
-    c.toggle(this.swordForms, 'swordFormsVisible', 'hidden', !form);
-    if (form) c.text(this.swordForms, 'swordForms', `공격 타입 · ${SWORD_FORMS[form].name}`);
+    const roan = sim.roan;
+    c.toggle(this.swordForms, 'swordFormsVisible', 'hidden', !roan.weapon);
+    if (roan.weapon) {
+      const name = roan.upgrade ? `${ROAN_UPGRADES[roan.upgrade].name}${roan.awakened ? ' · 각성' : ''}` : ROAN_WEAPONS[roan.weapon].name;
+      c.text(this.swordForms, 'swordForms', `무기 · ${name}`);
+    }
 
     c.text(this.timer, 'timer', sim.overtime ? `+${formatTime(Math.floor(sim.elapsed - RUN_CONFIG.timeLimit))}` : formatTime(Math.ceil(sim.remaining)));
     const toBoss = RUN_CONFIG.bossAt - sim.elapsed;

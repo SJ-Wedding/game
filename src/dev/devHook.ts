@@ -43,7 +43,7 @@ export function installDevHook(app: App): void {
         choiceGrades: s ? s.choices.map((c) => (c.kind === 'upgrade' ? c.grade : null)) : null,
         tokens: app.save.meta.tokens,
         lastTokens: app.lastTokens,
-        choices: s ? s.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.id)) : null,
+        choices: s ? s.choices.map((c) => (c.kind === 'upgrade' ? c.def.id : c.kind === 'roanGear' ? c.gear.id : c.id)) : null,
         player: s ? { x: s.player.x, y: s.player.y, dodgeCd: s.player.dodgeCd } : null,
         result: app.lastResult,
         save: app.save,

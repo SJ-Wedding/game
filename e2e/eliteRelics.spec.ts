@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { collectErrors, snap } from './util';
 
-test('로안: 균열 수호자 유물을 모두 가지면 수호자의 정수 카드가 나오고, 새 유물이 전투에서 동작한다', async ({ page }) => {
+test('로안: 근접 특화 유물을 모두 가지면 수호자의 정수 카드가 나오고, 새 유물이 전투에서 동작한다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=561');
   await page.getByTestId('play').click();
@@ -11,9 +11,8 @@ test('로안: 균열 수호자 유물을 모두 가지면 수호자의 정수 �
     const { sim } = (window as any).__rift;
     // 삼중 선택의 인장은 보너스 선택 화면을 열지 않도록 보유 목록에만 넣는다
     sim.relics.owned.add('tripleChoice');
-    // 공격 타입을 고르기 전에는 타입 전용 유물이 나오지 않으므로 공용 유물만 모두 가진다
-    for (const id of ['swordCircle', 'swordDuel', 'elitePact', 'swordPulse', 'swordEcho',
-      'swordLong', 'swordOath', 'swordMirror', 'swordDash', 'swordResolve']) sim.relics.acquire(id);
+    // 상위 무기를 고르기 전에는 상위 무기 전용 유물이 나오지 않으므로 근접 특화 유물만 모두 가진다
+    for (const id of ['elitePact', 'whetKit', 'bloodThirst', 'weaponThrow', 'armorBreaker', 'warriorBreath', 'toughMuscle']) sim.relics.acquire(id);
     const elite = sim.spawnEnemy('elite', sim.player.x + 400, sim.player.y);
     sim.damageEnemy(elite, 1e9);
   });
@@ -35,8 +34,7 @@ test('로안: 균열 수호자 유물을 모두 가지면 수호자의 정수 �
       target.speed = 0;
     }
   });
-  await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.relics.shield)).toBeGreaterThan(0);
-  await expect(page.getByTestId('hud-hp')).toContainText('보호막');
+  await expect.poll(() => page.evaluate(() => (window as any).__rift.sim.hitsByAttack.sword ?? 0)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 

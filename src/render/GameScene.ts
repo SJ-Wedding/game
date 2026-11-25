@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ARENA_CONFIG, VIEW_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
-import { SWORD, SWORD_FORMS } from '../config/characters';
+import { SWORD } from '../config/characters';
 import { DROP_CONFIG } from '../config/drops';
 import { ENEMY_CONFIG } from '../config/enemies';
 import { xpVisual } from '../config/progression';
@@ -12,7 +12,7 @@ import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
-import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
+import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
 import {
   drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
@@ -72,6 +72,7 @@ export class GameScene extends Phaser.Scene {
       this.load.spritesheet(key, url, { frameWidth: CHARACTER_FRAME_SIZE, frameHeight: CHARACTER_FRAME_SIZE });
     }
     this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
+    this.load.spritesheet('roan-weapons', ROAN_WEAPON_SHEET, { frameWidth: ROAN_WEAPON_FRAME.width, frameHeight: ROAN_WEAPON_FRAME.height });
     for (const [key, url] of Object.entries(WEAPON_SPRITES)) this.load.image(`weapon-${key}`, url);
   }
 
@@ -318,6 +319,24 @@ export class GameScene extends Phaser.Scene {
         this.ringTelegraph(e.x, e.y, e.r, 1 - e.timer / ENEMY_CONFIG.elite.burstWindup);
       }
     }
+    // 로안: 출혈(붉은 방울)과 기절(노란 별) 표시
+    if (sim.loadout.character === 'roan') {
+      for (const [target, bleed] of sim.roan.bleeds) {
+        if (target.dead) continue;
+        const drops = Math.min(4, Math.ceil(bleed.stacks / 2));
+        for (let i = 0; i < drops; i++) {
+          const a = t * 2 + i * Math.PI / 2;
+          g.fillStyle(0xd8324a, 0.9).fillCircle(target.x + Math.cos(a) * (target.r + 4), target.y - target.r - 4 + Math.sin(a) * 3, 2.5);
+        }
+      }
+      for (const e of sim.enemies) {
+        if (e.dead || e.rootedUntil <= sim.elapsed) continue;
+        for (let i = 0; i < 3; i++) {
+          const a = t * 6 + i * Math.PI * 2 / 3;
+          g.fillStyle(0xffe27a, 0.95).fillCircle(e.x + Math.cos(a) * (e.r * 0.7), e.y - e.r - 6 + Math.sin(a) * 3, 2);
+        }
+      }
+    }
     const b = sim.boss;
     if (b && !b.dead) {
       if (b.state === 'chargeWindup') this.lineTelegraph(b.x, b.y, b.dx, b.dy, BOSS_CHARGE_LENGTH + b.r, b.r, 1 - b.timer / BOSS_CONFIG.charge.windup);
@@ -401,7 +420,7 @@ export class GameScene extends Phaser.Scene {
     const col = p.hurtFlash > 0 ? PALETTE.playerHurt : PALETTE.player;
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
-    const texture = characterTexture(sim.loadout);
+    const texture = sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
     const frame = p.facing === 'south' ? 1 : p.facing === 'north' ? 2 : 0;
     if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
     else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
@@ -411,6 +430,7 @@ export class GameScene extends Phaser.Scene {
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
+    this.drawRoanSwings(sim, t);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;
@@ -441,28 +461,69 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /** 로안 무기 휘두르기 모션: 판정마다 무기 이미지를 궤적을 따라 움직인다 */
+  private readonly swingImages = new Map<object, Phaser.GameObjects.Image>();
+
+  private drawRoanSwings(sim: GameSim, now: number): void {
+    const live = new Set<object>();
+    for (const sweep of sim.swordSweeps) {
+      if (sweep.kind === 'shock') continue;
+      const progress = (now - sweep.at) / SWORD.sweepDuration;
+      if (progress >= 1) continue;
+      live.add(sweep);
+      const { frame, gripX, gripY } = roanWeaponFrame(sweep.design);
+      let img = this.swingImages.get(sweep);
+      if (!img) {
+        img = this.add.image(0, 0, 'roan-weapons', frame).setDepth(6).setScale(2)
+          .setOrigin(gripX / ROAN_WEAPON_FRAME.width, gripY / ROAN_WEAPON_FRAME.height);
+        this.swingImages.set(sweep, img);
+      }
+      const s = Math.min(1, progress / 0.6);
+      const ease = 1 - (1 - s) ** 2;
+      const { x, y, angle, width, range } = sweep;
+      let a = angle;
+      let px = x;
+      let py = y;
+      if (sweep.motion === 'thrust') {
+        const reach = range * 0.45 * Math.sin(Math.PI * s);
+        px += Math.cos(angle) * reach;
+        py += Math.sin(angle) * reach;
+      } else if (sweep.motion === 'slam' && width < Math.PI * 2 - 1e-6) {
+        a = angle - 1.6 + 1.6 * ease * ease;
+      } else {
+        a = angle - width / 2 + width * ease;
+      }
+      img.setPosition(px, py).setRotation(a + Math.PI / 2).setAlpha(Math.min(1, (1 - progress) * 3));
+    }
+    for (const [key, img] of this.swingImages) {
+      if (live.has(key)) continue;
+      img.destroy();
+      this.swingImages.delete(key);
+    }
+  }
+
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
     const progress = (now - sweep.at) / SWORD.sweepDuration;
     if (progress >= 1) return;
     const g = this.weaponEffects;
     const fade = (1 - progress) ** 1.6;
-    const { x, y, angle, width, range, form, followup } = sweep;
-    if (form === 'swordCrush') {
-      drawSwordCrush(this.groundEffects, g, sweep, progress);
+    const { x, y, angle, width, range, motion, kind } = sweep;
+    const color = kind === 'combo' ? 0xe9fff3 : sweep.color;
+    if (kind === 'shock') {
+      this.groundEffects.fillStyle(color, fade * 0.16).fillCircle(x, y, range);
+      g.lineStyle(3, color, fade * 0.8).strokeCircle(x, y, range * (0.6 + 0.4 * progress));
+    } else if (motion === 'slam' && width < Math.PI * 2 - 1e-6) {
+      drawSwordCrush(this.groundEffects, g, sweep, progress, color);
     } else {
-      const color = followup ? 0xe9fff3 : form ? SWORD_FORMS[form].color : 0xff9676;
       const start = angle - width / 2;
       const point = (a: number, r: number) => ({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
       const steps = Math.max(8, Math.ceil(width * 9));
       const edge = Array.from({ length: steps + 1 }, (_, i) => point(start + i * width / steps, range));
       const inside = edge.map((_, i) => point(start + i * width / steps, range - 18 - 16 * Math.sin(Math.PI * i / steps)));
-      if (form) this.groundEffects.fillStyle(color, fade * 0.10).fillPoints([{ x, y }, ...edge], true);
+      this.groundEffects.fillStyle(color, fade * 0.10).fillPoints([{ x, y }, ...edge], true);
       g.fillStyle(color, fade * 0.45).fillPoints([...edge, ...inside.reverse()], true);
       g.lineStyle(10, color, fade * 0.24).strokePoints(edge);
       g.lineStyle(3, 0xfff2d5, fade * 0.98).strokePoints(edge);
-      const sweepFront = Math.min(1, 0.18 + progress * 2);
-      const tip = point(start + width * (followup ? 1 - sweepFront : sweepFront), range - 5);
-      g.lineStyle(4, 0xffffff, fade).lineBetween(tip.x - 4, tip.y - 4, tip.x + 4, tip.y + 4);
     }
     for (const burst of sweep.blocked) {
       const radius = 5 + 16 * progress;
