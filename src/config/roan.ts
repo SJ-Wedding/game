@@ -6,6 +6,7 @@
 
 export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
 export const DAGGER_THRUST = { damage: 0.35, range: 80, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
+export const SCIMITAR_THRUST_BONUSES = { widthPerMastery: 3, desertWindWidth: 6 } as const;
 export const TWIN_BLADE_DAMAGE_FACTOR = 0.6;
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
@@ -93,8 +94,9 @@ export const ROAN_UPGRADES = {
     effect: '출혈 최대 5 → 8중첩, 출혈 피해 +50%', awaken: '출혈이 최대 중첩에 닿으면 남은 출혈 피해를 한 번에 줌',
   },
   scimitar: {
-    weapon: 'dagger', name: '시미터', symbol: '☾', damage: 0.45, interval: 0.55, range: 110, angle: 150, motion: 'slash',
-    effect: '베기 150°, 출혈 중인 적에게 직접 피해 +30%', awaken: '출혈 중인 적을 처치하면 출혈이 주변 2마리에 번짐',
+    weapon: 'dagger', name: '시미터', symbol: '☾', damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'thrust',
+    effect: `직선 찌르기 (검 피해 ${DAGGER_THRUST.damage * 100}%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px). 출혈 중인 적에게 직접 피해 +30%.`,
+    awaken: '출혈 중인 적을 처치하면 출혈이 주변 2마리에 번짐',
   },
   twinblades: {
     weapon: 'dagger', name: '쌍검', symbol: '⚔', damage: DAGGER_THRUST.damage * TWIN_BLADE_DAMAGE_FACTOR,

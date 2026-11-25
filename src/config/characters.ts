@@ -1,5 +1,5 @@
 import { GRADES, GRADE_INDEX, type GradeId } from './grades';
-import { DAGGER_THRUST } from './roan';
+import { DAGGER_THRUST, SCIMITAR_THRUST_BONUSES } from './roan';
 
 export const CHARACTERS = {
   ranger: { name: '균열 사수', color: '#75d9ff', description: '자동 사격과 여러 특수 무기를 조합합니다.' },
@@ -40,7 +40,7 @@ export const CHARACTER_UPGRADES = {
   turretPierce: { path: 'turret', name: '철갑 노즐', count: true, text: (n: number) => `포탑탄 관통 +${n}마리` },
   swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}%` },
   swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 공격 거리 +${pct(0.12 * n)}% (무기 기본 거리의 최대 148%)` },
-  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 레이피어·할버드 찌르기 +${6 * n}° · 단검·쌍검 폭 +${DAGGER_THRUST.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
+  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 레이피어·할버드 찌르기 +${6 * n}° · 단검 계열 폭 +${DAGGER_THRUST.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
   swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
   swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
   // ── 로안 기본 무기 전용 (6레벨에 고른 무기) ──
@@ -65,7 +65,7 @@ export const CHARACTER_UPGRADES = {
   rapierPierce: { path: 'roan', form: 'rapier', name: '관통 숙련', count: true, text: (n: number) => `찌르기 관통 +${n}마리` },
   stilettoStacks: { path: 'roan', form: 'stiletto', name: '출혈 심화', count: true, text: (n: number) => `출혈 최대 중첩 +${2 * n}` },
   stilettoVenom: { path: 'roan', form: 'stiletto', name: '칼끝 독', text: (n: number) => `출혈 피해 +${pct(0.15 * n)}%` },
-  scimitarArc: { path: 'roan', form: 'scimitar', name: '휘어진 날', text: (n: number) => `베기 각도 +${Math.round(20 * n)}°` },
+  scimitarArc: { path: 'roan', form: 'scimitar', name: '휘어진 날', text: (n: number) => `직선 찌르기 폭 +${SCIMITAR_THRUST_BONUSES.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
   scimitarScent: { path: 'roan', form: 'scimitar', name: '피 냄새', text: (n: number) => `출혈 중인 적 직접 피해 +${pct(0.1 * n)}%p` },
   twinCross: { path: 'roan', form: 'twinblades', name: '교차 베기', text: (n: number) => `연타 한 번 피해 +${pct(0.08 * n)}%p` },
   twinChain: { path: 'roan', form: 'twinblades', name: '피의 연쇄', text: (n: number) => `출혈 지속 +${(0.5 * n).toFixed(2).replace(/\.?0+$/, '')}초` },

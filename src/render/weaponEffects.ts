@@ -346,9 +346,18 @@ export function drawDaggerThrust(g: Graphics, body: Point, angle: number, extens
     const trail = [blade(-3, -5), blade(16, -7), blade(27, -3)];
     g.lineStyle(2, edge, alpha * 0.62 * (1 - progress / 0.53)).strokePoints(trail);
   }
-  g.fillStyle(0x101422, alpha).fillPoints([blade(3, -6), blade(16, -5), blade(29, 0), blade(17, 5), blade(3, 6)], true);
-  g.fillStyle(edge, alpha).fillPoints([blade(5, -bladeShoulder), blade(16, -3), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
-  g.fillStyle(design === 'stiletto' ? 0x946cc2 : 0x8099ad, alpha).fillPoints([blade(5, 0), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+  if (design === 'scimitar') {
+    g.fillStyle(0x101422, alpha).fillPoints([blade(3, -7), blade(13, -8), blade(24, -10), blade(34, -5),
+      blade(27, 2), blade(19, 6), blade(9, 7), blade(3, 6)], true);
+    g.fillStyle(0xffedcb, alpha).fillPoints([blade(5, -5), blade(15, -6), blade(24, -8), blade(31, -5),
+      blade(25, 1), blade(17, 4), blade(5, 5)], true);
+    g.fillStyle(0x8fa3ad, alpha).fillPoints([blade(5, 0), blade(17, -1), blade(24, -4), blade(31, -5),
+      blade(25, 1), blade(17, 4), blade(5, 5)], true);
+  } else {
+    g.fillStyle(0x101422, alpha).fillPoints([blade(3, -6), blade(16, -5), blade(29, 0), blade(17, 5), blade(3, 6)], true);
+    g.fillStyle(edge, alpha).fillPoints([blade(5, -bladeShoulder), blade(16, -3), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+    g.fillStyle(design === 'stiletto' ? 0x946cc2 : 0x8099ad, alpha).fillPoints([blade(5, 0), blade(27, 0), blade(16, 3), blade(5, bladeShoulder)], true);
+  }
   const guard = [blade(5, -5), blade(5, 5)];
   g.lineStyle(4, 0x101422, alpha).strokePoints(guard);
   g.lineStyle(2, design === 'twinblades' ? 0xea776c : design === 'stiletto' ? 0xb88de1 : 0xffcd77, alpha).strokePoints(guard);

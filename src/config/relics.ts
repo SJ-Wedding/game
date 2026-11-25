@@ -1,4 +1,5 @@
 import type { Loadout } from './characters';
+import { DAGGER_THRUST, SCIMITAR_THRUST_BONUSES } from './roan';
 import { FUSION_RELIC_DAMAGE_BONUS, isFusionIngredient, type FusionId } from './weapons';
 
 export const TRIPLE_CHOICE_COUNT = 3;
@@ -45,8 +46,8 @@ export const RELICS = {
   bloodFeast: { source: 'elite', symbol: '✚', character: 'roan', form: 'stiletto', name: '피의 축제', effect: '출혈 중인 적을 처치하면 체력 1 회복, 초당 최대 3.' },
   deepCut: { source: 'elite', symbol: '◢', character: 'roan', form: 'stiletto', name: '깊은 베임', effect: '출혈 피해 +25%. 직접 피해 −10%.' },
   bloodBurst: { source: 'elite', symbol: '✺', character: 'roan', form: 'stiletto', name: '혈류 폭발', effect: '출혈이 최대 중첩에 닿으면 반경 60px 폭발(피해 80%).' },
-  desertWind: { source: 'elite', symbol: '≋', character: 'roan', form: 'scimitar', name: '사막의 바람', effect: '베기 각도 +40°.' },
-  crescentEdge: { source: 'elite', symbol: '◑', character: 'roan', form: 'scimitar', name: '초승달 칼날', effect: '출혈 중인 적을 처치하면 0.15초 뒤 추가 베기.' },
+  desertWind: { source: 'elite', symbol: '≋', character: 'roan', form: 'scimitar', name: '사막의 바람', effect: `시미터 찌르기 폭 +${SCIMITAR_THRUST_BONUSES.desertWindWidth}px (최대 ${DAGGER_THRUST.maxWidth}px).` },
+  crescentEdge: { source: 'elite', symbol: '◑', character: 'roan', form: 'scimitar', name: '초승달 칼날', effect: '출혈 중인 적을 처치하면 0.15초 뒤 추가 찌르기.' },
   bloodHook: { source: 'elite', symbol: 'ʃ', character: 'roan', form: 'scimitar', name: '피의 갈고리', effect: '출혈 중인 적을 치면 출혈 1중첩 추가.' },
   bladeDance: { source: 'elite', symbol: '⚘', character: 'roan', form: 'twinblades', name: '칼춤', effect: '연타마다 1초간 이동 속도 +5%, 최대 +25%.' },
   endlessWound: { source: 'elite', symbol: '∞', character: 'roan', form: 'twinblades', name: '끝없는 상처', effect: '적의 출혈 10중첩마다 그 적의 출혈 피해 +5%.' },

@@ -2,7 +2,7 @@ import { AUTO_COMBAT } from '../config/player';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
-  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, TWIN_BLADE_DAMAGE_FACTOR,
+  DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, SCIMITAR_THRUST_BONUSES, TWIN_BLADE_DAMAGE_FACTOR,
   type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
 } from '../config/roan';
 import { bossInvulnerable } from './boss';
@@ -190,9 +190,7 @@ export class RoanCombat {
   private get rawAngle(): number {
     let a = this.def.angle + 20 * this.m('swordArc');
     if (this.family('waraxe')) a += 20 * this.m('axeArc');
-    if (this.upgrade === 'scimitar') a += 20 * this.m('scimitarArc');
     if (this.upgrade === 'greataxe') a += 20 * this.m('greataxeEdge');
-    if (this.gear('desertWind')) a += 40;
     if (this.upgrade === 'halberd' && this.awakened) a += 20;
     return a;
   }
@@ -202,8 +200,13 @@ export class RoanCombat {
   }
 
   get lineWidth(): number | undefined {
-    if (this.design !== 'dagger' && this.design !== 'stiletto' && this.design !== 'twinblades') return undefined;
-    return Math.min(DAGGER_THRUST.maxWidth, DAGGER_THRUST.width + DAGGER_THRUST.widthPerMastery * this.m('swordArc'));
+    if (!this.family('dagger')) return undefined;
+    let width = DAGGER_THRUST.width + DAGGER_THRUST.widthPerMastery * this.m('swordArc');
+    if (this.upgrade === 'scimitar') {
+      width += SCIMITAR_THRUST_BONUSES.widthPerMastery * this.m('scimitarArc');
+      if (this.gear('desertWind')) width += SCIMITAR_THRUST_BONUSES.desertWindWidth;
+    }
+    return Math.min(DAGGER_THRUST.maxWidth, width);
   }
 
   /** 베기 각도 (도). 찌르기 무기는 찌르기 폭 */
@@ -703,7 +706,7 @@ export class RoanCombat {
       }
     }
     if (this.gear('crescentEdge')) {
-      this.later(0.15, () => this.strike({ angle: this.sim.player.aim, width: this.angle * Math.PI / 180, range: this.range, factor: 1, kind: 'extra' }));
+      this.later(0.15, () => this.strike({ angle: this.sim.player.aim, width: 0, lineWidth: this.lineWidth, range: this.range, factor: 1, kind: 'extra' }));
     }
     if (this.upgrade === 'scimitar' && this.awakened) {
       const near = this.sim.enemies.filter((o) => !o.dead && o !== e).sort((a, b) => dist(e.x, e.y, a.x, a.y) - dist(e.x, e.y, b.x, b.y)).slice(0, 2);

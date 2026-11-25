@@ -141,7 +141,7 @@ describe('무기 특화 기능', () => {
     expect((s.damageByAttack.bleed ?? 0) - before).toBeGreaterThan(swordDamage * 0.15 * 5 * 0.9);
   });
 
-  it.each([undefined, 'stiletto'] as const)('단검 %s은 사거리 80px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
+  it.each([undefined, 'stiletto', 'scimitar'] as const)('단검 계열 %s은 사거리 80px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
     const s = make('dagger', upgrade);
     const ahead = target(s, 36);
     const edge = target(s, 80, 17);
@@ -161,6 +161,35 @@ describe('무기 특화 기능', () => {
     swing(s);
     expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 24, hits: 2 });
     expect(edge.hp).toBeLessThan(edge.maxHp);
+  });
+
+  it('시미터의 전용 강화와 사막의 바람은 찌르기 폭을 합산한다', () => {
+    const s = new GameSim({ seed: 41, god: true, loadout: roan, roanGear: gear('dagger', 'scimitar'),
+      presetUpgrades: { swordArc: 1, scimitarArc: 1 } });
+    s.relics.acquire('desertWind');
+    target(s, 40);
+    const edge = target(s, 68, 23);
+    swing(s);
+    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 21, hits: 2 });
+    expect(edge.hp).toBeLessThan(edge.maxHp);
+  });
+
+  it('시미터가 출혈 중인 적을 처치하면 각성 전염과 초승달 칼날의 직선 찌르기가 발동한다', () => {
+    const s = make('dagger', 'scimitar', { awaken: true, relics: ['crescentEdge'] });
+    const victim = target(s, 36);
+    const ahead = target(s, 72);
+    const beside = target(s, 74, 30);
+    swing(s);
+    victim.hp = 1;
+    const before = ahead.hp;
+    swing(s);
+    expect(victim.dead).toBe(true);
+    expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 1.3);
+    expect(s.roan.bleeds.has(beside)).toBe(true);
+    steps(s, 9);
+    expect(s.swordSweep).toMatchObject({ kind: 'extra', range: 80, lineWidth: 10, hits: 1 });
+    expect(beside.hp).toBe(beside.maxHp);
+    expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 2.6);
   });
 
   it('쌍검: 출혈 중첩에 한도가 없다', () => {
