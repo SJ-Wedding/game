@@ -85,6 +85,13 @@ export class RelicEffects {
   private migrantUntil = -1;
   /** 균열 결정: 희귀 등급 이상을 보장할 남은 레벨업 수 */
   rareCards = 0;
+  // 로안·루멘 균열 수호자 유물
+  /** 수호자의 서약 보호막 */
+  shield = 0;
+  private cycleKills = 0;
+  private cloakReady = 0;
+  /** 약점 표식의 룬: 대상별 전용 무기 명중 수와 약점 종료 시각 */
+  private readonly runeHits = new WeakMap<Target, { hits: number; until: number }>();
 
   constructor(private readonly sim: GameSim) {}
 
@@ -126,6 +133,8 @@ export class RelicEffects {
       }
     }
     if (this.has('steelHeart')) multiplier *= 0.8;
+    if (this.has('swordLong')) multiplier *= 0.92;
+    if (this.sim.resolveActive) multiplier *= 1.1;
     if (this.now < this.dodgeBoostUntil) multiplier *= 1.25;
     if (this.now < this.migrantUntil) multiplier *= 1.25;
     if (this.now < this.magnetUntil) multiplier *= 1.5;
@@ -137,6 +146,9 @@ export class RelicEffects {
     let hp = this.sim.stats.maxHp;
     if (this.has('steelHeart')) hp *= 1.35;
     if (this.has('calmShield')) hp *= 0.9;
+    if (this.has('swordOath')) hp *= 0.9;
+    if (this.has('lumenCrystal')) hp *= 0.9;
+    hp += 15 * this.sim.essences.life;
     if (this.has('clover')) hp -= 10;
     if (this.has('collectorPack')) hp += 10 * this.owned.size;
     if (this.lastMatchSpent) hp *= 0.8;
@@ -203,7 +215,7 @@ export class RelicEffects {
     if (this.has('fifthBell')) rate *= 0.85;
     if (this.has('lightHands')) rate *= 1.15;
     if (this.now < this.magnetUntil) rate *= 1.5;
-    return rate;
+    return rate * (1 + 0.05 * this.sim.essences.swift);
   }
 
   /** 맥동 총열: 10초 주기 중 마지막 3초 */
@@ -224,7 +236,7 @@ export class RelicEffects {
   }
 
   get dodgeCooldown(): number {
-    return this.sim.stats.dodgeCooldown + (this.has('compass') ? 0.5 : 0);
+    return this.sim.stats.dodgeCooldown + (this.has('compass') ? 0.5 : 0) + (this.has('swordDash') ? 0.5 : 0);
   }
 
   get cooldownMultiplier(): number {
@@ -341,6 +353,39 @@ export class RelicEffects {
     if (this.has('splitHead') && source !== 'relic') this.split(enemy);
     if (this.has('hourglass')) this.sim.weapons.reduceCooldowns(enemy.kind === 'elite' ? 2 : 0.1);
     if (enemy.kind === 'elite' && this.has('riftCrystal')) this.rareCards++;
+    // 마나 순환 고리: 25마리 처치마다 전용 무기 대기시간 초기화
+    if (this.has('lumenCycle') && ++this.cycleKills % 25 === 0) this.sim.weapons.resetCooldown();
+  }
+
+  /** 멈춰 있는가 (집중의 지팡이) */
+  get still(): boolean {
+    return !this.moving;
+  }
+
+  /** 수호자의 서약: 베기에 맞은 적 수만큼 보호막, 최대 25 */
+  addShield(hits: number): void {
+    this.shield = Math.min(25, this.shield + hits);
+  }
+
+  /** 처형자의 대검: 체력 20% 이하 일반 적은 베기에 즉사 */
+  swordExecutes(enemy: Enemy): boolean {
+    return this.has('swordExecute') && enemy.kind !== 'elite' && enemy.hp <= enemy.maxHp * 0.2;
+  }
+
+  /** 약점 표식의 룬: 전용 무기 명중 기록. 3번째 명중부터 4초간 약점 */
+  onLumenHit(target: Target): void {
+    if (!this.has('lumenRune')) return;
+    const mark = this.runeHits.get(target) ?? { hits: 0, until: -1 };
+    mark.hits++;
+    if (mark.hits >= 3) {
+      mark.hits = 0;
+      mark.until = this.now + 4;
+    }
+    this.runeHits.set(target, mark);
+  }
+
+  private exposed(target: Target): boolean {
+    return (this.runeHits.get(target)?.until ?? -1) > this.now;
   }
 
   /** 갈라지는 화살촉: 처치 자리에서 좌우로 작은 탄 */
@@ -428,6 +473,11 @@ export class RelicEffects {
     const p = this.sim.player;
     const now = this.now;
     if (this.has('focusRing')) this.focusHits = 0;
+    if (this.has('lumenCloak') && now >= this.cloakReady) {
+      // 정전기 망토: 피격 시 반경 160px에 전용 무기 1타의 60%
+      this.cloakReady = now + 2;
+      this.blast(p, 160, this.sim.weapons.specialistHitDamage() * 0.6, 'chain');
+    }
     if (this.has('calmShield')) {
       const ready = now - this.lastHurtAt >= 8;
       this.lastHurtAt = now;
@@ -435,6 +485,11 @@ export class RelicEffects {
         this.sim.weapons.trace('barrier', [p], p.r + 14, 0.4);
         return 0;
       }
+    }
+    if (this.shield > 0 && amount > 0) {
+      const absorbed = Math.min(this.shield, amount);
+      this.shield -= absorbed;
+      amount -= absorbed;
     }
     if (amount >= p.hp && this.has('lastMatch') && !this.lastMatchSpent) {
       this.lastMatchSpent = true;
@@ -498,8 +553,10 @@ export class RelicEffects {
   }
 
   damageMultiplier(target: Boss | Enemy, basic: boolean): number {
-    if (!this.owned.size) return 1;
-    let multiplier = this.has('oath') ? 1 + Math.min(8, Math.floor((this.sim.kills - this.oathKills) / 25)) * 0.04 : 1;
+    const essence = 1 + 0.04 * this.sim.essences.power;
+    if (!this.owned.size) return essence;
+    let multiplier = essence * (this.exposed(target) ? 1.15 : 1);
+    multiplier *= this.has('oath') ? 1 + Math.min(8, Math.floor((this.sim.kills - this.oathKills) / 25)) * 0.04 : 1;
     for (const id of this.owned) {
       const relic = RELICS[id];
       if ('weapon' in relic && !this.sim.stacks[relic.weapon]) multiplier *= 1.05;

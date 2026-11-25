@@ -51,6 +51,7 @@ export class Bot {
   /** 레벨업 후보 중 고를 인덱스 */
   choose(sim: GameSim): number {
     if (sim.choices[0]?.kind === 'coin') return 1;
+    if (sim.choices[0]?.kind === 'essence') return 0;
     if (sim.choices[0]?.kind === 'relic') {
       // 기준 봇은 판을 크게 흔드는 유물을 피한다 (밸런스 측정용)
       const safe = sim.choices.findIndex((c) => c.kind === 'relic' && !BOT_AVOID.has(c.id));
@@ -74,7 +75,7 @@ export class Bot {
 
   /** 후보가 마음에 들지 않으면 새로고침할지 (남은 횟수가 있을 때) */
   wantsReroll(sim: GameSim): boolean {
-    if (sim.armoryOpen || sim.bonusOpen || sim.choices.some((choice) => choice.kind === 'relic' || choice.kind === 'fusion' || choice.kind === 'coin' || choice.kind === 'swordForm')) return false;
+    if (sim.armoryOpen || sim.bonusOpen || sim.choices.some((choice) => choice.kind === 'relic' || choice.kind === 'essence' || choice.kind === 'fusion' || choice.kind === 'coin' || choice.kind === 'swordForm')) return false;
     if (sim.rerollsLeft <= 0) return false;
     const best = Math.max(
       ...sim.choices.map((c) =>
