@@ -154,6 +154,8 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 .card.mobility { border-color: #6fb7ff88; } .card.mobility .cat { color: var(--mobility); }
 .card.fallback .cat { color: var(--gold); }
 .card:hover, .card:focus-visible { transform: translateY(-3px); border-color: #fff; }
+/* 떠오른 카드 아래에 생긴 틈도 hover 영역으로 남겨, 아래쪽 테두리에서 hover가 풀렸다 걸렸다 하며 떨리지 않게 한다 */
+.card:hover::after { content: ''; position: absolute; left: -2px; right: -2px; top: 100%; height: 6px; }
 
 /* 결과 */
 .result .outcome { font-size: 3em; letter-spacing: 0.1em; }
