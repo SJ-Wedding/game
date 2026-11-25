@@ -1,3 +1,4 @@
+import { SWORD_FORMS } from '../config/characters';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
@@ -162,9 +163,9 @@ export class Hud {
     c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
     c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
 
-    const formCount = sim.swordForms.length;
-    c.toggle(this.swordForms, 'swordFormsVisible', 'hidden', formCount < 2);
-    if (formCount > 1) c.text(this.swordForms, 'swordForms', `검격 ${formCount}종 동시 발동`);
+    const form = sim.swordForms[0];
+    c.toggle(this.swordForms, 'swordFormsVisible', 'hidden', !form);
+    if (form) c.text(this.swordForms, 'swordForms', `공격 타입 · ${SWORD_FORMS[form].name}`);
 
     c.text(this.timer, 'timer', sim.overtime ? `+${formatTime(Math.floor(sim.elapsed - RUN_CONFIG.timeLimit))}` : formatTime(Math.ceil(sim.remaining)));
     const toBoss = RUN_CONFIG.bossAt - sim.elapsed;

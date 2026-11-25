@@ -57,10 +57,10 @@ export const UPGRADES: UpgradeDef[] = [
   // ── 생존 ──
   { id: 'vitality', name: '강인한 육체', category: 'survival', description: '최대 체력 +25, 즉시 25 회복',
     effects: [{ stat: 'maxHp', op: 'add', value: 25, gradeValues: [25, 38, 50, 75] }], healOnPick: 25 },
-  { id: 'regen', name: '재생', category: 'survival', description: '초당 체력 0.8 회복',
-    effects: [{ stat: 'regen', op: 'add', value: 0.8 }] },
-  { id: 'guard', name: '수호 결계', category: 'survival', description: '받는 피해 -12%',
-    effects: [{ stat: 'damageTaken', op: 'mul', value: 0.88 }] },
+  { id: 'regen', name: '재생', category: 'survival', description: '초당 체력 0.5 회복',
+    effects: [{ stat: 'regen', op: 'add', value: 0.5 }] },
+  { id: 'guard', name: '수호 결계', category: 'survival', description: '받는 피해 -8%',
+    effects: [{ stat: 'damageTaken', op: 'mul', value: 0.92 }] },
   // ── 기동 ──
   { id: 'swift', name: '질풍 걸음', category: 'mobility', description: '이동 속도 +10%',
     effects: [{ stat: 'moveSpeed', op: 'pct', value: 0.1 }] },

@@ -137,6 +137,8 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 /* 레벨업 카드 */
 .levelup h2 { font-size: 2em; color: var(--gold); }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; width: 100%; }
+.cards.many { grid-template-columns: repeat(5, 1fr); gap: 0.6em; font-size: 0.86em; }
+.cards.many .card { padding: 0.8em; }
 .card {
   position: relative; display: grid; gap: 0.45em; align-content: start; text-align: left;
   min-height: 11em; padding: 1em 1.1em; border-width: 2px; background: #1a1730;

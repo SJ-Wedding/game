@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SWORD, SWORD_FORMS, type Loadout, type SwordFormId } from '../src/config/characters';
+import { SWORD, SWORD_FORMS, SWORD_FORM_IDS, type Loadout, type SwordFormId } from '../src/config/characters';
 import { MASTERY_UPGRADES, UPGRADE_BY_ID, type UpgradeId } from '../src/config/upgrades';
 import { rollRelics } from '../src/core/relics';
 import { Rng } from '../src/core/rng';
@@ -194,7 +194,7 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.swordSweep?.blocked).toEqual([{ x: inArc.x, y: inArc.y }]);
   });
 
-  it('로안은 6·12·18레벨에 남은 형태만 고르고 모든 보유 형태로 동시에 공격한다', () => {
+  it('로안은 6레벨에 공격 타입 5종 중 하나만 고르고, 12·18레벨에는 형태 선택이 없다', () => {
     const sim = new GameSim({ seed: 21, god: true, loadout: roan });
     makeTarget(sim, 65);
     const swing = (forms: (SwordFormId | undefined)[]) => {
@@ -204,31 +204,29 @@ describe('캐릭터와 중첩 강화', () => {
       expect(current.map((sweep) => sweep.form)).toEqual(forms);
       expect(sim.player.fireCd).toBeCloseTo(sim.swordInterval);
     };
-    const learn = (level: number, form: SwordFormId, available: SwordFormId[]) => {
+    const levelTo = (level: number, pick: (c: GameSim['choices']) => number = () => 0) => {
       sim.player.fireCd = Infinity;
       while (sim.level < level) {
         sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
         sim.step(IDLE_INPUT);
-        while (sim.level < level && sim.phase === 'levelup') expect(sim.choose(0)).toBe(true);
+        while (sim.phase === 'levelup') {
+          if (sim.choices[0]?.kind === 'swordForm') {
+            expect(sim.pendingLevel).toBe(6);
+            expect(sim.choices).toEqual(SWORD_FORM_IDS.map((id) => ({ kind: 'swordForm', id })));
+            expect(sim.reroll()).toBe(false);
+            expect(sim.choose(pick(sim.choices))).toBe(true);
+          } else expect(sim.choose(0)).toBe(true);
+        }
       }
-      expect(sim.pendingLevel).toBe(level);
-      expect(sim.choices).toEqual(available.map((id) => ({ kind: 'swordForm', id })));
-      expect(sim.reroll()).toBe(false);
-      expect(sim.choose(available.indexOf(form))).toBe(true);
     };
 
     swing([undefined]);
-    learn(6, 'swordCrush', ['swordCrescent', 'swordCrush', 'swordGuard']);
+    levelTo(6, (choices) => choices.findIndex((c) => c.kind === 'swordForm' && c.id === 'swordCrush'));
+    expect(sim.swordForms).toEqual(['swordCrush']);
     swing(['swordCrush']);
-    learn(12, 'swordGuard', ['swordCrescent', 'swordGuard']);
-    swing(['swordCrush', 'swordGuard']);
-    learn(18, 'swordCrescent', ['swordCrescent']);
-    swing(['swordCrescent', 'swordCrush', 'swordGuard']);
-    sim.player.fireCd = Infinity;
-    for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
-    expect(sim.swordSweep?.followup).toBe(true);
-    swing(['swordCrescent', 'swordCrush', 'swordGuard']);
-    expect(sim.swordForms).toEqual(['swordCrush', 'swordGuard', 'swordCrescent']);
+    levelTo(19);
+    expect(sim.swordForms).toEqual(['swordCrush']);
+    swing(['swordCrush']);
     expect(sim.playerShots).toHaveLength(0);
   });
 
@@ -244,40 +242,51 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.swordSweep?.x).toBe(sim.player.x);
     expect(sim.swordSweep?.followup).toBe(true);
     expect(first.hp).toBe(hp);
-    expect(second.maxHp - second.hp).toBeCloseTo(sim.swordDamage * 0.60);
+    expect(second.maxHp - second.hp).toBeCloseTo(sim.swordDamage * SWORD_FORMS.swordCrescent.followupDamage);
     expect(sim.swordSwings).toBe(1);
   });
 
-  it('공통 검 강화는 세 형태에 함께 적용되고 근접 거리 상한을 지킨다', () => {
-    const sim = new GameSim({ seed: 23, god: true, loadout: roan, presetLevel: 18,
-      presetUpgrades: { swordRange: 30, swordArc: 1, swordDamage: 1, swordSpeed: 1 } });
+  it('공통 검 강화는 고른 타입에 적용되고, 각도 한도를 넘친 각도는 거리로 바뀐다', () => {
+    const sim = new GameSim({ seed: 23, god: true, loadout: roan,
+      presetUpgrades: { swordRange: 30, swordArc: 6, swordDamage: 1, swordSpeed: 1 } });
     expect(sim.swordRange).toBe(SWORD.maxRange);
-    const far = makeTarget(sim, SWORD.maxRange + 35);
-    sim.step(IDLE_INPUT);
-    expect(far.hp).toBe(far.maxHp);
-    expect(sim.swordSwings).toBe(0);
+    // 기본 베기 130° + 120° = 250°, 한도 안
+    expect(sim.strikeRange()).toBe(SWORD.maxRange);
+    const forms = (sim as unknown as { learnedSwordForms: SwordFormId[] }).learnedSwordForms;
+    forms.push('swordGuard');
+    // 270° + 120° = 390° → 360°, 넘친 30° → 거리 +7.5%
+    expect(sim.swordAngle('swordGuard')).toBe(360);
+    expect(sim.strikeRange('swordGuard')).toBeCloseTo(SWORD.maxRange * SWORD_FORMS.swordGuard.range * 1.075);
+    // 강철 파쇄 70° + 120° = 190° → 150°, 넘친 40° → 거리 +10%
+    expect(sim.swordAngle('swordCrush')).toBe(150);
+    expect(sim.strikeRange('swordCrush')).toBeCloseTo(SWORD.maxRange * 1.1);
+    // 검기 발사: 넓은 베기는 각도 대신 두께
+    expect(sim.swordAngle('swordWave')).toBe(SWORD_FORMS.swordWave.angle);
+    expect(sim.strikeRange('swordWave')).toBe(SWORD.maxRange);
 
     const near = makeTarget(sim, 65);
     sim.step(IDLE_INPUT);
-    expect(sim.swordSweeps.map((sweep) => Math.round(sweep.width * 180 / Math.PI))).toEqual([150, 90, 290]);
-    expect(sim.swordSweeps.map((sweep) => sweep.range)).toEqual([SWORD.maxRange, SWORD.maxRange, SWORD.maxRange * SWORD_FORMS.swordGuard.range]);
+    expect(sim.swordSweeps.map((sweep) => sweep.form)).toEqual(['swordGuard']);
     expect(sim.swordDamage).toBeCloseTo(sim.stats.damage * SWORD.damage * 1.30);
-    expect(near.maxHp - near.hp).toBeCloseTo(sim.swordDamage * 3.30);
+    expect(near.maxHp - near.hp).toBeCloseTo(sim.swordDamage * SWORD_FORMS.swordGuard.damage);
     expect(sim.player.fireCd).toBeCloseTo(SWORD.interval / sim.relics.fireRate * 0.9 * 1.03);
     const shared = MASTERY_UPGRADES.filter((def) => upgradeAvailable(roan, def, sim.level));
     expect(shared.map((def) => def.id)).toEqual(['swordSpeed', 'swordRange', 'swordArc', 'swordDamage', 'swordPierce']);
+    const wave = MASTERY_UPGRADES.filter((def) => upgradeAvailable(roan, def, sim.level, ['swordWave']));
+    expect(wave.map((def) => def.id)).toEqual([...shared.map((def) => def.id), 'swordWavePierce', 'swordWaveRange']);
   });
 
-  it('동시 검격과 되베기는 유물 대상 수와 투사체 차단 한도를 공격 단위로 계산한다', () => {
-    const sim = new GameSim({ seed: 24, god: true, loadout: roan, presetLevel: 18, carryRelics: ['swordScabbard', 'swordRhythm'] });
+  it('반월 연격의 되베기는 투사체 차단 한도를 공격 단위로 계산한다', () => {
+    const sim = new GameSim({ seed: 24, god: true, loadout: roan, presetLevel: 6, carryRelics: ['swordScabbard', 'swordRhythm'] });
+    expect(sim.swordForms).toEqual(['swordCrescent']);
     makeTarget(sim, 65);
-    const shots = [makeShot(sim, 30, 0), makeShot(sim, 40, 0), makeShot(sim, -20, 50), makeShot(sim, -20, -50)];
+    const shots = [makeShot(sim, 30, 0), makeShot(sim, 40, 0), makeShot(sim, 50, 0), makeShot(sim, 55, 0), makeShot(sim, -40, 0)];
     sim.enemyShots.push(...shots);
     sim.step(IDLE_INPUT);
-    expect(sim.enemyShots).toEqual([shots[3]]);
     for (let i = 0; i < 9; i++) sim.step(IDLE_INPUT);
-    expect(sim.hitsByAttack.sword).toBe(4);
+    expect(sim.hitsByAttack.sword).toBe(2);
     expect(sim.swordSweeps.flatMap((sweep) => sweep.blocked)).toHaveLength(3);
+    expect(sim.enemyShots).toEqual([shots[3], shots[4]]);
     expect(sim.player.fireCd).toBeCloseTo(sim.swordInterval - 0.15);
   });
 

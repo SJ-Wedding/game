@@ -9,10 +9,8 @@ export const RELICS = {
   swordRhythm: { source: 'level', symbol: 'ϟ', character: 'roan', name: '부러진 칼등', effect: '한 번 공격해 서로 다른 적 4마리 이상을 베면 다음 공격 대기시간이 35% 줄어듭니다.' },
   swordDuel: { source: 'elite', symbol: '⚔', character: 'roan', name: '결투자의 장갑', effect: '베기에 맞은 적이 한 마리면 해당 베기의 피해가 50% 증가합니다.' },
   // ── 로안 균열 수호자 유물 (유물 기획안) ──
-  swordWave: { source: 'elite', symbol: '☽', character: 'roan', name: '검기 대검', effect: '적을 맞힌 베기마다 전방으로 검기를 날립니다. 사거리 260px, 적 3마리 관통, 피해는 베기의 45%. 베기 간격 +10%.' },
   swordPulse: { source: 'elite', symbol: '♡', character: 'roan', name: '강철 맥박', effect: '베기에 맞은 적 1마리당 다음 베기 피해 +4%, 최대 +40%. 3초 동안 아무도 못 베면 초기화됩니다.' },
   swordEcho: { source: 'elite', symbol: '≋', character: 'roan', name: '잔향 검흔', effect: '베기 0.6초 뒤 같은 궤적을 잔흔이 한 번 더 베어 피해 35%를 줍니다. 검 피해 −10%.' },
-  swordExecute: { source: 'elite', symbol: '⚰', character: 'roan', name: '처형자의 대검', effect: '체력 20% 이하 일반 적은 베기에 즉사합니다. 보스·균열 수호자는 체력 30% 이하일 때 베기 피해 +30%. 베기 각도 −15°.' },
   swordLong: { source: 'elite', symbol: '⟷', character: 'roan', name: '긴 칼등', effect: '베기 거리 +15%, 최대 베기 거리 185px → 225px. 이동 속도 −8%.' },
   swordWeight: { source: 'elite', symbol: '◑', character: 'roan', form: 'swordCrescent', name: '초승달의 추', effect: '반월 연격의 두 번째 베기가 뒤쪽도 함께 베며, 두 번 모두 맞은 적은 피해 +25%. 두 번째 베기 지연 +0.05초.' },
   swordQuake: { source: 'elite', symbol: '⛏', character: 'roan', form: 'swordCrush', name: '지진 망치', effect: '강철 파쇄 끝 지점에 반경 90px 충격파(피해 70%)를 일으키고 일반 적을 0.5초 기절시킵니다. 강철 파쇄 간격 +10%.' },
@@ -21,8 +19,26 @@ export const RELICS = {
   swordMirror: { source: 'elite', symbol: '⟲', character: 'roan', name: '반격의 거울검', effect: '베기 궤적에 닿은 적 탄을 최대 2개 되돌려 보냅니다. 되돌아간 탄은 공격력의 100% 피해를 줍니다.' },
   swordDash: { source: 'elite', symbol: '⇥', character: 'roan', name: '돌진 베기의 갑주', effect: '회피가 끝나면 회피 방향으로 즉시 강화 베기(피해 150%, 각도 +40°)를 합니다. 회피 대기시간 +0.5초.' },
   swordResolve: { source: 'elite', symbol: '⚑', character: 'roan', name: '결전의 각오', effect: '보스·균열 수호자가 300px 안에 있으면 베기 간격 −20%, 이동 속도 +10%. 일반 적에게 받는 피해 +10%.' },
+  // ── 로안 공격 타입 전용 (고른 타입의 유물만 등장) ──
+  swordTriple: { source: 'elite', symbol: '☾', character: 'roan', form: 'swordCrescent', name: '삼일월', effect: '두 번째 베기 0.15초 뒤 세 번째 베기(피해 40%)를 합니다. 공격 간격 +10%.' },
+  swordMoonlink: { source: 'elite', symbol: '◐', character: 'roan', form: 'swordCrescent', name: '월광 연결', effect: '두 베기에 모두 맞은 적 1마리당 다음 공격 대기시간 −4%, 최대 −32%.' },
+  swordNewmoon: { source: 'elite', symbol: '●', character: 'roan', form: 'swordCrescent', name: '그믐 칼날', effect: '두 번째 베기 피해 55% → 80%. 첫 베기 피해 60% → 45%.' },
+  swordFissure: { source: 'elite', symbol: '⌇', character: 'roan', form: 'swordCrush', name: '파쇄 균열', effect: '강철 파쇄 끝 지점에 2초간 반경 70px 균열이 남아 0.5초마다 피해 15%를 주고 일반 적을 느리게 합니다.' },
+  swordSunder: { source: 'elite', symbol: '⛓', character: 'roan', form: 'swordCrush', name: '갑주 분쇄', effect: '강철 파쇄에 맞은 적은 4초간 받는 피해 +15%.' },
+  swordWeighted: { source: 'elite', symbol: '⚓', character: 'roan', form: 'swordCrush', name: '무게 추', effect: '강철 파쇄 피해 +35%. 공격 간격 +17%.' },
+  swordCentrifuge: { source: 'elite', symbol: '❂', character: 'roan', form: 'swordGuard', name: '원심 칼날', effect: '근위 검무 거리 +25%. 근위 검무 피해 −10%.' },
+  swordWard: { source: 'elite', symbol: '✠', character: 'roan', form: 'swordGuard', name: '수호의 원', effect: '근위 검무가 한 번에 3마리 이상 맞히면 체력 2를 회복합니다. 재사용 1초.' },
+  swordBulwark: { source: 'elite', symbol: '▣', character: 'roan', form: 'swordGuard', name: '철벽 검무', effect: '근위 검무에 맞은 적 1마리당 2초간 받는 피해 −3%, 최대 −24%.' },
+  swordGiant: { source: 'elite', symbol: '◯', character: 'roan', form: 'swordWave', name: '거대 검기', effect: '검기 두께와 사거리 2.5배. 검기 피해 −50%. 균열 수호자 유물 후보에 35% 확률로만 나옵니다.' },
+  swordTwinWave: { source: 'elite', symbol: '⫶', character: 'roan', form: 'swordWave', name: '쌍검기', effect: '0.12초 뒤 검기를 1발 더 날립니다(피해 50%).' },
+  swordPiercer: { source: 'elite', symbol: '➵', character: 'roan', form: 'swordWave', name: '꿰뚫는 검기', effect: '검기 관통 +3마리. 관통할 때마다 검기 피해 +10%, 최대 +50%.' },
+  swordReturn: { source: 'elite', symbol: '↩', character: 'roan', form: 'swordWave', name: '회귀 검기', effect: '검기가 최대 사거리에서 되돌아오며 한 번 더 피해(50%)를 줍니다. 공격 간격 +10%.' },
+  swordGuillotine: { source: 'elite', symbol: '⊓', character: 'roan', form: 'swordExecute', name: '단두대', effect: '처형 즉사 기준 +8%p. 공격 간격 +10%.' },
+  swordHarvest: { source: 'elite', symbol: '♨', character: 'roan', form: 'swordExecute', name: '피의 수확', effect: '처형할 때마다 체력 1을 회복합니다. 초당 최대 4.' },
+  swordTerror: { source: 'elite', symbol: '☒', character: 'roan', form: 'swordExecute', name: '공포의 처형', effect: '처형하면 반경 100px 안의 일반 적이 1초간 움직이지 못합니다.' },
+  swordChainExec: { source: 'elite', symbol: '⋈', character: 'roan', form: 'swordExecute', name: '연쇄 처형', effect: '처형하면 3초간 공격 간격 −8%, 최대 3중첩.' },
   // ── 루멘 균열 수호자 유물 (유물 기획안) ──
-  lumenCrystal: { source: 'elite', symbol: '⬖', character: 'lumen', name: '마력 증폭 수정', effect: '루멘 전용 강화 1점당 무기 피해 보너스 6% → 9%. 최대 체력 −10%.' },
+  lumenCrystal: { source: 'elite', symbol: '⬖', character: 'lumen', name: '마력 증폭 수정', effect: '루멘 전용 강화 1점당 무기 피해 보너스 3% → 4.5%. 최대 체력 −10%.' },
   lumenSight: { source: 'elite', symbol: '◬', character: 'lumen', name: '현자의 시야', effect: '전용 무기 사거리 +25% (연쇄: 첫 대상 탐색 거리, 포탑: 사격 거리).' },
   lumenRune: { source: 'elite', symbol: 'ᛉ', character: 'lumen', name: '약점 표식의 룬', effect: '전용 무기에 3번 맞은 적은 4초간 받는 피해 +15%. 전용 무기 피해 −5%.' },
   lumenCycle: { source: 'elite', symbol: '⟳', character: 'lumen', name: '마나 순환 고리', effect: '적 25마리를 처치할 때마다 전용 무기 대기시간이 즉시 초기화됩니다.' },
@@ -145,7 +161,7 @@ const FUSION_EFFECTS: Record<WeaponRelicId, string> = {
 
 export function relicDescription(id: RelicId, fusions: Iterable<FusionId> = []): string {
   const relic = RELICS[id];
-  if ('form' in relic) return `${relic.effect} 검술 형태를 익히지 않았으면 검 피해 +5%.`;
+  if ('form' in relic) return `${relic.effect} 다른 공격 타입을 고르면 효과 대신 검 피해 +5%.`;
   if (!('weapon' in relic)) return relic.effect;
   const bonus = `융합 무기 피해 +${FUSION_RELIC_DAMAGE_BONUS * 100}%.`;
   if (isFusionIngredient(fusions, relic.weapon)) return `${FUSION_EFFECTS[id as WeaponRelicId]} ${bonus}`;

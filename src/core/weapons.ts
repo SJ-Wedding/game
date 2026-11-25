@@ -639,7 +639,7 @@ export class WeaponSystem {
     const branches = this.sim.mastery('chainFork') * 2;
     if (!recast) {
       const speed = chainDelay(this.sim.mastery('chainSpeed'));
-      const interval = (specialist ? 1.7 * speed : 2.15) * (relics.has('chainCloud') ? 1.1 : 1) * (rebound ? 1.1 : 1);
+      const interval = (specialist ? LUMEN_CHAIN.interval * speed : 2.15) * (relics.has('chainCloud') ? 1.1 : 1) * (rebound ? 1.1 : 1);
       this.ready.set('chain', now + Math.max(0.12, interval * relics.cooldownMultiplier));
       if (relics.onWeaponActivated()) this.ready.set('chain', now);
       // 이중 방전 코일: 25% 확률로 0.2초 뒤 피해 60%로 한 번 더

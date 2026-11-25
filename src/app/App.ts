@@ -202,7 +202,7 @@ export class App {
     const sim = this.sim!;
     this.screen = 'levelup';
     const reward = sim.choices[0];
-    const title = reward?.kind === 'swordForm' ? `로안 공격 형태 · Lv ${sim.pendingLevel}`
+    const title = reward?.kind === 'swordForm' ? `로안 공격 타입 · Lv ${sim.pendingLevel}`
       : reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'essence' ? '중간 보스 유물'
       : reward?.kind === 'relic'
       ? (reward.source === 'elite' ? '중간 보스 유물' : `레벨 ${reward.source === 'opening' ? OPENING_RELIC_LEVEL : sim.pendingLevel - 1} 유물`)
@@ -237,7 +237,7 @@ export class App {
     this.statusReturn = this.screen;
     sim.setPaused(true);
     this.screen = 'status';
-    const layers = statLayers(sim.picks, sim.meta);
+    const layers = statLayers(sim.picks, sim.meta, sim.loadout.character);
     layers.meta.luck = sim.meta.luck;
     layers.final = {
       ...layers.final,
@@ -409,10 +409,10 @@ export class App {
         if (e.code === 'Escape' && !e.repeat) this.showTitle();
         break;
       case 'levelup': {
-        const n = ['Digit1', 'Digit2', 'Digit3', 'Numpad1', 'Numpad2', 'Numpad3'].indexOf(e.code);
-        if (n >= 0 && !e.repeat) {
+        const digit = /^(?:Digit|Numpad)([1-5])$/.exec(e.code);
+        if (digit && !e.repeat) {
           e.preventDefault();
-          this.choose(n % 3);
+          this.choose(Number(digit[1]) - 1);
         }
         if (e.code === 'KeyR' && !e.repeat) {
           e.preventDefault();

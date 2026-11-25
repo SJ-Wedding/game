@@ -1,3 +1,4 @@
+import { UPGRADE_BY_ID } from '../src/config/upgrades';
 import { describe, expect, it } from 'vitest';
 import { LUMEN, SWORD, SWORD_FORMS, type Loadout, type SwordFormId } from '../src/config/characters';
 import { ESSENCE_MAX_STACK, RELICS, RELIC_IDS, relicAllowed, type RelicId } from '../src/config/relics';
@@ -40,8 +41,8 @@ const swordDealt = (s: GameSim) => s.damageByAttack.sword ?? 0;
 describe('균열 수호자 유물 후보', () => {
   const pool = (loadout: Loadout) => RELIC_IDS.filter((id) => RELICS[id].source === 'elite' && relicAllowed(id, loadout));
 
-  it('로안은 16개, 루멘은 무기별 15개의 균열 수호자 유물을 받는다', () => {
-    expect(pool(roan)).toHaveLength(16);
+  it('로안은 공용 11개와 타입 전용 20개, 루멘은 무기별 15개의 균열 수호자 유물을 받는다', () => {
+    expect(pool(roan)).toHaveLength(31);
     expect(pool(chain)).toHaveLength(15);
     expect(pool(turret)).toHaveLength(15);
     expect(pool(chain).some((id) => id.startsWith('turret') || id === 'winterLantern')).toBe(false);
@@ -66,7 +67,7 @@ describe('균열 수호자 유물 후보', () => {
     expect(s.choose(life)).toBe(true);
     expect(s.relics.maxHp).toBe(maxHp + 15);
     expect(s.player.hp).toBe(65);
-    expect(s.relics.owned.has('swordWave' as RelicId)).toBe(true);
+    expect(s.relics.owned.has('swordPulse')).toBe(true);
     expect([...s.relics.owned].every((id) => Object.hasOwn(RELICS, id))).toBe(true);
 
     s.essences.power = ESSENCE_MAX_STACK;
@@ -92,20 +93,6 @@ describe('균열 수호자 유물 후보', () => {
 });
 
 describe('로안 균열 수호자 유물', () => {
-  it('검기 대검: 적을 맞히면 관통하는 검기를 날리고 베기 간격이 10% 늘어난다', () => {
-    const base = sim(roan);
-    const s = sim(roan, ['swordWave']);
-    expect(s.swordInterval).toBeCloseTo(base.swordInterval * 1.1);
-    target(s, 70);
-    const far = target(s, 230);
-    s.step(IDLE_INPUT);
-    expect(s.playerShots).toHaveLength(1);
-    expect(s.playerShots[0].source).toBe('swordWave');
-    expect(s.playerShots[0].pierceLeft).toBe(3);
-    steps(s, 30);
-    expect(far.maxHp - far.hp).toBeCloseTo(s.swordDamage * 0.45, 0);
-  });
-
   it('강철 맥박: 직전 공격에 맞은 적 수만큼 다음 베기 피해가 늘고 3초 뒤 초기화된다', () => {
     const s = sim(roan, ['swordPulse']);
     const hits = [70, 80, 90].map((x) => target(s, x));
@@ -135,25 +122,6 @@ describe('로안 균열 수호자 유물', () => {
     s.player.x += 300;
     steps(s, 40);
     expect(after - enemy.hp).toBeCloseTo(s.swordDamage * 0.35);
-  });
-
-  it('처형자의 대검: 체력 20% 이하 일반 적은 즉사, 균열 수호자는 30% 이하에서 피해 +30%, 각도 −15°', () => {
-    const base = sim(roan);
-    const s = sim(roan, ['swordExecute']);
-    expect(s.swordAngle()).toBe(base.swordAngle() - 15);
-    const weak = target(s, 70);
-    weak.hp = 190;
-    s.step(IDLE_INPUT);
-    expect(weak.dead).toBe(true);
-
-    const e1 = sim(roan, ['swordExecute']);
-    const e2 = sim(roan);
-    for (const x of [e1, e2]) {
-      const elite = target(x, 70, 0, 'elite');
-      elite.hp = 290;
-      x.step(IDLE_INPUT);
-    }
-    expect(swordDealt(e1) / swordDealt(e2)).toBeCloseTo(1.3);
   });
 
   it('긴 칼등: 베기 거리 +15%, 최대 225px, 이동 속도 −8%', () => {
@@ -263,12 +231,12 @@ describe('로안 균열 수호자 유물', () => {
 });
 
 describe('루멘 균열 수호자 유물', () => {
-  it('마력 증폭 수정: 전용 강화 1점당 보너스 9%, 최대 체력 −10%', () => {
+  it('마력 증폭 수정: 전용 강화 1점당 보너스 1.5배, 최대 체력 −10%', () => {
     const s = sim(chain, ['lumenCrystal'], { presetUpgrades: { chainLinks: 2 } });
     const base = sim(chain, [], { presetUpgrades: { chainLinks: 2 } });
     const points = (base.starterDamageMultiplier / LUMEN.baseDamage - 1) / LUMEN.damagePerPoint;
     expect(points).toBeGreaterThan(0);
-    expect(s.starterDamageMultiplier).toBeCloseTo(LUMEN.baseDamage * (1 + points * 0.09));
+    expect(s.starterDamageMultiplier).toBeCloseTo(LUMEN.baseDamage * (1 + points * LUMEN.damagePerPoint * 1.5));
     expect(s.relics.maxHp).toBeCloseTo(s.stats.maxHp * 0.9);
   });
 
@@ -464,5 +432,147 @@ describe('루멘 균열 수호자 유물', () => {
       return s.weapons.devices.find((d) => d.shots)!.next;
     };
     expect(run(['turretResonance']) / run([])).toBeCloseTo(0.85, 1);
+  });
+});
+
+describe('로안 공격 타입 (검기 발사 · 처형 베기)', () => {
+  const pick = (s: GameSim, form: SwordFormId) => learn(s, form);
+
+  it('타입 전용 유물은 고른 타입의 것만 후보에 나오고, 타입을 고르기 전에는 나오지 않는다', () => {
+    const rng = new Rng(5);
+    const roll = (forms: SwordFormId[]) => Array.from({ length: 40 }, () => rollRelics('elite', rng, new Set(), roan, new Set(), forms)).flat()
+      .map((c) => (c.kind === 'relic' ? c.id : ''));
+    const formOf = (id: string) => (RELICS as Record<string, { form?: string }>)[id]?.form;
+    expect(roll([]).some((id) => formOf(id))).toBe(false);
+    const wave = roll(['swordWave']);
+    expect(wave.filter((id) => formOf(id)).every((id) => formOf(id) === 'swordWave')).toBe(true);
+    expect(wave).toContain('swordTwinWave');
+    const perRun = RELIC_IDS.filter((id) => RELICS[id].source === 'elite' && relicAllowed(id, roan) && (!formOf(id) || formOf(id) === 'swordCrush'));
+    expect(perRun).toHaveLength(15);
+  });
+
+  it('거대 검기는 후보를 뽑을 때 35% 확률로만 포함된다', () => {
+    const rng = new Rng(9);
+    const owned = new Set<RelicId>(RELIC_IDS.filter((id) => id !== 'swordGiant'));
+    let seen = 0;
+    for (let i = 0; i < 400; i++) if (rollRelics('elite', rng, owned, roan, new Set(), ['swordWave']).length) seen++;
+    expect(seen / 400).toBeGreaterThan(0.28);
+    expect(seen / 400).toBeLessThan(0.42);
+  });
+
+  it('검기 발사: 매 공격 검기를 쏘고, 넓은 베기는 각도 대신 검기 두께를 키운다', () => {
+    const s = sim(roan, [], { presetUpgrades: { swordArc: 2 } });
+    pick(s, 'swordWave');
+    const base = sim(roan);
+    expect(s.swordInterval).toBeCloseTo(base.swordInterval * 1.1);
+    expect(s.swordAngle('swordWave')).toBe(130);
+    expect(s.waveWidth).toBeCloseTo(28 * 1.4);
+    const far = target(s, 280);
+    s.step(IDLE_INPUT);
+    expect(s.swordSwings).toBe(1);
+    expect(s.playerShots).toHaveLength(1);
+    const shot = s.playerShots[0];
+    expect(shot.source).toBe('swordWave');
+    expect(shot.r).toBeCloseTo(28 * 1.4 / 2);
+    expect(shot.pierceLeft).toBe(3);
+    steps(s, 30);
+    expect(far.maxHp - far.hp).toBeCloseTo(s.swordDamage * 0.9);
+  });
+
+  it('처형 베기: 체력 25% 이하 일반 적은 즉사, 균열 수호자는 30% 이하에서 피해 +30%', () => {
+    const s = sim(roan);
+    pick(s, 'swordExecute');
+    expect(s.swordAngle('swordExecute')).toBe(200);
+    const weak = target(s, 70);
+    weak.hp = 240;
+    s.step(IDLE_INPUT);
+    expect(weak.dead).toBe(true);
+    const dealt = (hp: number) => {
+      const x = sim(roan);
+      pick(x, 'swordExecute');
+      const elite = target(x, 70, 0, 'elite');
+      elite.hp = hp;
+      x.step(IDLE_INPUT);
+      return swordDealt(x);
+    };
+    expect(dealt(290) / dealt(310)).toBeCloseTo(1.3);
+  });
+
+  it('처형 베기 전용 강화와 유물: 처형선·단두대·처형 여파·피의 수확·공포의 처형·연쇄 처형', () => {
+    const s = sim(roan, ['swordGuillotine', 'swordHarvest', 'swordTerror', 'swordChainExec']);
+    pick(s, 'swordExecute');
+    const add = (s as unknown as { addUpgrade(def: unknown, grade: string): boolean }).addUpgrade.bind(s);
+    expect(add(UPGRADE_BY_ID.swordExecuteLine, 'common')).toBe(true);
+    expect(add(UPGRADE_BY_ID.swordExecuteBlast, 'common')).toBe(true);
+    expect(s.executeThreshold).toBeCloseTo(0.25 + 0.03 + 0.08);
+    const interval = s.swordInterval;
+    const weak = target(s, 70);
+    weak.hp = 350;
+    const near = target(s, 70, 50);
+    near.hp = near.maxHp = 1000;
+    s.player.hp = 10;
+    s.step(IDLE_INPUT);
+    expect(weak.dead).toBe(true);
+    expect(near.rootedUntil).toBeGreaterThan(s.elapsed);
+    expect(s.player.hp).toBe(11);
+    expect(s.swordInterval).toBeCloseTo(interval * 0.92);
+  });
+
+  it('반월 연격 유물: 삼일월·월광 연결·그믐 칼날', () => {
+    const s = sim(roan, ['swordTriple', 'swordNewmoon', 'swordMoonlink']);
+    pick(s, 'swordCrescent');
+    const enemy = target(s, 70);
+    s.step(IDLE_INPUT);
+    expect(1000 - enemy.hp).toBeCloseTo(s.swordDamage * 0.45);
+    const cd = s.player.fireCd;
+    steps(s, 20);
+    expect(1000 - enemy.hp).toBeCloseTo(s.swordDamage * (0.45 + 0.8 + 0.4));
+    expect(s.player.fireCd).toBeLessThan(cd - 20 / 60 - s.swordInterval * 0.03);
+  });
+
+  it('강철 파쇄 유물: 파쇄 균열·갑주 분쇄·무게 추', () => {
+    const base = sim(roan);
+    pick(base, 'swordCrush');
+    const s = sim(roan, ['swordFissure', 'swordSunder', 'swordWeighted']);
+    pick(s, 'swordCrush');
+    expect(s.swordInterval).toBeCloseTo(base.swordInterval * 1.17);
+    const enemy = target(s, 70);
+    const atEnd = target(s, SWORD.range + 40);
+    s.step(IDLE_INPUT);
+    expect(1000 - enemy.hp).toBeCloseTo(s.swordDamage * 2.0 * 1.35);
+    expect(s.relics.damageMultiplier(enemy, false)).toBeCloseTo(1.15);
+    s.player.fireCd = Infinity;
+    steps(s, 60);
+    expect(atEnd.hp).toBeLessThan(1000);
+  });
+
+  it('근위 검무 유물: 원심 칼날·수호의 원·철벽 검무', () => {
+    const s = sim(roan, ['swordCentrifuge', 'swordWard', 'swordBulwark'], { god: false });
+    pick(s, 'swordGuard');
+    expect(s.strikeRange('swordGuard')).toBeCloseTo(SWORD.range * 1.25);
+    for (const x of [60, 80, 100]) target(s, x);
+    s.player.hp = 50;
+    const taken = s.relics.damageTaken();
+    s.step(IDLE_INPUT);
+    expect(s.player.hp).toBeCloseTo(52);
+    expect(s.relics.damageTaken()).toBeCloseTo(taken * 0.91);
+  });
+
+  it('검기 발사 유물: 거대 검기·쌍검기·꿰뚫는 검기·회귀 검기', () => {
+    const s = sim(roan, ['swordGiant', 'swordTwinWave', 'swordPiercer', 'swordReturn']);
+    pick(s, 'swordWave');
+    expect(s.waveWidth).toBeCloseTo(70);
+    expect(s.waveRange).toBeCloseTo(750);
+    target(s, 70);
+    s.step(IDLE_INPUT);
+    expect(s.playerShots[0].pierceLeft).toBe(6);
+    expect(s.playerShots[0].damage).toBeCloseTo(s.swordDamage * 0.9 * 0.5);
+    s.player.fireCd = Infinity;
+    steps(s, 8);
+    expect(s.playerShots.filter((p) => p.source === 'swordWave')).toHaveLength(2);
+    const first = s.playerShots[0];
+    const vx = first.vx;
+    steps(s, Math.round(750 / 620 * 60) + 2);
+    expect(Math.sign(first.vx)).toBe(-Math.sign(vx));
   });
 });

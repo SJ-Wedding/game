@@ -317,7 +317,7 @@ export class Screens {
         btn.style.setProperty('--form-color', `#${form.color.toString(16)}`);
         btn.dataset.swordForm = c.id;
         btn.append(
-          el('span', { class: 'cat', text: '근접 공격 형태' }),
+          el('span', { class: 'cat', text: '공격 타입' }),
           el('span', { class: 'sword-form-symbol', 'aria-hidden': 'true', text: form.symbol }),
           el('strong', { class: 'name', text: form.name }),
           el('span', { class: 'desc', text: SWORD_FORM_DESCRIPTIONS[c.id] }),
@@ -361,8 +361,8 @@ export class Screens {
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
         ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
-        el('p', { class: 'muted', text: formChoice ? `${opts.swordForms.length + 1}번째 공격 형태를 고르세요. 배운 형태는 한 번 공격할 때 함께 발동합니다.` : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
-        el('div', { class: 'cards' }, cards),
+        el('p', { class: 'muted', text: formChoice ? '공격 타입 하나를 고르세요 (클릭 또는 1~5). 이번 판 동안 이 타입으로만 공격하고, 이 타입의 유물만 나옵니다.' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('div', { class: cards.length > 3 ? 'cards many' : 'cards' }, cards),
         ...(formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
     );
@@ -501,9 +501,9 @@ export class Screens {
 
   private swordStatus(forms: readonly { id: SwordFormId; angle: number }[]): HTMLElement {
     return el('section', { class: 'sword-forms', 'data-testid': 'sword-forms' }, [
-      el('h3', { text: forms.length > 1 ? '동시 발동하는 공격 형태' : '로안 공격 형태' }),
-      forms.length ? el('ul', {}, forms.map(({ id, angle }) => el('li', { text: `${SWORD_FORMS[id].name} · ${angle}°` })))
-        : el('p', { class: 'muted', text: `기본 베기 · Lv ${SWORD_FORM_LEVELS[0]}에 첫 형태 선택` }),
+      el('h3', { text: '로안 공격 타입' }),
+      forms.length ? el('ul', {}, forms.map(({ id, angle }) => el('li', { text: `${SWORD_FORMS[id].name} · ${id === 'swordWave' ? '검기' : `${angle}°`}` })))
+        : el('p', { class: 'muted', text: `기본 베기 · Lv ${SWORD_FORM_LEVELS[0]}에 공격 타입 선택` }),
     ]);
   }
 

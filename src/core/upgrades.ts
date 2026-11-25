@@ -107,15 +107,17 @@ export function rollRunChoices(
   return [...choices.slice(0, PROGRESSION_CONFIG.choiceCount - 1), weapon];
 }
 
-function masteryAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
+function masteryAvailable(loadout: Loadout, def: UpgradeDef, level: number, forms: readonly string[] = []): boolean {
   if (!def.mastery || loadout.character === 'ranger') return false;
   const mastery = CHARACTER_UPGRADES[def.mastery];
   return mastery.path === (loadout.character === 'lumen' ? loadout.weapon : 'roan')
-    && (!('minLevel' in mastery) || level >= mastery.minLevel);
+    && (!('minLevel' in mastery) || level >= mastery.minLevel)
+    && (!('form' in mastery) || forms.includes(mastery.form));
 }
 
-export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: number): boolean {
-  if (def.mastery) return masteryAvailable(loadout, def, level);
+/** forms: 로안이 고른 공격 타입. 타입 전용 강화는 그 타입을 고른 뒤에만 나온다. */
+export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: number, forms: readonly string[] = []): boolean {
+  if (def.mastery) return masteryAvailable(loadout, def, level, forms);
   if (loadout.character === 'ranger') return true;
   if (def.weapon) return loadout.character === 'lumen' && loadout.weapon === def.weapon;
   return def.category !== 'attack';
@@ -123,10 +125,10 @@ export function upgradeAvailable(loadout: Loadout, def: UpgradeDef, level: numbe
 
 export function rollMasteryChoices(
   rng: Rng, stacks: Stacks, loadout: Loadout, level: number, luck: number,
-  { exclude = [], armory = false }: { exclude?: UpgradeId[]; armory?: boolean } = {},
+  { exclude = [], armory = false, forms = [] }: { exclude?: UpgradeId[]; armory?: boolean; forms?: readonly string[] } = {},
 ): UpgradeChoice[] {
   const weapon = loadout.character === 'lumen' ? UPGRADE_BY_ID[loadout.weapon] : undefined;
-  const mastery = MASTERY_UPGRADES.filter((def) => masteryAvailable(loadout, def, level));
+  const mastery = MASTERY_UPGRADES.filter((def) => masteryAvailable(loadout, def, level, forms));
   if (weapon?.maxStacks !== undefined && stacks[weapon.id] < weapon.maxStacks) mastery.push(weapon);
   if (armory) return rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount, mastery);
   const dedicated = rollChoices(rng, stacks, luck, exclude, PROGRESSION_CONFIG.choiceCount - 1, mastery);
