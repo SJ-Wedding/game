@@ -71,7 +71,7 @@ export class GameScene extends Phaser.Scene {
     this.drawFloor();
     this.groundEffects = this.add.graphics().setDepth(1);
     this.bossImage = this.add.image(0, 0, 'boss').setDepth(3).setVisible(false);
-    this.playerImage = this.add.image(0, 0, 'player', 1).setDepth(5).setScale(2).setVisible(false);
+    this.playerImage = this.add.image(0, 0, 'player', 1).setDepth(5).setVisible(false);
     this.weaponEffects = this.add.graphics().setDepth(5.5);
     this.g = this.add.graphics().setDepth(6);
     const kb = this.input.keyboard!;
@@ -411,6 +411,7 @@ export class GameScene extends Phaser.Scene {
     if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
     else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
     this.playerImage.setPosition(Math.round(p.x), Math.round(p.y))
+      .setScale(sim.loadout.character === 'roan' ? 1.25 : 2)
       .setFlipX(p.facing === 'west')
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
@@ -418,7 +419,7 @@ export class GameScene extends Phaser.Scene {
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
-    const aimMarker = CHARACTER_FRAME_SIZE + 2;
+    const aimMarker = this.playerImage.displayWidth / 2 + 2;
     if (sim.loadout.character !== 'lumen') g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
       p.x + ax * (aimMarker + 8), p.y + ay * (aimMarker + 8),
       p.x + ax * aimMarker - ay * 4, p.y + ay * aimMarker + ax * 4,
