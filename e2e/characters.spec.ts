@@ -89,7 +89,7 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   expect(errors).toEqual([]);
 });
 
-test('로안: 6·12·18레벨에 고른 형태 순서와 다음 베기를 보여 준다', async ({ page }) => {
+test('로안: 6·12·18레벨에 고른 형태가 함께 발동하고 상태창에 표시된다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=553');
   await page.getByTestId('play').click();
@@ -107,27 +107,31 @@ test('로안: 6·12·18레벨에 고른 형태 순서와 다음 베기를 보여
       }
     }, level);
     await expect(page.getByRole('heading', { name: `로안 공격 형태 · Lv ${level}` })).toBeVisible();
+    await expect(page.getByText('배운 형태는 한 번 공격할 때 함께 발동합니다.', { exact: false })).toBeVisible();
     await expect(page.locator('[data-sword-form]')).toHaveCount(count);
     await expect(page.getByTestId('reroll')).toHaveCount(0);
     await page.locator(`[data-sword-form="${choice}"]`).click();
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   }
 
-  const next = page.getByTestId('hud-sword-next');
-  await expect(next).toContainText('강철 파쇄');
+  await expect(page.getByTestId('hud-sword-forms')).toHaveText('검격 3종 동시 발동');
   await page.evaluate(() => {
     const { sim } = (window as any).__rift;
     const target = sim.spawnEnemy('chaser', sim.player.x + 75, sim.player.y);
     target.hp = target.maxHp = 1000;
     target.speed = 0;
   });
-  await expect(next).toContainText('근위 검무');
+  await expect.poll(() => page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    const firstStrikes = sim.swordSweeps.filter((sweep: { followup?: boolean }) => !sweep.followup);
+    return [firstStrikes.length, new Set(firstStrikes.map((sweep: { at: number }) => sweep.at)).size];
+  })).toEqual([3, 1]);
   await page.keyboard.press('Tab');
-  const order = page.getByTestId('sword-order');
-  await expect(order.locator('li')).toHaveCount(3);
-  for (const [index, name] of ['강철 파쇄', '근위 검무', '반월 연격'].entries()) {
-    await expect(order.locator('li').nth(index)).toContainText(name);
+  const forms = page.getByTestId('sword-forms');
+  await expect(forms.getByRole('heading', { name: '동시 발동하는 공격 형태' })).toBeVisible();
+  await expect(forms.locator('li')).toHaveCount(3);
+  for (const name of ['강철 파쇄', '근위 검무', '반월 연격']) {
+    await expect(forms.locator('li').filter({ hasText: name })).toBeVisible();
   }
-  await expect(order.locator('[aria-current="step"]')).toContainText('근위 검무');
   expect(errors).toEqual([]);
 });

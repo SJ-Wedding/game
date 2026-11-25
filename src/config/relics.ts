@@ -4,9 +4,9 @@ import { FUSION_RELIC_DAMAGE_BONUS, isFusionIngredient, type FusionId } from './
 export const TRIPLE_CHOICE_COUNT = 3;
 
 export const RELICS = {
-  swordScabbard: { source: 'level', symbol: '⛨', character: 'roan', name: '화살막이 검집', effect: '검 궤적에 닿은 적 투사체를 베기 한 번에 최대 3개 지웁니다.' },
-  swordCircle: { source: 'elite', symbol: '◉', character: 'roan', name: '원형 검무의 인장', effect: '매 세 번째 베기가 360° 회전 베기로 바뀝니다. 회전 베기의 피해는 일반 베기의 80%입니다.' },
-  swordRhythm: { source: 'level', symbol: 'ϟ', character: 'roan', name: '부러진 칼등', effect: '한 번에 적 4마리 이상을 베면 다음 베기 대기시간이 35% 줄어듭니다.' },
+  swordScabbard: { source: 'level', symbol: '⛨', character: 'roan', name: '화살막이 검집', effect: '한 번 공격할 때 검 궤적에 닿는 적 투사체를 합계 3개까지 지웁니다.' },
+  swordCircle: { source: 'elite', symbol: '◉', character: 'roan', name: '원형 검무의 인장', effect: '매 세 번째 공격의 첫 검격이 모두 360°를 벱니다. 각 검격은 원래 피해의 80%를 줍니다.' },
+  swordRhythm: { source: 'level', symbol: 'ϟ', character: 'roan', name: '부러진 칼등', effect: '한 번 공격해 서로 다른 적 4마리 이상을 베면 다음 공격 대기시간이 35% 줄어듭니다.' },
   swordDuel: { source: 'elite', symbol: '⚔', character: 'roan', name: '결투자의 장갑', effect: '베기에 맞은 적이 한 마리면 해당 베기의 피해가 50% 증가합니다.' },
   tripleChoice: { source: 'elite', symbol: 'Ⅲ', name: '삼중 선택의 인장', effect: '판마다 처음 장착할 때 보너스 강화 선택이 3회 열립니다. 각 화면에서 강화 하나를 고릅니다.' },
   awl: { source: 'level', symbol: '↠', name: '철심 탄환', effect: '기본탄 한 발이 일반 적을 한 마리 더 관통합니다. 후반 관통과 중첩됩니다.' },

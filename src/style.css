@@ -226,11 +226,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .card.sword-form-card { border-color: var(--form-color); background: #1e2334; }
 .sword-form-card .name, .sword-form-symbol { color: var(--form-color); }
 .sword-form-symbol { font-size: 1.5em; line-height: 1; }
-.sword-next { color: #f3c3a5; }
-.sword-order { width: 100%; padding: 0.55em 0.75em; border: 1px solid #615345; border-radius: 6px; }
-.sword-order ol { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em 1.8em; margin: 0; padding-inline-start: 1.4em; }
-.sword-order li[aria-current='step'] { color: #ffe1b2; }
-.sword-order li small { margin-inline-start: 0.4em; color: #ffc27c; }
+.sword-forms-hud { color: #f3c3a5; }
+.sword-forms { width: 100%; padding: 0.55em 0.75em; border: 1px solid #615345; border-radius: 6px; }
+.sword-forms ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em 1.8em; margin: 0; padding-inline-start: 1.4em; }
 .fusion-recipes { width: 100%; text-align: left; padding: 0.5em 0.85em; background: #231b30; border-radius: 6px; }
 .fusion-recipes summary { cursor: pointer; color: #e1bdff; font-weight: 700; }
 .fusion-recipes ul { margin: 0.5em 0; padding-left: 1.3em; }

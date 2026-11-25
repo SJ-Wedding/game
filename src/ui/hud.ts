@@ -1,4 +1,3 @@
-import { SWORD_FORMS } from '../config/characters';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
@@ -25,7 +24,7 @@ export class Hud {
   private dodgeFill: HTMLElement;
   private dodgeText: HTMLElement;
   private dodgeBox: HTMLElement;
-  private swordNext: HTMLElement;
+  private swordForms: HTMLElement;
   private timer: HTMLElement;
   private timerSub: HTMLElement;
   private kills: HTMLElement;
@@ -58,7 +57,7 @@ export class Hud {
     this.dodgeFill = el('div', { class: 'fill' });
     this.dodgeText = el('span', { class: 'label', 'data-testid': 'hud-dodge' });
     this.dodgeBox = el('div', { class: 'bar dodge' }, [this.dodgeFill, this.dodgeText]);
-    this.swordNext = el('small', { class: 'sword-next hidden', 'data-testid': 'hud-sword-next' });
+    this.swordForms = el('small', { class: 'sword-forms-hud hidden', 'data-testid': 'hud-sword-forms' });
     this.timer = el('div', { class: 'timer', 'data-testid': 'hud-timer' });
     this.timerSub = el('div', { class: 'timer-sub' });
     this.kills = el('div', { class: 'kills', 'data-testid': 'hud-kills' });
@@ -85,7 +84,7 @@ export class Hud {
         el('div', { class: 'bar hp' }, [this.hpFill, this.hpText]),
         el('div', { class: 'bar xp' }, [this.xpFill, this.xpText]),
         this.dodgeBox,
-        this.swordNext,
+        this.swordForms,
         this.xpGainText,
       ]),
       el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
@@ -161,9 +160,9 @@ export class Hud {
     c.text(this.dodgeText, 'dodge', ready ? '회피 준비 (Space)' : `회피 ${p.dodgeCd.toFixed(1)}초`);
     c.toggle(this.dodgeBox, 'dodgeReady', 'ready', ready);
 
-    const nextForm = sim.loadout.character === 'roan' ? sim.nextSwordForm : undefined;
-    c.toggle(this.swordNext, 'swordNextVisible', 'hidden', !nextForm);
-    if (nextForm) c.text(this.swordNext, 'swordNext', `다음 베기 · ${SWORD_FORMS[nextForm].name}`);
+    const formCount = sim.swordForms.length;
+    c.toggle(this.swordForms, 'swordFormsVisible', 'hidden', formCount < 2);
+    if (formCount > 1) c.text(this.swordForms, 'swordForms', `검격 ${formCount}종 동시 발동`);
 
     c.text(this.timer, 'timer', sim.overtime ? `+${formatTime(Math.floor(sim.elapsed - RUN_CONFIG.timeLimit))}` : formatTime(Math.ceil(sim.remaining)));
     const toBoss = RUN_CONFIG.bossAt - sim.elapsed;

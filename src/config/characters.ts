@@ -20,8 +20,8 @@ export const SWORD = {
 
 export const SWORD_FORM_LEVELS: readonly number[] = [6, 12, 18];
 export const SWORD_FORMS = {
-  swordCrescent: { name: '반월 연격', symbol: '☾', color: 0x85e8d7, damage: 0.70, followupDamage: 0.60, followupDelay: 0.15 },
-  swordCrush: { name: '강철 파쇄', symbol: '◆', color: 0xffb16d, damage: 1.70, angle: 70, interval: 1.20, armorPierce: 0.25 },
+  swordCrescent: { name: '반월 연격', symbol: '☾', color: 0x85e8d7, damage: 0.70, angle: SWORD.angle, followupDamage: 0.60, followupDelay: 0.15 },
+  swordCrush: { name: '강철 파쇄', symbol: '◆', color: 0xffb16d, damage: 1.70, angle: 70, maxAngle: 150, armorPierce: 0.25 },
   swordGuard: { name: '근위 검무', symbol: '◔', color: 0xbe9bff, damage: 0.90, angle: 270, range: 0.80 },
 } as const;
 export type SwordFormId = keyof typeof SWORD_FORMS;
@@ -29,7 +29,7 @@ export const SWORD_FORM_IDS = Object.keys(SWORD_FORMS) as SwordFormId[];
 
 export const SWORD_FORM_DESCRIPTIONS: Record<SwordFormId, string> = {
   swordCrescent: '전방을 두 번 벱니다. 첫 베기 피해 70%, 0.15초 뒤 두 번째 베기 피해 60%.',
-  swordCrush: '전방 70°를 내려찍습니다. 피해 170%, 몬스터 피해 저항 25% 무시, 공격 간격 +20%.',
+  swordCrush: '전방 70°를 내려찍습니다. 피해 170%, 몬스터 피해 저항 25% 무시.',
   swordGuard: '몸 주위 270°를 휩씁니다. 피해 90%, 일반 베기 거리의 80%.',
 };
 
@@ -39,8 +39,6 @@ export const turretDelay = (n: number) => 0.42 + 0.58 * (1 - 0.15 / 0.58) ** n;
 export const turretMountDamage = (n: number) => 1 / (1 + (1 / 0.85 - 1) * n + 0.25 * n * Math.max(0, n - 1) / (n + 1));
 
 const pct = (n: number) => Math.round(n * 1000) / 10;
-export const crescentFollowupDelay = (n: number) => Math.max(0.06, SWORD_FORMS.swordCrescent.followupDelay - 0.02 * n);
-export const crushArmorPierce = (n: number) => 1 - (1 - SWORD_FORMS.swordCrush.armorPierce) * (0.4 + 0.6 * (8 / 9) ** n);
 export const CHARACTER_UPGRADES = {
   chainLinks: { path: 'chain', name: '도전선 증설', count: true, text: (n: number) => `최대 연쇄 타격 +${n}회` },
   chainVoltage: { path: 'chain', name: '고전압 축전지', text: (n: number) => `첫 대상 피해 +${pct(0.45 * n)}% · 후속 피해 −${pct(1 - 0.85 ** n)}%` },
@@ -50,18 +48,12 @@ export const CHARACTER_UPGRADES = {
   turretSpeed: { path: 'turret', name: '압축 냉각기', text: (n: number) => `포탑 발사 간격 −${pct(1 - turretDelay(n))}%` },
   turretFrost: { path: 'turret', name: '빙결 탄두', text: (n: number) => `폭발 피해 ${pct(0.35 * n)}% · 폭발 반경 ${Math.round(frostRadius(n))}px · 둔화 ${(n * 0.8).toFixed(1)}초` },
   turretPierce: { path: 'turret', name: '철갑 노즐', count: true, text: (n: number) => `포탑탄 관통 +${n}마리` },
-  swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `베기 간격 −${pct(1 - 0.9 ** n)}%` },
-  swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `베기 거리 +${pct(0.12 * n)}% (최대 ${SWORD.maxRange}px)` },
-  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (최대 360°)` },
-  swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `검 피해 +${pct(SWORD.damagePerMastery * n)}% · 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
-  swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
-  swordCrescentEdge: { path: 'roan', form: 'swordCrescent', name: '반월 연격 · 되베기', text: (n: number) => `두 번째 베기 피해 +${pct(0.08 * n)}%p · 각도 +${8 * n}°` },
-  swordCrescentTempo: { path: 'roan', form: 'swordCrescent', name: '반월 연격 · 빠른 연결', text: (n: number) => `두 베기 사이 간격 ${crescentFollowupDelay(n).toFixed(3).replace(/0$/, '')}초` },
-  swordCrushWidth: { path: 'roan', form: 'swordCrush', name: '강철 파쇄 · 넓은 칼날', text: (n: number) => `내려찍기 각도 +${8 * n}° (최대 150°)` },
-  swordCrushPierce: { path: 'roan', form: 'swordCrush', name: '강철 파쇄 · 갑주 절단', text: (n: number) => `강철 파쇄가 몬스터 피해 저항 ${pct(crushArmorPierce(n))}% 무시` },
-  swordGuardWidth: { path: 'roan', form: 'swordGuard', name: '근위 검무 · 넓은 회전', text: (n: number) => `회전 베기 각도 +${12 * n}° (최대 360°)` },
-  swordGuardEdge: { path: 'roan', form: 'swordGuard', name: '근위 검무 · 회전 칼날', text: (n: number) => `회전 베기 피해 +${pct(0.08 * n)}%p` },
-} as const satisfies Record<string, { path: LumenWeapon | 'roan'; name: string; text: (n: number) => string; count?: true; minLevel?: number; form?: SwordFormId }>;
+  swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}%` },
+  swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 검격 거리 +${pct(0.12 * n)}% (기준 거리 최대 ${SWORD.maxRange}px)` },
+  swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `모든 검격 각도 +${20 * n}° (강철 파쇄 최대 ${SWORD_FORMS.swordCrush.maxAngle}°, 그 외 360°)` },
+  swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
+  swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
+} as const satisfies Record<string, { path: LumenWeapon | 'roan'; name: string; text: (n: number) => string; count?: true; minLevel?: number }>;
 
 export type CharacterUpgradeId = keyof typeof CHARACTER_UPGRADES;
 export const CHARACTER_UPGRADE_IDS = Object.keys(CHARACTER_UPGRADES) as CharacterUpgradeId[];

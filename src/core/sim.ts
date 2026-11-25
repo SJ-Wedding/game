@@ -1,6 +1,6 @@
 import {
   DEFAULT_LOADOUT, LUMEN, SWORD, SWORD_FORMS, SWORD_FORM_IDS, SWORD_FORM_LEVELS, characterUpgradeValue,
-  crescentFollowupDelay, crushArmorPierce, type CharacterUpgradeId, type Loadout, type SwordFormId,
+  type CharacterUpgradeId, type Loadout, type SwordFormId,
 } from '../config/characters';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
 import { OPENING_RELIC_LEVEL, validCarry, validRelicIds, type RelicId, type RelicSource } from '../config/relics';
@@ -87,10 +87,15 @@ interface SwordSweep extends SwordStrike {
   blocked: { x: number; y: number }[];
 }
 
+interface SwordAttack {
+  hits: Set<SwordTarget>;
+  blocksLeft: number;
+}
+
 interface SwordFollowup {
   at: number;
   strike: SwordStrike;
-  firstHits: SwordTarget[];
+  attack: SwordAttack;
   rhythmReduction: number;
 }
 
@@ -128,7 +133,6 @@ export class GameSim {
   swordSwings = 0;
   private readonly learnedSwordForms: SwordFormId[] = [];
   readonly swordForms: readonly SwordFormId[] = this.learnedSwordForms;
-  private lastSwordForm?: SwordFormId;
   private swordFollowup: SwordFollowup | null = null;
   readonly swordSweeps: SwordSweep[] = [];
 
@@ -215,7 +219,7 @@ export class GameSim {
     if (options.presetUpgrades) {
       for (const pick of picksFromCounts(options.presetUpgrades)) {
         const def = UPGRADE_BY_ID[pick.id];
-        if (def && upgradeAvailable(this.loadout, def, this.level, this.swordForms)) this.addUpgrade(def, pick.grade);
+        if (def && upgradeAvailable(this.loadout, def, this.level)) this.addUpgrade(def, pick.grade);
       }
     }
     if (this.loadout.character === 'lumen') this.stacks[this.loadout.weapon] = Math.max(1, this.stacks[this.loadout.weapon]);
@@ -366,7 +370,7 @@ export class GameSim {
       this.target = null;
       if (len > 0.01) p.aim = Math.atan2(my, mx);
     } else if (AUTO_COMBAT.enabled) {
-      const range = this.loadout.character === 'roan' ? this.nextSwordRange : AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus;
+      const range = this.loadout.character === 'roan' ? this.swordTargetRange : AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus;
       this.target = this.findTarget(range);
       if (!this.target && this.loadout.character === 'roan' && this.relics.has('swordScabbard')) {
         this.target = this.enemyShots.find((shot) => shot.life > 0 && dist(p.x, p.y, shot.x, shot.y) <= range + shot.r) ?? null;
@@ -492,21 +496,18 @@ export class GameSim {
     return Math.min(SWORD.maxRange, SWORD.range * (1 + 0.12 * this.mastery('swordRange')));
   }
 
-  get nextSwordForm(): SwordFormId | undefined {
-    const previous = this.lastSwordForm ? this.swordForms.indexOf(this.lastSwordForm) : -1;
-    return this.swordForms[(previous + 1) % (this.swordForms.length || 1)];
-  }
-
   get swordSweep(): SwordSweep | null {
     return this.swordSweeps.at(-1) ?? null;
   }
 
-  private get nextSwordRange(): number {
-    return this.swordRange * (this.nextSwordForm === 'swordGuard' ? SWORD_FORMS.swordGuard.range : 1);
+  private get swordTargetRange(): number {
+    return this.swordRange * (this.swordForms.length === 1 && this.swordForms[0] === 'swordGuard' ? SWORD_FORMS.swordGuard.range : 1);
   }
 
-  get swordAngle(): number {
-    return Math.min(360, SWORD.angle + 20 * this.mastery('swordArc'));
+  swordAngle(form?: SwordFormId): number {
+    const base = form ? SWORD_FORMS[form].angle : SWORD.angle;
+    const limit = form === 'swordCrush' ? SWORD_FORMS.swordCrush.maxAngle : 360;
+    return Math.min(limit, base + 20 * this.mastery('swordArc'));
   }
 
   get swordInterval(): number {
@@ -520,9 +521,8 @@ export class GameSim {
 
   private swingSword(): void {
     const p = this.player;
-    const form = this.nextSwordForm;
-    const range = this.nextSwordRange;
-    // 이동이 끝난 위치에서 유효한 대상을 확인한 뒤에만 순서를 넘긴다.
+    const range = this.swordTargetRange;
+    // 이동이 끝난 위치에서 유효한 대상을 확인한 뒤 공격한다.
     if (AUTO_COMBAT.enabled) {
       const target = this.findTarget(range) ?? (this.relics.has('swordScabbard')
         ? this.enemyShots.find((shot) => shot.life > 0 && dist(p.x, p.y, shot.x, shot.y) <= range + shot.r) : undefined);
@@ -530,34 +530,37 @@ export class GameSim {
       p.aim = Math.atan2(target.y - p.y, target.x - p.x);
     }
     this.facePlayer(Math.cos(p.aim), Math.sin(p.aim));
-    this.lastSwordForm = form;
     this.swordSwings++;
 
-    const config = form ? SWORD_FORMS[form] : undefined;
-    const angleBonus = this.swordAngle - SWORD.angle;
-    let width = this.swordAngle;
-    if (form === 'swordCrush') width = Math.min(150, SWORD_FORMS.swordCrush.angle + angleBonus * 0.35 + 8 * this.mastery('swordCrushWidth'));
-    if (form === 'swordGuard') width = Math.min(360, SWORD_FORMS.swordGuard.angle + angleBonus * 0.35 + 12 * this.mastery('swordGuardWidth'));
+    const attack: SwordAttack = { hits: new Set(), blocksLeft: this.relics.has('swordScabbard') ? 3 : 0 };
     const spin = this.relics.has('swordCircle') && this.swordSwings % 3 === 0;
-    const factor = (config?.damage ?? 1) + (form === 'swordGuard' ? 0.08 * this.mastery('swordGuardEdge') : 0);
-    const hits = this.hitSword({
-      form, angle: p.aim, range, width: spin ? Math.PI * 2 : width * Math.PI / 180,
-      factor: factor * (spin ? 0.8 : 1),
-      armorPierce: form === 'swordCrush' ? crushArmorPierce(this.mastery('swordCrushPierce')) : 0,
-    });
-    const interval = this.swordInterval * (form === 'swordCrush' ? SWORD_FORMS.swordCrush.interval : 1);
+    // 형태 선택 순서와 무관하게 같은 틱에 모든 첫 타격을 판정한다.
+    const forms = this.swordForms.length ? SWORD_FORM_IDS.filter((form) => this.swordForms.includes(form)) : [undefined];
+    for (const form of forms) {
+      this.hitSword({
+        form, angle: p.aim,
+        range: this.swordRange * (form === 'swordGuard' ? SWORD_FORMS.swordGuard.range : 1),
+        width: spin ? Math.PI * 2 : this.swordAngle(form) * Math.PI / 180,
+        factor: (form ? SWORD_FORMS[form].damage : 1) * (spin ? 0.8 : 1),
+        armorPierce: form === 'swordCrush' ? SWORD_FORMS.swordCrush.armorPierce : 0,
+      }, attack);
+    }
+    this.emit('swing', p.x, p.y);
+
+    const interval = this.swordInterval;
     const rhythmReduction = this.relics.has('swordRhythm') ? interval * 0.35 : 0;
-    p.fireCd = interval - (hits.length >= 4 ? rhythmReduction : 0);
-    if (form === 'swordCrescent') {
-      const edge = this.mastery('swordCrescentEdge');
+    p.fireCd = interval - (attack.hits.size >= 4 ? rhythmReduction : 0);
+    if (this.swordForms.includes('swordCrescent')) {
+      const crescent = SWORD_FORMS.swordCrescent;
       this.swordFollowup = {
-        at: this.elapsed + crescentFollowupDelay(this.mastery('swordCrescentTempo')),
+        at: this.elapsed + crescent.followupDelay,
         strike: {
-          form, angle: p.aim, range, width: Math.min(360, this.swordAngle + 8 * edge) * Math.PI / 180,
-          factor: SWORD_FORMS.swordCrescent.followupDamage + 0.08 * edge, followup: true,
+          form: 'swordCrescent', angle: p.aim, range: this.swordRange,
+          width: this.swordAngle('swordCrescent') * Math.PI / 180,
+          factor: crescent.followupDamage, followup: true,
         },
-        firstHits: hits,
-        rhythmReduction: hits.length < 4 ? rhythmReduction : 0,
+        attack,
+        rhythmReduction: attack.hits.size < 4 ? rhythmReduction : 0,
       };
     }
   }
@@ -567,13 +570,14 @@ export class GameSim {
     const followup = this.swordFollowup;
     if (!followup || this.elapsed + 1e-6 < followup.at) return;
     this.swordFollowup = null;
-    const hits = this.hitSword(followup.strike);
-    if (followup.rhythmReduction && new Set([...followup.firstHits, ...hits]).size >= 4) {
+    this.hitSword(followup.strike, followup.attack);
+    this.emit('swing', this.player.x, this.player.y);
+    if (followup.rhythmReduction && followup.attack.hits.size >= 4) {
       this.player.fireCd -= followup.rhythmReduction;
     }
   }
 
-  private hitSword(strike: SwordStrike): SwordTarget[] {
+  private hitSword(strike: SwordStrike, attack: SwordAttack): void {
     // 두 번째 베기도 발동 시점의 플레이어 위치에서 판정한다.
     const { x, y } = this.player;
     const { angle, width, range, factor, armorPierce = 0 } = strike;
@@ -591,21 +595,20 @@ export class GameSim {
     if (boss && !boss.dead && !bossInvulnerable(boss) && intersects(boss)) hits.push(boss);
     const damage = this.swordDamage * factor * (hits.length === 1 && this.relics.has('swordDuel') ? 1.5 : 1);
     for (const target of hits) {
+      attack.hits.add(target);
       if ('id' in target) this.damageEnemy(target, damage, 'sword', armorPierce);
       else this.damageBoss(damage, 'sword', armorPierce);
     }
     const blocked: { x: number; y: number }[] = [];
-    if (this.relics.has('swordScabbard')) {
+    if (attack.blocksLeft > 0) {
       for (const shot of this.enemyShots) {
-        if (blocked.length === 3) break;
         if (shot.life <= 0 || !intersects(shot)) continue;
         shot.life = 0;
         blocked.push({ x: shot.x, y: shot.y });
+        if (--attack.blocksLeft === 0) break;
       }
     }
     this.swordSweeps.push({ ...strike, x, y, at: this.elapsed, blocked });
-    this.emit('swing', x, y);
-    return hits;
   }
 
   private firePlayer(): void {
@@ -1045,7 +1048,7 @@ export class GameSim {
     }
     const choices = this.loadout.character === 'ranger'
       ? rollRunChoices(this.rngUpgrade, this.rngWeapon, this.stacks, level, luck, exclude)
-      : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.pendingLevel, luck, { exclude, forms: this.swordForms });
+      : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.pendingLevel, luck, { exclude });
     let out = [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
     // 점술가의 카드: 후보 2개. 무기 후보(마지막 칸)는 남긴다.
     if (out.length > this.relics.choiceCount) out = [out[0], ...out.slice(out.length - this.relics.choiceCount + 1)];
@@ -1075,7 +1078,7 @@ export class GameSim {
   }
 
   private rollArmoryChoices(): UpgradeChoice[] {
-    if (this.loadout.character !== 'ranger') return rollMasteryChoices(this.rngWeapon, this.stacks, this.loadout, this.level, this.luck, { armory: true, forms: this.swordForms });
+    if (this.loadout.character !== 'ranger') return rollMasteryChoices(this.rngWeapon, this.stacks, this.loadout, this.level, this.luck, { armory: true });
     const choices = this.fusionChoices().slice(0, PROGRESSION_CONFIG.choiceCount);
     const available = WEAPON_UPGRADES.filter((def) => this.stacks[def.id] < def.maxStacks);
     const featured = new Set<UpgradeId>();
@@ -1116,7 +1119,7 @@ export class GameSim {
       } else if (source === 'bonus') {
         this.choices = this.loadout.character === 'ranger'
           ? [...this.fusionChoices(), ...rollChoices(this.rngUpgrade, this.stacks, this.luck)].slice(0, PROGRESSION_CONFIG.choiceCount)
-          : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.level, this.luck, { forms: this.swordForms });
+          : rollMasteryChoices(this.rngUpgrade, this.stacks, this.loadout, this.level, this.luck);
         this.applyGradeRelics(this.choices, this.luck, false);
         this.bonusOpen = true;
       } else if (source === 'coin') {
@@ -1159,7 +1162,7 @@ export class GameSim {
         this.pickOrder.push(c.id);
       } else if (c.kind === 'upgrade') {
         if (c.def.weapon && isFusionIngredient(this.weapons.fusions, c.def.weapon)) return false;
-        if (!upgradeAvailable(this.loadout, c.def, this.level, this.swordForms) || !this.addUpgrade(c.def, c.grade)) return false;
+        if (!upgradeAvailable(this.loadout, c.def, this.level) || !this.addUpgrade(c.def, c.grade)) return false;
         this.stats = computeStats(this.picks, this.meta);
         this.relics.heal(healOnPick(c.def.id, c.grade));
       } else {

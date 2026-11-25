@@ -351,7 +351,7 @@ export class Screens {
       el('div', { class: 'panel levelup' }, [
         el('h2', { text: opts.title }),
         ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
-        el('p', { class: 'muted', text: formChoice ? `${opts.swordForms.length + 1}번째 공격 형태를 고르세요. 획득 순서대로 검을 휘두릅니다.` : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
+        el('p', { class: 'muted', text: formChoice ? `${opts.swordForms.length + 1}번째 공격 형태를 고르세요. 배운 형태는 한 번 공격할 때 함께 발동합니다.` : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
         el('div', { class: 'cards' }, cards),
         ...(formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
@@ -364,8 +364,7 @@ export class Screens {
     loadout: Loadout;
     starterRank?: number;
     swordAngle?: number;
-    swordForms: readonly SwordFormId[];
-    nextSwordForm?: SwordFormId;
+    swordForms: readonly { id: SwordFormId; angle: number }[];
     echo?: { growth: ReturnType<typeof echoGrowth>; luck: number };
     layers: { base: PlayerStats; meta: PlayerStats; final: PlayerStats };
     picks: UpgradePick[];
@@ -450,7 +449,7 @@ export class Screens {
           el('tbody', {}, rows),
         ]),
         ...(opts.swordAngle ? [el('small', { class: 'muted', text: `검 타격 각도 ${opts.swordAngle}°` })] : []),
-        ...(opts.loadout.character === 'roan' ? [this.swordStatus(opts.swordForms, opts.nextSwordForm)] : []),
+        ...(opts.loadout.character === 'roan' ? [this.swordStatus(opts.swordForms)] : []),
         el('h3', { text: '이번 판 강화 스택 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
         ...(opts.echo ? [this.echoStatus(opts.echo.growth, opts.echo.luck, opts.fusions.includes('volley'))] : []),
@@ -490,12 +489,11 @@ export class Screens {
     ]));
   }
 
-  private swordStatus(forms: readonly SwordFormId[], next?: SwordFormId): HTMLElement {
-    return el('section', { class: 'sword-order', 'data-testid': 'sword-order' }, [
-      el('h3', { text: '로안 공격 순서' }),
-      forms.length ? el('ol', {}, forms.map((id) => el('li', id === next ? { 'aria-current': 'step' } : {}, [
-        SWORD_FORMS[id].name, ...(id === next ? [el('small', { text: '다음' })] : []),
-      ]))) : el('p', { class: 'muted', text: `기본 베기 · Lv ${SWORD_FORM_LEVELS[0]}에 첫 형태 선택` }),
+  private swordStatus(forms: readonly { id: SwordFormId; angle: number }[]): HTMLElement {
+    return el('section', { class: 'sword-forms', 'data-testid': 'sword-forms' }, [
+      el('h3', { text: forms.length > 1 ? '동시 발동하는 공격 형태' : '로안 공격 형태' }),
+      forms.length ? el('ul', {}, forms.map(({ id, angle }) => el('li', { text: `${SWORD_FORMS[id].name} · ${angle}°` })))
+        : el('p', { class: 'muted', text: `기본 베기 · Lv ${SWORD_FORM_LEVELS[0]}에 첫 형태 선택` }),
     ]);
   }
 
