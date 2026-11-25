@@ -37,7 +37,7 @@ interface EffectTiming {
 
 export interface WeaponEffect extends EffectTiming {
   kind: WeaponId;
-  variant?: 'markCharge' | 'echoCharge' | 'frostBurst' | 'maceQuake' | 'maceScar';
+  variant?: 'markCharge' | 'echoCharge' | 'frostBurst' | 'maceQuake' | 'maceScar' | 'bleedBurst';
   /** 도착 지점별 재연쇄 횟수. 첫 타격과 출발 지점은 0. */
   reboundCounts?: number[];
 }

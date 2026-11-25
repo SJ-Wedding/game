@@ -5,9 +5,13 @@
  */
 
 export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
-export const DAGGER_THRUST = { damage: 0.35, range: 80, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
+export const DAGGER_THRUST = { damage: 0.35, range: 100, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
 export const SCIMITAR_THRUST_BONUSES = { widthPerMastery: 3, desertWindWidth: 6 } as const;
 export const TWIN_BLADE_DAMAGE_FACTOR = 0.6;
+/** 단검 계열 출혈 연쇄: 출혈 중인 적이 죽으면 출혈이 옮겨 붙고 남은 출혈 피해가 터진다 */
+export const DAGGER_BLEED_CHAIN = { spreadTargets: 2, spreadRadius: 120, burstRadius: 70, burstRadiusRelic: 110, burstMinSeconds: 1 } as const;
+/** 시미터 각성: 출혈 중인 적 처치 시 초승달 검기 */
+export const SCIMITAR_CRESCENT = { range: 200, width: 40, damage: 1.0, bleedStacks: 2 } as const;
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
 
@@ -42,7 +46,7 @@ export const ROAN_WEAPONS = {
   dagger: {
     name: '단검', symbol: '⸸', color: 0xc78cff, damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0,
     maxHp: 150, damageTaken: 1.05, moveSpeed: 1.12, dodgeCooldown: 2.4, motion: 'thrust',
-    special: '출혈: 맞은 적에게 3초간 초당 검 피해 15%, 최대 5중첩',
+    special: `출혈: 맞은 적에게 3초간 초당 검 피해 15%, 최대 5중첩. 출혈 중인 적이 죽으면 ${DAGGER_BLEED_CHAIN.spreadRadius}px 안의 ${DAGGER_BLEED_CHAIN.spreadTargets}마리에게 출혈 절반이 옮고, 남은 출혈 피해가 반경 ${DAGGER_BLEED_CHAIN.burstRadius}px에 터짐`,
     description: `빠른 직선 찌르기. 피해 ${DAGGER_THRUST.damage * 100}%, 공격 간격 55%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px. 체력 150, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.`,
   },
   mace: {
@@ -96,7 +100,7 @@ export const ROAN_UPGRADES = {
   scimitar: {
     weapon: 'dagger', name: '시미터', symbol: '☾', damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'thrust',
     effect: `직선 찌르기 (검 피해 ${DAGGER_THRUST.damage * 100}%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px). 출혈 중인 적에게 직접 피해 +30%.`,
-    awaken: '출혈 중인 적을 처치하면 출혈이 주변 2마리에 번짐',
+    awaken: `초승달 검기: 출혈 중인 적을 처치하면 찌르던 방향으로 검기 발사 (거리 ${SCIMITAR_CRESCENT.range}px·폭 ${SCIMITAR_CRESCENT.width}px, 찌르기 피해 ${SCIMITAR_CRESCENT.damage * 100}%, 관통, 출혈 ${SCIMITAR_CRESCENT.bleedStacks}중첩)`,
   },
   twinblades: {
     weapon: 'dagger', name: '쌍검', symbol: '⚔', damage: DAGGER_THRUST.damage * TWIN_BLADE_DAMAGE_FACTOR,

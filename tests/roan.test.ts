@@ -141,15 +141,15 @@ describe('무기 특화 기능', () => {
     expect((s.damageByAttack.bleed ?? 0) - before).toBeGreaterThan(swordDamage * 0.15 * 5 * 0.9);
   });
 
-  it.each([undefined, 'stiletto', 'scimitar'] as const)('단검 계열 %s은 사거리 80px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
+  it.each([undefined, 'stiletto', 'scimitar'] as const)('단검 계열 %s은 사거리 100px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
     const s = make('dagger', upgrade);
     const ahead = target(s, 36);
-    const edge = target(s, 80, 17);
+    const edge = target(s, 100, 17);
     const beside = target(s, 60, 25);
-    const beyond = target(s, 94);
+    const beyond = target(s, 114);
     const behind = target(s, -60);
     swing(s);
-    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 10, hits: 2 });
+    expect(s.swordSweep).toMatchObject({ range: 100, width: 0, lineWidth: 10, hits: 2 });
     for (const enemy of [ahead, edge]) expect(enemy.maxHp - enemy.hp).toBeCloseTo(make('sword').roan.damage * 0.35);
     for (const enemy of [beside, beyond, behind]) expect(enemy.hp).toBe(enemy.maxHp);
   });
@@ -159,7 +159,7 @@ describe('무기 특화 기능', () => {
     target(s, 42);
     const edge = target(s, 72, 24);
     swing(s);
-    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 24, hits: 2 });
+    expect(s.swordSweep).toMatchObject({ range: 100, width: 0, lineWidth: 24, hits: 2 });
     expect(edge.hp).toBeLessThan(edge.maxHp);
   });
 
@@ -170,26 +170,78 @@ describe('무기 특화 기능', () => {
     target(s, 40);
     const edge = target(s, 68, 23);
     swing(s);
-    expect(s.swordSweep).toMatchObject({ range: 80, width: 0, lineWidth: 21, hits: 2 });
+    expect(s.swordSweep).toMatchObject({ range: 100, width: 0, lineWidth: 21, hits: 2 });
     expect(edge.hp).toBeLessThan(edge.maxHp);
   });
 
-  it('시미터가 출혈 중인 적을 처치하면 각성 전염과 초승달 칼날의 직선 찌르기가 발동한다', () => {
-    const s = make('dagger', 'scimitar', { awaken: true, relics: ['crescentEdge'] });
+  it('단검 계열: 출혈 중인 적이 죽으면 가까운 2마리에 출혈 절반이 옮고 남은 출혈 피해가 반경 70px에 터진다', () => {
+    const s = make('dagger');
     const victim = target(s, 36);
-    const ahead = target(s, 72);
-    const beside = target(s, 74, 30);
-    swing(s);
+    for (let i = 0; i < 3; i++) swing(s);
+    expect(s.roan.bleeds.get(victim)?.stacks).toBe(3);
+    const near = [target(s, 36, 50), target(s, 36, -55)];
+    const third = target(s, 36, -95);
+    const far = target(s, 36, 200);
     victim.hp = 1;
-    const before = ahead.hp;
     swing(s);
     expect(victim.dead).toBe(true);
-    expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 1.3);
-    expect(s.roan.bleeds.has(beside)).toBe(true);
+    for (const e of near) {
+      expect(s.roan.bleeds.get(e)?.stacks).toBe(Math.ceil(4 / 2));
+      expect(e.hp).toBeLessThan(e.maxHp);
+    }
+    for (const e of [third, far]) {
+      expect(s.roan.bleeds.has(e)).toBe(false);
+      expect(e.hp).toBe(e.maxHp);
+    }
+  });
+
+  it('혈류 폭발은 출혈 폭발 반경을 110px로 넓힌다', () => {
+    for (const relic of [false, true]) {
+      const s = make('dagger', 'stiletto', { relics: relic ? ['bloodBurst'] : [] });
+      const victim = target(s, 36);
+      swing(s);
+      const mid = target(s, 36, -90);
+      victim.hp = 1;
+      swing(s);
+      expect(victim.dead).toBe(true);
+      expect(mid.hp < mid.maxHp).toBe(relic);
+    }
+  });
+
+  it('시미터 각성: 출혈 중인 적을 처치하면 처치 지점에서 초승달 검기가 날아가 관통하며 출혈 2중첩을 준다', () => {
+    for (const awaken of [false, true]) {
+      const s = make('dagger', 'scimitar', { awaken });
+      const victim = target(s, 36);
+      swing(s);
+      const far = target(s, 210);
+      const farther = target(s, 230, 15);
+      victim.hp = 1;
+      swing(s);
+      expect(victim.dead).toBe(true);
+      for (const e of [far, farther]) {
+        if (!awaken) {
+          expect(e.hp).toBe(e.maxHp);
+          continue;
+        }
+        expect(e.maxHp - e.hp).toBeCloseTo(s.roan.damage);
+        expect(s.roan.bleeds.get(e)?.stacks).toBe(2);
+      }
+      if (awaken) expect(s.swordSweeps.find((w) => w.wave)).toMatchObject({ kind: 'extra', range: 200, lineWidth: 40, hits: 2 });
+    }
+  });
+
+  it('초승달 칼날: 출혈 중인 적을 처치하면 0.15초 뒤 추가 찌르기', () => {
+    const s = make('dagger', 'scimitar', { relics: ['crescentEdge'] });
+    const victim = target(s, 36);
+    swing(s);
+    const ahead = target(s, 90);
+    victim.hp = 1;
+    swing(s);
+    expect(victim.dead).toBe(true);
+    const before = ahead.hp;
     steps(s, 9);
-    expect(s.swordSweep).toMatchObject({ kind: 'extra', range: 80, lineWidth: 10, hits: 1 });
-    expect(beside.hp).toBe(beside.maxHp);
-    expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 2.6);
+    expect(s.swordSweep).toMatchObject({ kind: 'extra', range: 100, lineWidth: 10, hits: 1 });
+    expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 1.3);
   });
 
   it('쌍검: 출혈 중첩에 한도가 없다', () => {
@@ -203,13 +255,13 @@ describe('무기 특화 기능', () => {
     const s = make('dagger', 'twinblades', { awaken });
     const ahead = target(s, 45);
     const beside = target(s, 70, 24);
-    const beyond = target(s, 95);
+    const beyond = target(s, 115);
     swing(s);
     steps(s, 10);
     const count = awaken ? 3 : 2;
     expect(s.swordSweeps).toHaveLength(count);
     for (const [i, strike] of s.swordSweeps.entries()) {
-      expect(strike).toMatchObject({ angle: 0, width: 0, lineWidth: 10, range: 80, motion: 'thrust', offHand: i % 2 === 1, hits: 1 });
+      expect(strike).toMatchObject({ angle: 0, width: 0, lineWidth: 10, range: 100, motion: 'thrust', offHand: i % 2 === 1, hits: 1 });
       expect(Math.round((strike.at - s.swordSweeps[0].at) * 60)).toBe(i * 5);
     }
     expect(ahead.maxHp - ahead.hp).toBeCloseTo(make('sword').roan.damage * 0.21 * count);
