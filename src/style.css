@@ -481,3 +481,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .status .upgrades .mastery-stack { flex-wrap: wrap; justify-content: center; }
 .mastery-total { flex-basis: 100%; color: #c0bfe0; }
 .mastery-bonus { color: #c7eaff; }
+
+.account-line { margin: 0.2em 0 0; font-size: 0.9em; opacity: 0.85; display: flex; gap: 0.6em; align-items: center; justify-content: center; flex-wrap: wrap; }
+.account-line button.small { font-size: 0.9em; padding: 0.25em 0.8em; }
+.panel.account { max-width: 26em; }
+.account-form { display: flex; flex-direction: column; gap: 0.5em; margin: 0.8em 0; }
+.account-form input { font: inherit; padding: 0.5em 0.7em; border-radius: 6px; border: 1px solid #4a5068; background: #151824; color: inherit; }
+.account-message { min-height: 1.3em; color: #ffd27a; margin: 0.3em 0; }

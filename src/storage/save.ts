@@ -181,15 +181,18 @@ export interface CloudRow {
   meta: unknown;
   records: unknown;
   rev: number;
+  /** 아이디 계정이면 아이디, 게스트면 null */
+  account?: string | null;
 }
 
 /**
  * 브라우저 저장과 서버 저장을 합친다.
  * 상점 내역(토큰·구매)은 누적 획득 토큰이 더 많은 쪽, 같으면 저장 번호가 더 큰 쪽을 그대로 쓰고,
  * 기록은 항목마다 더 좋은 값을 쓴다. 누적 획득 토큰은 줄지 않으므로 저장 번호가 빠진 옛 저장도 잃지 않는다.
+ * preferRemote(아이디로 로그인할 때)면 상점 내역은 계정 쪽을 그대로 쓴다.
  * 서버 값은 브라우저 저장과 같은 검증을 거친다.
  */
-export function mergeCloud(local: SaveData, remote: CloudRow | null): SaveData {
+export function mergeCloud(local: SaveData, remote: CloudRow | null, preferRemote = false): SaveData {
   if (!remote) return local;
   const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta, records: remote.records })).data;
   const localRev = local.cloudRev ?? 0;
@@ -199,7 +202,7 @@ export function mergeCloud(local: SaveData, remote: CloudRow | null): SaveData {
   const fastest = [a.fastestWin, b.fastestWin].filter((v): v is number => v !== null);
   return {
     ...local,
-    meta: (parsed.meta.totalEarned !== local.meta.totalEarned ? parsed.meta.totalEarned > local.meta.totalEarned : remoteRev > localRev) ? parsed.meta : local.meta,
+    meta: preferRemote || (parsed.meta.totalEarned !== local.meta.totalEarned ? parsed.meta.totalEarned > local.meta.totalEarned : remoteRev > localRev) ? parsed.meta : local.meta,
     records: {
       runs: Math.max(a.runs, b.runs),
       wins: Math.max(a.wins, b.wins),
@@ -207,6 +210,6 @@ export function mergeCloud(local: SaveData, remote: CloudRow | null): SaveData {
       bestKills: Math.max(a.bestKills, b.bestKills),
       fastestWin: fastest.length ? Math.min(...fastest) : null,
     },
-    cloudRev: Math.max(localRev, remoteRev),
+    cloudRev: preferRemote ? remoteRev : Math.max(localRev, remoteRev),
   };
 }
