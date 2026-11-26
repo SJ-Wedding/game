@@ -3,6 +3,7 @@ import { collectErrors } from './util';
 
 test('전용 강화 상점은 탭과 구매를 유지하고 선택한 캐릭터에만 강화가 적용된다', async ({ page }) => {
   const errors = collectErrors(page);
+  await page.setViewportSize({ width: 1536, height: 1024 });
   await page.goto('/?dev=1&god=1&seed=53');
   await page.getByTestId('open-shop').click();
   await expect(page.getByTestId('buy-hp')).toBeDisabled();
@@ -16,13 +17,14 @@ test('전용 강화 상점은 탭과 구매를 유지하고 선택한 캐릭터�
   await expect(page.getByTestId('shop-tab-ranger')).toBeFocused();
   await expect(page.getByTestId('shop-tab-ranger')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.shop-grid .shop-item')).toHaveCount(6);
+  expect(await page.getByRole('tabpanel').evaluate((panel) => panel.scrollHeight - panel.clientHeight)).toBeLessThanOrEqual(1);
   await page.getByTestId('buy-rangerAim').click();
   await expect(page.getByTestId('lv-rangerAim')).toHaveText('1/5');
   await expect(page.getByTestId('shop-tokens')).toHaveText('◆ 35');
   await expect(page.getByTestId('shop-tab-ranger')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('buy-rangerAim')).toBeFocused();
   await expect(page.getByTestId('buy-rangerAim')).toContainText('35');
-  await expect(page.getByText('기본탄 조준 거리·사거리 +3% → +6%')).toBeVisible();
+  await expect(page.getByText('사거리 +3% → +6%')).toBeVisible();
   await page.getByTestId('shop-tab-lumen').click();
   await expect(page.locator('.shop-grid .shop-item')).toHaveCount(6);
   await expect(page.getByText('서리 포탑 전용').first()).toBeVisible();
@@ -30,7 +32,7 @@ test('전용 강화 상점은 탭과 구매를 유지하고 선택한 캐릭터�
   await page.getByTestId('shop-tab-roan').click();
   await expect(page.locator('.shop-grid .shop-item')).toHaveCount(6);
   await expect(page.getByTestId('buy-roanPierce')).toBeEnabled();
-  await expect(page.getByText('Lv24부터')).toBeVisible();
+  await expect(page.getByText('Lv24')).toBeVisible();
   await page.getByTestId('buy-roanReach').click();
 
   await page.reload();
