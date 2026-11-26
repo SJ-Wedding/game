@@ -1,4 +1,4 @@
-import shopIcons from '../assets/shop-icons.png';
+import { shopSprite as icon } from './art';
 import { CHARACTER_SHOP_ITEMS, characterShopAmount, type CharacterShopId } from '../config/characterShop';
 import { META_STATS, META_UNLOCKS } from '../config/meta';
 import { WEAPONS } from '../config/weapons';
@@ -19,13 +19,6 @@ const RANGER_LABELS: Partial<Record<CharacterShopId, string>> = {
   rangerAim: '사거리', rangerPierce: '관통 후 피해', rangerTuning: '특수 무기 피해',
   rangerParts: '융합 짝 우선 확률', rangerEscape: '회피 후 이동 속도',
 };
-
-function icon(index: number, label = ''): HTMLElement {
-  const node = el('span', { class: 'shop-sprite', 'aria-hidden': 'true' }, label ? [el('span', { class: 'shop-icon-text', text: label })] : []);
-  node.style.backgroundImage = `url("${shopIcons}")`;
-  node.style.setProperty('--shop-sprite', String(index));
-  return node;
-}
 
 export function buildShop(meta: SaveMeta, activeTab: ShopTab, onSelect: (tab: ShopTab) => void,
   onBuy: (id: string) => void, onBack: () => void, focusItem?: string): HTMLElement {
@@ -76,7 +69,7 @@ export function buildShop(meta: SaveMeta, activeTab: ShopTab, onSelect: (tab: Sh
       return row(item.id, item.name, description, item.maxLevel);
     });
     content.append(el('div', { class: 'shop-common' }, [
-      el('section', {}, [el('h3', { text: '능력치' }), el('ul', { class: 'shop-list' }, stats)]),
+      el('section', { class: 'shop-common-stats' }, [el('h3', { text: '능력치' }), el('ul', { class: 'shop-list' }, stats)]),
       el('section', {}, [el('h3', { text: '해금' }), el('ul', { class: 'shop-list' }, META_UNLOCKS.map((item) => row(item.id, item.name, item.description, item.maxLevel)))]),
     ]));
   } else {

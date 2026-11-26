@@ -110,8 +110,14 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.locator('.boss-bar')).toBeHidden();
     await expect.poll(async () => (await snap(page)).boss?.state ?? 'none', { timeout: 20_000 }).not.toMatch(/none|enter/);
     await expect(page.locator('.boss-bar')).toBeVisible();
-    // 보스 체력을 낮춘 뒤 자동 공격으로 마무리한다 (입력 없음)
-    await page.evaluate(() => (window as any).__rift.debug.setBossHp(0.0001));
+    // 자동 사격으로 마무리하도록 사거리 안에 보스를 배치하고 다른 표적을 비운다.
+    await page.evaluate(() => {
+      const { sim, debug } = (window as any).__rift;
+      sim.enemies.length = 0;
+      sim.boss.x = sim.player.x + 120;
+      sim.boss.y = sim.player.y;
+      debug.setBossHp(0.0001);
+    });
     await expect.poll(async () => (await snap(page)).screen, { timeout: 60_000 }).toBe('result');
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await expect(page.getByTestId('cause')).toContainText('처치했습니다');
@@ -235,9 +241,14 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     // 개발 옵션 없이 10초 이상 실제로 싸운 뒤(자동 공격으로 처치 발생) 쓰러진다 → 기록에 반영됨
     await page.getByTestId('play').click();
     await page.getByTestId('character-ranger').click();
+    await page.evaluate(() => { (window as any).__rift.sim.player.invuln = 30; });
     await expect.poll(async () => (await snap(page)).kills ?? 0, { timeout: 60_000 }).toBeGreaterThan(0);
     await waitElapsed(page, 10);
-    await page.evaluate(() => (window as any).__rift.sim.hurtPlayer(9999, '시험용 일격'));
+    expect(await page.evaluate(() => {
+      const { sim } = (window as any).__rift;
+      sim.player.invuln = 0;
+      return sim.hurtPlayer(9999, '시험용 일격');
+    })).toBe(true);
     await expect.poll(async () => (await snap(page)).screen, { timeout: 10_000 }).toBe('result');
     const s = await snap(page);
     expect(s.result!.cause).toBe('death');

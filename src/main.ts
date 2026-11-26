@@ -10,6 +10,7 @@ import { loadSave, type StorageLike } from './storage/save';
 import { Hud } from './ui/hud';
 import { Screens } from './ui/screens';
 import './style.css';
+import './ui/theme.css';
 
 function getStorage(): StorageLike | null {
   try {

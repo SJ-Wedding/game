@@ -1,6 +1,24 @@
 import { expect, test } from '@playwright/test';
 import { collectErrors } from './util';
 
+test('상점 진입 시 공용 강화 카드와 돌아가기 버튼이 화면 안에 들어온다', async ({ page }) => {
+  await page.goto('/');
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 390, height: 740 }]) {
+    await page.setViewportSize(viewport);
+    await page.getByTestId('open-shop').click();
+    await expect(page.getByTestId('shop-tab-common')).toHaveAttribute('aria-selected', 'true');
+
+    const panel = page.getByRole('tabpanel');
+    await expect(panel.locator('.shop-item')).toHaveCount(11);
+    for (const region of [page.locator('#overlay'), panel]) {
+      await expect.poll(() => region.evaluate((node) => node.scrollHeight - node.clientHeight)).toBeLessThanOrEqual(1);
+    }
+    await expect(page.getByTestId('buy-luck')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('shop-back')).toBeInViewport({ ratio: 1 });
+    await page.getByTestId('shop-back').click();
+  }
+});
+
 test('전용 강화 상점은 탭과 구매를 유지하고 선택한 캐릭터에만 강화가 적용된다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.setViewportSize({ width: 1536, height: 1024 });

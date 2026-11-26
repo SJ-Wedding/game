@@ -19,6 +19,7 @@ import echo from '../assets/echo.png';
 import gravity from '../assets/gravity.png';
 import infection from '../assets/infection.png';
 import weaponEffects from '../assets/weapon-effects.png';
+import fusionCombat from '../assets/fusion-combat.png';
 
 import roanWeapons from '../assets/roan-weapons.png';
 import type { RoanDesign } from '../config/roan';
@@ -30,6 +31,7 @@ const ROAN_SHEETS = Object.fromEntries(
 );
 
 export const CHARACTER_FRAME_SIZE = 40;
+export const FUSION_ART_FRAME_SIZE = 96;
 export const CHARACTER_SHEETS: Record<string, string> = { player, 'lumen-chain': lumenChain, 'lumen-turret': lumenTurret, roan, 'roan-thrust': roanThrust, ...ROAN_SHEETS };
 
 export function roanTexture(design: RoanDesign): string {
@@ -62,4 +64,4 @@ export const WEAPON_TEXTURES = {
 export const WEAPON_FRAMES = { mine: 0, gravity: 7 } as const;
 export const WEAPON_SPRITES = { orbit, axe, turret, echo };
 export type WeaponSprite = keyof typeof WEAPON_FRAMES | keyof typeof WEAPON_SPRITES;
-export { weaponEffects };
+export { fusionCombat, weaponEffects };

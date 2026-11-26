@@ -18,7 +18,11 @@ test('창 크기를 줄여도 균열 사수는 픽셀 렌더링과 방향별 스
   await expect(page.locator('canvas')).toHaveCSS('image-rendering', 'pixelated');
   for (const [key, frame, flipped] of [['KeyW', 2, false], ['KeyA', 0, true], ['KeyD', 0, false], ['KeyS', 1, false]] as const) {
     await page.keyboard.down(key);
-    await expect.poll(sprite).toEqual(['player', frame, 40, flipped, 50, 50, 14]);
+    await expect.poll(async () => {
+      const [texture, current, ...body] = await sprite();
+      return [texture, current >= 3 && current < 9, current % 3, ...body];
+    }).toEqual(['player', true, frame, 40, flipped, 50, 50, 14]);
+    await expect.poll(async () => (await sprite())[1]).toBe(frame + 6);
     await page.keyboard.up(key);
   }
   expect(errors).toEqual([]);
@@ -54,7 +58,8 @@ for (const [weapon, name] of starters) {
     await expect.poll(async () => page.evaluate((key) => (window as any).__rift.sim.damageByAttack[key] ?? 0, weapon)).toBeGreaterThan(0);
     expect((await snap(page)).shotsFired).toBe(0);
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('heading', { name: '마도공 루멘 · Lv 1' })).toBeVisible();
+    const status = page.getByRole('dialog', { name: '상태창' });
+    await expect(status.getByText('마도공 루멘 · Lv 1')).toBeVisible();
     await expect(page.getByTestId('stat-damage')).toHaveText(weapon === 'chain' ? '51' : '18.5');
     await expect(page.getByRole('button', { name: `${name} Lv 1` })).toBeVisible();
     await expect(page.getByText('특수 무기 합체 조합식')).toHaveCount(0);
@@ -86,7 +91,7 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   await page.keyboard.press('Tab');
   const status = page.locator('.status');
   await expect(status).toBeVisible();
-  await expect(status.getByRole('heading', { name: '철검 수호자 로안 · Lv 1' })).toBeVisible();
+  await expect(status.getByText('철검 수호자 로안 · Lv 1')).toBeVisible();
   await expect(status.getByRole('rowheader', { name: '베기 거리' })).toBeVisible();
   await expect(status.locator('.mastery-stack').filter({ hasText: name })).toContainText('1스택');
   await expect(status.locator('.mastery-total')).not.toBeEmpty();

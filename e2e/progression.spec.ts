@@ -103,6 +103,24 @@ test.describe('성장 시스템', () => {
     await expect(tooltip).toBeHidden();
   });
 
+  test('좁은 화면에서는 상태창의 내용만 스크롤되고 닫기 버튼은 같은 위치에 있다', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 640 });
+    await startRun(page, '&seed=42&god=1');
+    await page.keyboard.press('Tab');
+    const status = page.getByRole('dialog', { name: '상태창' });
+    const close = status.getByTestId('status-close');
+    await expect(close).toBeInViewport({ ratio: 1 });
+    const initial = await close.boundingBox();
+    const content = status.locator('.status-content');
+    expect(await content.evaluate((node) => {
+      node.scrollTop = node.scrollHeight;
+      return node.scrollTop;
+    })).toBeGreaterThan(0);
+    expect(await close.boundingBox()).toEqual(initial);
+    await close.click();
+    await expect(status).toBeHidden();
+  });
+
   test('상태창에서 획득한 강화 스택을 확인하고 보유 유물 탭을 따로 열 수 있다', async ({ page }) => {
     await startRun(page, '&seed=43&god=1');
     await page.evaluate(() => {

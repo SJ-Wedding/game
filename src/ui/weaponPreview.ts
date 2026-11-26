@@ -21,13 +21,13 @@ import { el } from './dom';
 
 type PreviewId = WeaponId | FusionId;
 
-const PREVIEWS = {
+export const WEAPON_PREVIEWS = {
   axe, barrier, bastion, chain, echo, eclipse, flame, gravity, inferno, infection, mark, mine, orbit, spear, storm, tempest, turret, volley,
 } satisfies Record<PreviewId, string>;
 
 export function weaponPreview() {
   const title = el('strong');
-  const image = el('img', { width: '344', height: '206', decoding: 'async' });
+  const image = el('img', { width: '432', height: '170', decoding: 'async' });
   const description = el('small');
   const tooltip = el('div', {
     id: 'status-weapon-preview', class: 'weapon-effect-preview', role: 'tooltip', popover: 'manual',
@@ -42,7 +42,7 @@ export function weaponPreview() {
     active = button;
     title.textContent = name;
     description.textContent = fusion?.effect ?? weapon.description;
-    image.src = PREVIEWS[id];
+    image.src = WEAPON_PREVIEWS[id];
     image.alt = `${name} 인게임 효과`;
     if (!tooltip.matches(':popover-open')) tooltip.showPopover();
 

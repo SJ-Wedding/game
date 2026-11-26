@@ -41,6 +41,7 @@ export interface WeaponEffect extends EffectTiming {
   variant?: 'markCharge' | 'echoCharge' | 'frostBurst' | 'maceQuake' | 'maceScar' | 'bleedBurst';
   /** 도착 지점별 재연쇄 횟수. 첫 타격과 출발 지점은 0. */
   reboundCounts?: number[];
+  markHits?: number;
 }
 
 export interface ResonanceEffect extends EffectTiming {
@@ -105,6 +106,10 @@ export class WeaponSystem {
   private readonly rodBursts: (Point & { factor: number; from: Target })[] = [];
 
   constructor(private readonly sim: GameSim) {}
+
+  get chainCooldownRemaining(): number {
+    return Math.max(0, (this.ready.get('chain') ?? 0) - this.sim.elapsed);
+  }
 
   private *targets(): Iterable<Target> {
     for (const e of this.sim.enemies) if (!e.dead) yield e;
@@ -462,7 +467,7 @@ export class WeaponSystem {
     const bell = this.sim.relics.has('secondBell');
     if (!target.dead && hits < (bell ? 2 : 3)) {
       this.marks.set(target, hits);
-      this.trace('mark', [target], target.r, 0.2, 'markCharge');
+      this.trace('mark', [target], target.r, 0.2, 'markCharge').markHits = hits;
       return;
     }
     this.marks.delete(target);
@@ -867,7 +872,7 @@ export class WeaponSystem {
         extra.sort((a, b) => depth(a) - depth(b));
         targets.push(...extra.slice(0, pierce));
       }
-      this.trace('turret', [turret, targets[targets.length - 1]], 0, 0.26);
+      this.trace('turret', [turret, ...targets], 0, 0.26);
       for (const t of targets) strike(t, 1);
     }
     const frost = this.sim.mastery('turretFrost');
