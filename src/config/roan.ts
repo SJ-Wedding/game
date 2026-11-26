@@ -7,11 +7,25 @@
 export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
 export const DAGGER_THRUST = { damage: 0.35, range: 100, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
 export const SCIMITAR_THRUST_BONUSES = { widthPerMastery: 3, desertWindWidth: 6 } as const;
-export const TWIN_BLADE_DAMAGE_FACTOR = 0.6;
+export const TWIN_BLADE_DAMAGE_FACTOR = 0.5;
+/** 시미터 찌르기 피해 (검 피해 대비) */
+export const SCIMITAR_DAMAGE = 0.385;
 /** 단검 계열 출혈 연쇄: 출혈 중인 적이 죽으면 출혈이 옮겨 붙고 남은 출혈 피해가 터진다 */
 export const DAGGER_BLEED_CHAIN = { spreadTargets: 2, spreadRadius: 120, burstRadius: 70, burstRadiusRelic: 110, burstMinSeconds: 1 } as const;
 /** 시미터 각성: 출혈 중인 적 처치 시 초승달 검기 */
 export const SCIMITAR_CRESCENT = { range: 200, width: 40, damage: 1.0, bleedStacks: 2 } as const;
+
+/**
+ * 리밸런싱: 묵직한 일격의 피해 증가 효율. 공격이 빠른 무기일수록 낮다.
+ * 상위 무기 → 기본 무기 순으로 찾고, 없으면 1.
+ */
+export const ROAN_DAMAGE_MASTERY_EFFICIENCY: Readonly<Record<string, number>> = {
+  dagger: 0.35, stiletto: 0.35, scimitar: 0.35, twinblades: 0.25, rapier: 0.6, throwingaxe: 0.7, onehand: 0.8,
+};
+/** 리밸런싱: 빠른 회수(공통 공격 간격 감소)의 효율. 단검 계열은 절반 */
+export const ROAN_SPEED_MASTERY_EFFICIENCY: Readonly<Record<string, number>> = { dagger: 0.5 };
+/** 상위 무기별 받는 피해 추가 배율 */
+export const ROAN_UPGRADE_DAMAGE_TAKEN: Readonly<Record<string, number>> = { onehand: 0.9 };
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
 
@@ -50,16 +64,16 @@ export const ROAN_WEAPONS = {
     description: `빠른 직선 찌르기. 피해 ${DAGGER_THRUST.damage * 100}%, 공격 간격 55%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px. 체력 150, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.`,
   },
   mace: {
-    name: '메이스(한손)', symbol: '⚒', color: 0xffc06e, damage: 1.2, interval: 1.2, range: 125, angle: 110,
-    maxHp: 240, damageTaken: 0.85, moveSpeed: 0.94, dodgeCooldown: 3.4, motion: 'slam',
+    name: '메이스(한손)', symbol: '⚒', color: 0xffc06e, damage: 1.2, interval: 1.08, range: 125, angle: 110,
+    maxHp: 240, damageTaken: 0.7, moveSpeed: 0.94, dodgeCooldown: 3.4, motion: 'slam',
     special: '분쇄: 몬스터 피해 저항 30% 무시. 일반 적 35% 확률로 0.6초 기절 (균열 수호자는 절반 확률)',
-    description: '묵직한 한손 메이스. 피해 120%, 공격 간격 120%, 각도 110°. 체력 240, 받는 피해 −15%, 이동 속도 −6%, 회피 3.4초.',
+    description: '묵직한 한손 메이스. 피해 120%, 공격 간격 108%, 각도 110°. 체력 240, 받는 피해 −30%, 이동 속도 −6%, 회피 3.4초.',
   },
   waraxe: {
     name: '도끼', symbol: '⚔', color: 0xff8f6b, damage: 1.4, interval: 1.5, range: 130, angle: 160,
-    maxHp: 230, damageTaken: 0.85, moveSpeed: 0.92, dodgeCooldown: 3.6, motion: 'slash',
+    maxHp: 230, damageTaken: 0.68, moveSpeed: 0.92, dodgeCooldown: 3.6, motion: 'slash',
     special: '깊은 상처: 적 체력이 낮을수록 피해 증가, 최대 +50%',
-    description: '넓게 휘두르는 도끼. 피해 140%, 공격 간격 150%, 각도 160°, 거리 130px. 체력 230, 받는 피해 −15%, 이동 속도 −8%, 회피 3.6초.',
+    description: '넓게 휘두르는 도끼. 피해 140%, 공격 간격 150%, 각도 160°, 거리 130px. 체력 230, 받는 피해 −32%, 이동 속도 −8%, 회피 3.6초.',
   },
 } as const satisfies Record<string, RoanWeaponDef>;
 
@@ -83,7 +97,7 @@ export interface RoanUpgradeDef {
 export const ROAN_UPGRADES = {
   onehand: {
     weapon: 'sword', name: '한손검', symbol: '†', damage: 1.0, interval: 0.8, range: 125, angle: 130, motion: 'slash',
-    effect: '공격 간격 −20%, 연격이 2번째 공격마다 발동', awaken: '연격 추가 베기 피해 50% → 90%',
+    effect: '공격 간격 −20%, 받는 피해 −10%, 연격이 2번째 공격마다 발동', awaken: '연격 추가 베기 피해 50% → 90%',
   },
   greatsword: {
     weapon: 'sword', name: '대검', symbol: '✝', damage: 1.6, interval: 1.3, range: 150, angle: 180, motion: 'slash',
@@ -98,8 +112,8 @@ export const ROAN_UPGRADES = {
     effect: '출혈 최대 5 → 8중첩, 출혈 피해 +50%', awaken: '출혈이 최대 중첩에 닿으면 남은 출혈 피해를 한 번에 줌',
   },
   scimitar: {
-    weapon: 'dagger', name: '시미터', symbol: '☾', damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'thrust',
-    effect: `직선 찌르기 (검 피해 ${DAGGER_THRUST.damage * 100}%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px). 출혈 중인 적에게 직접 피해 +30%.`,
+    weapon: 'dagger', name: '시미터', symbol: '☾', damage: SCIMITAR_DAMAGE, interval: 0.55, range: DAGGER_THRUST.range, angle: 0, motion: 'thrust',
+    effect: `직선 찌르기 (검 피해 ${SCIMITAR_DAMAGE * 100}%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px). 출혈 중인 적에게 직접 피해 +30%.`,
     awaken: `초승달 검기: 출혈 중인 적을 처치하면 찌르던 방향으로 검기 발사 (거리 ${SCIMITAR_CRESCENT.range}px·폭 ${SCIMITAR_CRESCENT.width}px, 찌르기 피해 ${SCIMITAR_CRESCENT.damage * 100}%, 관통, 출혈 ${SCIMITAR_CRESCENT.bleedStacks}중첩)`,
   },
   twinblades: {
@@ -108,28 +122,28 @@ export const ROAN_UPGRADES = {
     effect: `직선 찌르기 2연타 (거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px, 각 단검 피해 ${TWIN_BLADE_DAMAGE_FACTOR * 100}%). 출혈 2배 누적, 중첩 제한 해제.`, awaken: '직선 찌르기 3연타',
   },
   warmace: {
-    weapon: 'mace', name: '메이스', symbol: '⚒', damage: 1.56, interval: 1.2, range: 125, angle: 140, motion: 'slam',
-    effect: '피해 +30%, 각도 140°, 기절 확률 35% → 50% (균열 수호자 25%)', awaken: '기절한 적에게 피해 +40%',
+    weapon: 'mace', name: '메이스', symbol: '⚒', damage: 1.56, interval: 0.96, range: 150, angle: 140, motion: 'slam',
+    effect: '피해 +30%, 각도 140°, 거리 150px, 공격 간격 −11%, 기절 확률 35% → 50% (균열 수호자 25%)', awaken: '기절한 적에게 피해 +40%',
   },
   morningstar: {
-    weapon: 'mace', name: '모닝스타', symbol: '✹', damage: 1.2, interval: 1.2, range: 125, angle: 110, motion: 'slam',
-    effect: '적중 시 가시 파편 3개(각 피해 40%)', awaken: '파편 5개, 파편도 기절 판정',
+    weapon: 'mace', name: '모닝스타', symbol: '✹', damage: 1.38, interval: 0.96, range: 125, angle: 110, motion: 'slam',
+    effect: '피해 +15%, 공격 간격 −11%, 적중 시 가시 파편 3개(각 피해 40%)', awaken: '파편 5개, 파편도 기절 판정',
   },
   flail: {
-    weapon: 'mace', name: '플레일', symbol: '◎', damage: 1.2, interval: 1.2, range: 125, angle: 360, motion: 'spin',
+    weapon: 'mace', name: '플레일', symbol: '◎', damage: 1.2, interval: 1.08, range: 125, angle: 360, motion: 'spin',
     effect: '타격 지점을 중심으로 철퇴가 360° 돌며 주변을 때림, 연속 공격할수록 회전 반경 증가(최대 +40%)', awaken: '회전이 2바퀴, 두 번째 피해 50%',
   },
   maul: {
-    weapon: 'mace', name: '양손메이스', symbol: '▼', damage: 2.16, interval: 1.68, range: 125, angle: 110, motion: 'slam',
+    weapon: 'mace', name: '양손메이스', symbol: '▼', damage: 2.16, interval: 1.512, range: 125, angle: 110, motion: 'slam',
     effect: '피해 +80%, 내려찍기 충격파 반경 100px(피해 50%), 공격 간격 +40%', awaken: '충격파 반경 150px, 충격파에도 기절',
   },
   greataxe: {
-    weapon: 'waraxe', name: '대형 도끼', symbol: '⚔', damage: 1.96, interval: 1.8, range: 130, angle: 220, motion: 'slash',
-    effect: '220°, 피해 +40%, 공격 간격 +20%', awaken: '깊은 상처 최대 +50% → +100%',
+    weapon: 'waraxe', name: '대형 도끼', symbol: '⚔', damage: 1.96, interval: 1.62, range: 130, angle: 220, motion: 'slash',
+    effect: '220°, 피해 +40%, 공격 간격 +8%', awaken: '깊은 상처 최대 +50% → +100%',
   },
   halberd: {
-    weapon: 'waraxe', name: '할버드', symbol: '⫯', damage: 1.4, interval: 1.5, range: 188, angle: 160, motion: 'thrust',
-    effect: '거리 +50%, 찌르기와 베기를 번갈아, 일반 적 밀쳐내기', awaken: '베기 180°, 찌르기 폭 2배',
+    weapon: 'waraxe', name: '할버드', symbol: '⫯', damage: 1.4, interval: 1.35, range: 188, angle: 160, motion: 'thrust',
+    effect: '거리 +50%, 공격 간격 −10%, 찌르기와 베기를 번갈아, 일반 적 밀쳐내기', awaken: '베기 180°, 찌르기 폭 2배',
   },
   throwingaxe: {
     weapon: 'waraxe', name: '투척 도끼', symbol: '⟲', damage: 0.75, interval: 0.7, range: 115, angle: 130, motion: 'twin',
