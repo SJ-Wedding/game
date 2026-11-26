@@ -11,6 +11,7 @@ import type { TokenReward } from '../core/meta';
 import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
+import type { ShopTab } from '../ui/shop';
 
 export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop';
 
@@ -45,6 +46,7 @@ export class App {
   lastTokens: TokenReward | null = null;
   /** 상태창을 닫으면 돌아갈 화면 */
   private statusReturn: 'playing' | 'paused' = 'playing';
+  private shopTab: ShopTab = 'common';
   /** 지금까지 시작한 판 수 (디버그용) */
   runsStarted = 0;
   /** 전역 리스너 등록 횟수 (중복 검사용, 항상 1 이어야 함) */
@@ -247,7 +249,7 @@ export class App {
       xpGain: sim.xpGainMultiplier,
       damageTaken: sim.relics.damageTaken(),
       luck: sim.luck,
-      projectileRange: sim.stats.projectileRange + sim.reachBonus + sim.relics.basicReachBonus,
+      projectileRange: sim.basicProjectileRange,
       projectileCount: sim.relics.projectileCount,
     };
     const loadout = sim.loadout;
@@ -297,9 +299,12 @@ export class App {
     }
   }
 
-  showShop(): void {
+  showShop(focusItem?: string): void {
     this.screen = 'shop';
-    this.screens.showShop(this.save.meta, (id) => this.buy(id), () => this.showTitle());
+    this.screens.showShop(this.save.meta, this.shopTab, (tab) => {
+      this.shopTab = tab;
+      this.showShop();
+    }, (id) => this.buy(id), () => this.showTitle(), focusItem);
   }
 
   buy(id: string): void {
@@ -307,7 +312,7 @@ export class App {
     if (!next) return;
     this.save = next;
     writeSave(this.storage, this.save);
-    this.showShop();
+    this.showShop(id);
   }
 
   private finish(): void {

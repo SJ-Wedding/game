@@ -200,6 +200,7 @@ export class RelicEffects {
     let multiplier = this.sim.stats.damageTaken * (this.has('bloodPrice') ? 1.25 : 1) * (this.has('greedDice') ? 1.2 : 1);
     if (this.has('lightningRod')) multiplier *= kind === 'shot' ? 0.7 : kind === 'contact' ? 1.2 : 1;
     if (this.sim.loadout.character === 'roan') multiplier *= this.sim.roan.damageTaken;
+    if (kind === 'contact') multiplier *= 1 + this.sim.characterShopBonus('roanArmor');
     if (this.has('battleJoy')) {
       const p = this.sim.player;
       let count = 0;

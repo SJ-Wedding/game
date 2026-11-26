@@ -1,9 +1,12 @@
 import { META_STATS, META_UNLOCKS, TOKEN_REWARDS, type MetaUnlockId } from '../config/meta';
+import { CHARACTER_SHOP_ITEMS, type CharacterShopId } from '../config/characterShop';
+import type { Loadout } from '../config/characters';
 import type { StatKey } from '../config/player';
 import type { RunResult } from './types';
 
 /** 구매 내역: 항목 id → 구매한 단계 수 */
 export type MetaPurchases = Record<string, number>;
+export const META_SHOP_ITEMS = [...META_STATS, ...META_UNLOCKS, ...CHARACTER_SHOP_ITEMS];
 
 export interface MetaBonus {
   /** 시작 능력치에 곱해지는 비율 (0.1 = +10%) */
@@ -12,13 +15,14 @@ export interface MetaBonus {
   revives: number;
   startPick: boolean;
   luck: number;
+  character: Partial<Record<CharacterShopId, number>>;
 }
 
 export function metaLevel(purchases: MetaPurchases | undefined, id: string): number {
   return Math.max(0, Math.floor(purchases?.[id] ?? 0));
 }
 
-export function metaBonus(purchases: MetaPurchases | undefined): MetaBonus {
+export function metaBonus(purchases: MetaPurchases | undefined, loadout?: Loadout): MetaBonus {
   const statPct: MetaBonus['statPct'] = {};
   for (const m of META_STATS) {
     const lv = Math.min(m.maxLevel, metaLevel(purchases, m.id));
@@ -28,18 +32,26 @@ export function metaBonus(purchases: MetaPurchases | undefined): MetaBonus {
     const def = META_UNLOCKS.find((u) => u.id === id)!;
     return Math.min(def.maxLevel, metaLevel(purchases, id));
   };
+  const character: MetaBonus['character'] = {};
+  for (const item of CHARACTER_SHOP_ITEMS) {
+    if (loadout?.character !== item.character) continue;
+    if ('weapon' in item && (loadout.character !== 'lumen' || loadout.weapon !== item.weapon)) continue;
+    const level = Math.min(item.maxLevel, metaLevel(purchases, item.id));
+    if (level > 0) character[item.id] = level * item.step;
+  }
   return {
     statPct,
     rerolls: unlock('reroll'),
     revives: unlock('revive'),
     startPick: unlock('startPick') > 0,
     luck: unlock('luck'),
+    character,
   };
 }
 
 /** 다음 단계 가격. 최대 단계면 null */
 export function nextCost(purchases: MetaPurchases, id: string): number | null {
-  const def = [...META_STATS, ...META_UNLOCKS].find((d) => d.id === id);
+  const def = META_SHOP_ITEMS.find((d) => d.id === id);
   if (!def) return null;
   const lv = metaLevel(purchases, id);
   return lv >= def.maxLevel ? null : def.costs[lv];

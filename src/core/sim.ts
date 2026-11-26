@@ -3,6 +3,7 @@ import {
   type CharacterUpgradeId, type Loadout,
 } from '../config/characters';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
+import { CHARACTER_SHOP, SHOP_TIMING, type CharacterShopId } from '../config/characterShop';
 import { ESSENCE_IDS, ESSENCE_MAX_STACK, OPENING_RELIC_LEVEL, validCarry, validRelicIds, type EssenceId, type RelicId, type RelicSource } from '../config/relics';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
@@ -169,6 +170,8 @@ export class GameSim {
 
   private acc = 0;
   private dodgeBuffered = false;
+  private rangerEscapeUntil = 0;
+  private manaWardReadyAt = 0;
   private nextId = 1;
   private spawnTimer = 0.6;
   private eventIndex = 0;
@@ -182,7 +185,7 @@ export class GameSim {
     this.rngAi = new Rng(deriveSeed(this.seed, 'ai'));
     this.rngWeapon = new Rng(deriveSeed(this.seed, 'weapon'));
     this.rngDrop = new Rng(deriveSeed(this.seed, 'drop'));
-    this.meta = metaBonus(options.meta);
+    this.meta = metaBonus(options.meta, this.loadout);
     this.rerollsLeft = PROGRESSION_CONFIG.baseRerolls + this.meta.rerolls;
     this.revivesLeft = this.meta.revives;
     this.rngRelic = new Rng(deriveSeed(this.seed, 'relic'));
@@ -333,6 +336,7 @@ export class GameSim {
   private updatePlayer(dt: number, input: InputState): void {
     const p = this.player;
     const s = this.stats;
+    const now = this.elapsed;
     if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
     if (p.dodgeCd > 0) p.dodgeCd = Math.max(0, p.dodgeCd - dt);
     if (p.hurtFlash > 0) p.hurtFlash -= dt;
@@ -353,7 +357,8 @@ export class GameSim {
       this.target = null;
       if (len > 0.01) p.aim = Math.atan2(my, mx);
     } else if (AUTO_COMBAT.enabled) {
-      const range = this.loadout.character === 'roan' ? this.roan.targetRange : AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus;
+      const range = this.loadout.character === 'roan' ? this.roan.targetRange
+        : (AUTO_COMBAT.range + this.reachBonus + this.relics.basicReachBonus) * (1 + this.characterShopBonus('rangerAim'));
       this.target = this.findTarget(range);
       fire = this.target !== null;
       if (this.target) p.aim = Math.atan2(this.target.y - p.y, this.target.x - p.x);
@@ -378,6 +383,7 @@ export class GameSim {
       p.invuln = Math.max(p.invuln, s.dodgeInvuln);
       this.dodges++;
       dodgeStarted = true;
+      if (this.characterShopBonus('rangerEscape')) this.rangerEscapeUntil = now + s.dodgeDuration + SHOP_TIMING.rangerEscape;
       this.weapons.onDodge();
       this.relics.onDodge();
       this.emit('dodge', p.x, p.y);
@@ -388,7 +394,8 @@ export class GameSim {
     if (Math.hypot(horizontal, vertical) > 0.08) this.facePlayer(horizontal, vertical);
 
     const moving = len > 0.01 || p.dodgeTime > 0;
-    const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(moving);
+    const escape = now < this.rangerEscapeUntil ? this.characterShopBonus('rangerEscape') : 0;
+    const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(moving) * (1 + escape);
     const fromX = p.x;
     const fromY = p.y;
     if (p.dodgeTime > 0) {
@@ -419,6 +426,16 @@ export class GameSim {
   /** 사거리 안에서 몸 가장자리까지 가장 가까운 적(보스 포함). 무적 연출 중인 보스는 제외. */
   get reachBonus(): number {
     return COMBAT_REACH.bonus * clamp((this.elapsed - COMBAT_REACH.start) / (COMBAT_REACH.peak - COMBAT_REACH.start), 0, 1);
+  }
+
+  get basicProjectileRange(): number {
+    return (this.stats.projectileRange + this.reachBonus + this.relics.basicReachBonus) * (1 + this.characterShopBonus('rangerAim'));
+  }
+
+  characterShopBonus(id: CharacterShopId, level = this.level): number {
+    const def = CHARACTER_SHOP[id];
+    if ('minLevel' in def && level < def.minLevel) return 0;
+    return this.meta.character[id] ?? 0;
   }
 
   get luck(): number {
@@ -493,7 +510,7 @@ export class GameSim {
     const n = Math.max(1, this.relics.projectileCount);
     const spread = (s.spreadDeg * Math.PI) / 180;
     const speed = this.relics.projectileSpeed;
-    const life = (s.projectileRange + this.reachBonus + this.relics.basicReachBonus) / speed;
+    const life = this.basicProjectileRange / speed;
     const mods = this.relics.volley();
     const levelPierce = RANGER.pierceLevels.filter((level) => this.level >= level).length;
     const pierceLeft = Math.max(levelPierce, this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl')) + mods.pierce;
@@ -528,6 +545,11 @@ export class GameSim {
     if (this.phase !== 'combat' || p.hp <= 0) return false;
     if (p.invuln > 0 || p.dodgeTime > 0) return false;
     if (this.options.god) return false;
+    const ward = this.characterShopBonus('lumenWard');
+    if (ward && amount > 0 && this.elapsed >= this.manaWardReadyAt) {
+      this.manaWardReadyAt = this.elapsed + SHOP_TIMING.manaWard;
+      amount *= 1 + ward;
+    }
     const dmg = this.relics.onHurt(amount * this.relics.damageTaken(kind));
     p.hp = Math.max(0, p.hp - dmg);
     p.invuln = Math.max(p.invuln, this.stats.hurtInvuln + this.relics.hurtInvulnBonus);
@@ -757,11 +779,13 @@ export class GameSim {
         s.hitIds?.clear();
       }
       if (s.life <= 0 || !this.inArena(s.x, s.y)) continue;
+      const source = shotAttack(s.source);
+      const pierceBonus = source === 'basic' ? this.characterShopBonus('rangerPierce') : 0;
       for (const e of this.enemies) {
         if (e.dead || s.hitIds?.has(e.id)) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
-          this.damageEnemy(e, s.damage, shotAttack(s.source));
+          this.damageEnemy(e, s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source);
           if (RoanCombat.isRoanShot(s.source)) this.roan.onShotHit(s, e);
           if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx), s.echoVolley);
           if (s.pierceLeft) {
@@ -776,7 +800,7 @@ export class GameSim {
       if (s.life > 0 && boss && !boss.dead && !s.hitIds?.has(-1)) {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
-          this.damageBoss(s.damage, shotAttack(s.source));
+          this.damageBoss(s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source);
           if (RoanCombat.isRoanShot(s.source)) this.roan.onShotHit(s, boss);
           // 관통 탄은 보스를 한 번만 맞히고 지나간다
           if (s.pierceLeft && s.hitIds) s.hitIds.add(-1);
@@ -819,7 +843,7 @@ export class GameSim {
     const resistance = t < resistanceAt ? 0 : Math.min(maxResistance,
       initialResistance + regularMinutes * resistancePerMinute + finalMinutes * finalResistancePerMinute);
     let resistanceMultiplier = 1;
-    if (source === 'sword') resistanceMultiplier = 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce);
+    if (source === 'sword') resistanceMultiplier = this.swordResistanceMultiplier(swordArmorPierce);
     else if (source && Object.hasOwn(WEAPON_FUSIONS, source)) resistanceMultiplier = 1 - FUSION_ARMOR_PIERCE;
     else if (this.loadout.character === 'lumen' && source === this.loadout.weapon) {
       if (this.level >= LUMEN.advancedResistanceLevel) resistanceMultiplier -= LUMEN.advancedResistancePierce;
@@ -858,7 +882,7 @@ export class GameSim {
     if (!b || b.dead || bossInvulnerable(b)) return;
     const basic = source === 'basic';
     const armor = basic ? BOSS_CONFIG.basicResistance
-      : source === 'sword' ? BOSS_CONFIG.basicResistance * 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce) : 0;
+      : source === 'sword' ? BOSS_CONFIG.basicResistance * this.swordResistanceMultiplier(swordArmorPierce) : 0;
     const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor);
     b.hp = Math.max(0, b.hp - damage);
     this.recordAttackDamage(source, damage);
@@ -873,6 +897,10 @@ export class GameSim {
       this.weapons.onBulletHit(b);
       this.relics.onBasicHit(b);
     }
+  }
+
+  private swordResistanceMultiplier(armorPierce: number): number {
+    return 0.85 ** this.mastery('swordPierce') * (1 - armorPierce) * (1 - this.characterShopBonus('roanPierce'));
   }
 
   private updateHazards(dt: number): void {
@@ -955,8 +983,28 @@ export class GameSim {
     let out = [...(level >= 3 ? this.fusionChoices() : []), ...choices].slice(0, PROGRESSION_CONFIG.choiceCount);
     // 점술가의 카드: 후보 2개. 무기 후보(마지막 칸)는 남긴다.
     if (out.length > this.relics.choiceCount) out = [out[0], ...out.slice(out.length - this.relics.choiceCount + 1)];
+    this.prioritizeFusionIngredient(out, level, exclude);
     this.applyGradeRelics(out, luck, true);
     return out;
+  }
+
+  private prioritizeFusionIngredient(choices: UpgradeChoice[], level: number, exclude: UpgradeId[]): void {
+    const chance = this.characterShopBonus('rangerParts', level);
+    if (!chance) return;
+    const slot = choices.findIndex((choice) => choice.kind === 'upgrade' && choice.def.weapon);
+    const current = choices[slot];
+    if (current?.kind !== 'upgrade') return;
+    const offered = new Set(choices.flatMap((choice) => choice.kind === 'upgrade' ? [choice.def.id] : []));
+    const missing = FUSION_IDS.flatMap((id) => {
+      if (this.weapons.fusions.has(id)) return [];
+      const [a, b] = WEAPON_FUSIONS[id].pair;
+      if (this.stacks[a] > 0 && !this.stacks[b]) return [b];
+      if (this.stacks[b] > 0 && !this.stacks[a]) return [a];
+      return [];
+    }).filter((id) => !offered.has(id) && !exclude.includes(id));
+    if (!missing.length || this.rngWeapon.next() >= chance) return;
+    const id = missing[this.rngWeapon.int(missing.length)];
+    choices[slot] = { ...current, def: UPGRADE_BY_ID[id], nextStack: 1 };
   }
 
   /** 이름 없는 계약(일반 등급 제외)과 균열 결정(희귀 이상 1장 보장) */
@@ -1101,6 +1149,7 @@ export class GameSim {
         this.stats = this.computeStats();
         // 무기를 바꿔 최대 체력이 늘면 늘어난 만큼 채우고, 줄면 새 최대치로 자른다
         this.player.hp = Math.min(this.relics.maxHp, this.player.hp + Math.max(0, this.relics.maxHp - before));
+        this.player.hp += (this.relics.maxHp - this.player.hp) * this.characterShopBonus('roanRepair');
       } else if (c.kind === 'upgrade') {
         if (c.def.weapon && isFusionIngredient(this.weapons.fusions, c.def.weapon)) return false;
         if (!upgradeAvailable(this.loadout, c.def, this.level, this.roan.forms) || !this.addUpgrade(c.def, c.grade)) return false;

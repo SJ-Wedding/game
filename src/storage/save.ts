@@ -1,5 +1,4 @@
-import { buyMeta, tokenReward, type MetaPurchases, type TokenReward } from '../core/meta';
-import { META_STATS, META_UNLOCKS } from '../config/meta';
+import { META_SHOP_ITEMS, buyMeta, tokenReward, type MetaPurchases, type TokenReward } from '../core/meta';
 import { validCarry, validRelicIds, type RelicId } from '../config/relics';
 import type { RunResult } from '../core/types';
 
@@ -83,7 +82,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   const meta = (migrated.meta ?? {}) as Record<string, unknown>;
   const rawPurchases = (meta.purchases && typeof meta.purchases === 'object' ? meta.purchases : {}) as Record<string, unknown>;
   const purchases: MetaPurchases = {};
-  for (const d of [...META_STATS, ...META_UNLOCKS]) {
+  for (const d of META_SHOP_ITEMS) {
     const lv = num(rawPurchases[d.id], 0, 0, d.maxLevel);
     if (lv > 0) purchases[d.id] = Math.floor(lv);
   }

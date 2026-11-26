@@ -156,7 +156,7 @@ export class WeaponSystem {
     const focus = specialist
       ? this.sim.starterDamageMultiplier * (relics.has('lumenRune') ? 0.95 : 1) * (relics.has('lumenStaff') ? (relics.still ? 1.2 : 0.95) : 1)
       : 1;
-    return this.baseDamage * factor * SPECIAL_WEAPON_POWER[kind] * focus
+    return this.baseDamage * factor * SPECIAL_WEAPON_POWER[kind] * focus * (1 + this.sim.characterShopBonus('rangerTuning'))
       * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
 
@@ -244,7 +244,7 @@ export class WeaponSystem {
       if (elapsed < (this.ready.get(id) ?? 0)) continue;
       const recipe = WEAPON_FUSIONS[id];
       let radius = recipe.radius + reachBonus * 0.08;
-      let interval: number = recipe.interval;
+      let interval = recipe.interval * (1 + this.sim.characterShopBonus('rangerFusion'));
       if (id === 'storm' && relics.has('secondBell')) { radius *= 0.75; interval *= 2 / 3; }
       if (id === 'tempest' && relics.has('returnRing')) interval *= 1.2;
       if (id === 'eclipse' && relics.has('anchor')) radius *= 1.5;
@@ -491,7 +491,9 @@ export class WeaponSystem {
       this.updateChainRelics(now);
     }
     if (this.available('mine', this.rankEffect('mine'))) this.device('mine', p, Infinity, 96);
-    if (this.available('turret', this.rankEffect('turret') * (sim.loadout.character === 'lumen' && sim.relics.has('winterLantern') ? 0.7 : 1))) this.deployTurrets();
+    const turretInstall = this.rankEffect('turret') * (1 + sim.characterShopBonus('lumenCycle'))
+      * (sim.loadout.character === 'lumen' && sim.relics.has('winterLantern') ? 0.7 : 1);
+    if (this.available('turret', turretInstall)) this.deployTurrets();
     if (this.enabled('flame') && (!this.trail || dist(p.x, p.y, this.trail.x, this.trail.y) >= 28)) {
       this.trail = { x: p.x, y: p.y };
       this.device('flame', p, 2, this.rankEffect('flame'));
@@ -647,7 +649,8 @@ export class WeaponSystem {
     const branches = this.sim.mastery('chainFork') * 2;
     if (!recast) {
       const speed = chainDelay(this.sim.mastery('chainSpeed'));
-      const interval = (specialist ? LUMEN_CHAIN.interval * speed : 2.15) * (relics.has('chainCloud') ? 1.1 : 1) * (rebound ? 1.1 : 1);
+      const interval = (specialist ? LUMEN_CHAIN.interval * speed : 2.15) * (1 + this.sim.characterShopBonus('lumenCycle'))
+        * (relics.has('chainCloud') ? 1.1 : 1) * (rebound ? 1.1 : 1);
       this.ready.set('chain', now + Math.max(0.12, interval * relics.cooldownMultiplier));
       if (relics.onWeaponActivated()) this.ready.set('chain', now);
       // 이중 방전 코일: 25% 확률로 0.2초 뒤 피해 60%로 한 번 더
@@ -657,13 +660,14 @@ export class WeaponSystem {
     const points: Point[] = [player];
     const reboundCounts = [0];
     const maxLinks = this.rankEffect('chain') + (crown ? 2 : 0) + this.sim.mastery('chainLinks');
-    const range = specialist ? (125 + reachBonus * 0.12) * LUMEN_CHAIN.jumpRange * (relics.has('chainConductor') ? 1.4 : 1) : 125;
+    const range = specialist ? this.lumenChainRange : 125;
+    const repeatBonus = 1 + this.sim.characterShopBonus('lumenChainRepeat');
     const repeatTable = rebound ? [0.45, 0.40, 0.35] : LUMEN_CHAIN.repeatDamage;
     let firstFactor = 0;
     const hit = (enemy: Target, at: Point, factor: number) => {
       const repeats = visits.get(enemy) ?? 0;
       visits.set(enemy, repeats + 1);
-      const repeatDamage = repeats > 0 ? repeatTable[Math.min(repeats, repeatTable.length) - 1] : 1;
+      const repeatDamage = repeats > 0 ? repeatTable[Math.min(repeats, repeatTable.length) - 1] * repeatBonus : 1;
       // 피뢰 표식: 4초 안에 쓰러지면 주변 적 2마리에게 첫 타격의 50%
       if (rod) this.rodMarks.set(enemy, { until: now + 4, factor: firstFactor * 0.5 });
       this.damage('chain', enemy, factor * repeatDamage * (crown ? 0.75 : 1));
@@ -706,6 +710,11 @@ export class WeaponSystem {
     }
   }
 
+  private get lumenChainRange(): number {
+    return (125 + this.sim.reachBonus * 0.12) * LUMEN_CHAIN.jumpRange * (this.sim.relics.has('chainConductor') ? 1.4 : 1)
+      * (1 + this.sim.characterShopBonus('lumenChainRange'));
+  }
+
   /** 뇌운 병·이중 방전 코일·피뢰 표식 */
   private updateChainRelics(now: number): void {
     while (this.recasts.length && now + 1e-6 >= this.recasts[0]) {
@@ -719,7 +728,7 @@ export class WeaponSystem {
     }
     compact(this.clouds, (cloud) => cloud.next <= cloud.until);
     const bursts = this.rodBursts.splice(0);
-    const range = (125 + this.sim.reachBonus * 0.12) * LUMEN_CHAIN.jumpRange * (this.sim.relics.has('chainConductor') ? 1.4 : 1);
+    const range = this.lumenChainRange;
     for (const burst of bursts) {
       const skip = new Set<Target>([burst.from]);
       for (let i = 0; i < 2; i++) {
@@ -761,7 +770,8 @@ export class WeaponSystem {
     const winter = relics.has('winterLantern');
     const duration = 6 * (winter ? 0.7 : 1) * (relics.has('turretMobile') ? 0.85 : 1);
     const count = 1 + Number(winter) + this.sim.mastery('turretMount');
-    const range = (340 + reachBonus * 0.55) * (relics.has('lumenSight') ? 1.25 : 1) * (relics.has('turretScope') ? 1.3 : 1);
+    const range = (340 + reachBonus * 0.55) * (relics.has('lumenSight') ? 1.25 : 1) * (relics.has('turretScope') ? 1.3 : 1)
+      * (1 + this.sim.characterShopBonus('lumenTurretRange'));
     if (loadout.character !== 'lumen') {
       if (winter) {
         for (const side of [-1, 1]) this.device('turret', { x: player.x + side * 34, y: player.y }, duration, range);
@@ -815,11 +825,13 @@ export class WeaponSystem {
     const factor = this.turretFactor;
     const permafrost = relics.has('turretPermafrost');
     const scope = relics.has('turretScope');
+    const bonusSlow = this.sim.characterShopBonus('lumenTurretSlow');
+    const slowDuration = (permafrost ? 1.5 : 0.9) + bonusSlow;
     const strike = (t: Target, scale: number) => {
       if ('id' in t) {
         // 영구 동토 핵: 이미 둔화된 적이 다시 맞으면 0.4초 빙결
         if (permafrost && t.slowUntil > elapsed) t.rootedUntil = Math.max(t.rootedUntil, elapsed + 0.4);
-        t.slowUntil = Math.max(t.slowUntil, elapsed + (permafrost ? 1.5 : 0.9));
+        t.slowUntil = Math.max(t.slowUntil, elapsed + slowDuration);
       }
       const far = scope && dist(turret.x, turret.y, t.x, t.y) > 250 ? 1.2 : 1;
       this.damage('turret', t, factor * scale * far);
@@ -867,7 +879,7 @@ export class WeaponSystem {
       for (const t of this.targets()) {
         if (splash.has(t) || dist(impact.x, impact.y, t.x, t.y) > radius + t.r) continue;
         splash.add(t);
-        if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.8 * frost);
+        if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.8 * frost + bonusSlow);
         this.damage('turret', t, factor * 0.35 * frost);
       }
     }
