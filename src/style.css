@@ -138,7 +138,7 @@ fieldset.dev small { width: 100%; color: var(--muted); }
 .levelup h2 { font-size: 2em; color: var(--gold); }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1em; width: 100%; }
 .cards.many { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.6em; font-size: 0.86em; }
-.gear-sprite { position: absolute; right: 0.4em; top: 1.6em; width: 64px; height: 64px; background-size: 192px 64px; background-position: -64px 0; image-rendering: pixelated; opacity: 0.95; }
+.gear-sprite { position: absolute; right: 0.4em; top: 1.6em; width: 64px; height: 64px; background-size: 768px 64px; background-position: -64px 0; image-rendering: pixelated; opacity: 0.95; }
 .cards.many .card { padding: 0.8em; }
 .card {
   position: relative; display: grid; gap: 0.45em; align-content: start; text-align: left;
@@ -445,7 +445,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 }
 .weapon-effect-preview:popover-open { display: grid; gap: 0.45rem; }
 .weapon-effect-preview strong { color: #ead5ff; }
-.weapon-effect-preview img { width: 100%; height: auto; aspect-ratio: 344 / 206; max-height: 44vh; border-radius: 5px; object-fit: contain; background: #0b1421; }
+.weapon-effect-preview img { width: 100%; height: auto; aspect-ratio: 432 / 170; max-height: 44vh; border-radius: 5px; object-fit: contain; background: #0b1421; }
 .weapon-effect-preview small { color: #c4d1e6; line-height: 1.45; }
 
 .result-damage { width: 100%; text-align: left; padding: 0.55em 0.8em; background: #211a2c; border-radius: 6px; }

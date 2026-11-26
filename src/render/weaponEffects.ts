@@ -13,6 +13,39 @@ function noise(seed: number): number {
   return value - Math.floor(value);
 }
 
+function impact(g: Graphics, x: number, y: number, radius: number, color: number, alpha: number): void {
+  const xx = Math.round(x);
+  const yy = Math.round(y);
+  g.fillStyle(color, alpha).fillPoints([
+    { x: xx - radius, y: yy }, { x: xx - 2, y: yy - 2 }, { x: xx, y: yy - radius }, { x: xx + 2, y: yy - 2 },
+    { x: xx + radius, y: yy }, { x: xx + 2, y: yy + 2 }, { x: xx, y: yy + radius }, { x: xx - 2, y: yy + 2 },
+  ], true).fillStyle(0xf7ffff, alpha).fillRect(xx - 1, yy - 1, 3, 3);
+}
+
+export function drawMuzzleFlash(g: Graphics, x: number, y: number, angle: number, age: number): void {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  const alpha = Math.max(0, 1 - age / 0.096);
+  impact(g, x + dx * 23, y + dy * 23, 5 + 9 * alpha, 0x63e7ff, alpha);
+  if (age > 0.035) {
+    const k = age - 0.035;
+    g.fillStyle(0xffcb74, 0.8 * (1 - k / 0.105)).fillRect(
+      Math.round(x - dx * k * 105 - dy * 8), Math.round(y - dy * k * 105 + dx * 8 - 60 * k + 1200 * k * k), 3, 2,
+    );
+  }
+}
+
+export function drawCastCharge(g: Graphics, x: number, y: number, time: number, strength: number): void {
+  const radius = 5 + (1 - strength) * 12;
+  for (let i = 0; i < 4; i++) {
+    const angle = i * TAU / 4 + time * 11;
+    const px = Math.round(x + Math.cos(angle) * radius);
+    const py = Math.round(y + Math.sin(angle) * radius * 0.72);
+    g.fillStyle(i % 2 ? 0x63dcff : 0xe1f9ff, 0.42 + 0.48 * strength).fillRect(px, py, 2, 2);
+  }
+  impact(g, x, y, 3 + strength * 4, 0x68dfff, 0.78 * strength);
+}
+
 export function drawBolt(g: Graphics, from: Point, to: Point, color: number, alpha: number, seed: number, width = 1): void {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -26,9 +59,9 @@ export function drawBolt(g: Graphics, from: Point, to: Point, color: number, alp
     points.push({ x: from.x + dx * i / steps - dy * offset / length, y: from.y + dy * i / steps + dx * offset / length });
   }
   points.push(to);
-  g.lineStyle(12 * width, color, alpha * 0.17).strokePoints(points);
-  g.lineStyle(5 * width, color, alpha * 0.8).strokePoints(points);
-  g.lineStyle(2 * width, 0xf5ffff, alpha).strokePoints(points);
+  g.lineStyle(5.8 * width, 0x17243c, alpha * 0.75).strokePoints(points);
+  g.lineStyle(3.4 * width, color, alpha * 0.85).strokePoints(points);
+  g.lineStyle(1.4 * width, 0xf5ffff, alpha).strokePoints(points);
 
   if (width < 1 || length < 40) return;
   for (let i = 1; i < steps - 1; i += 2) {
@@ -51,15 +84,17 @@ export function drawLightning(g: Graphics, fx: WeaponEffect): void {
     const spark = [{ x: x + 3, y: y - 8 }, { x: x - 4, y }, { x: x + 3, y: y + 1 }, { x: x - 2, y: y + 8 }];
     g.lineStyle(4, 0x9b63ff, alpha * 0.5).strokePoints(spark);
     g.lineStyle(1.6, 0xf3ddff, alpha).strokePoints(spark);
+    for (let i = 0; i < (fx.markHits ?? 1); i++) g.fillStyle(0xdcb5ff, alpha).fillRect(x - 4 + i * 5, y - 13, 3, 2);
     return;
   }
   if (fx.kind === 'mark') {
-    drawBolt(g, { x: center.x - 32, y: center.y - 225 }, center, 0xc28aff, alpha, seed + 21, 1.5);
+    drawBolt(g, { x: center.x + 8, y: center.y - 175 }, center, 0xc28aff, alpha, seed + 21, 1.65);
     for (const [i, target] of targets.entries()) drawBolt(g, center, target, 0xba87ff, alpha * 0.8, seed + 31 + i * 13, 0.65);
-    g.fillStyle(0xf1d6ff, alpha * 0.82).fillCircle(center.x, center.y, 12 * (0.45 + 0.55 * alpha));
+    impact(g, center.x, center.y, 7 + 10 * alpha, 0xd9afff, alpha);
     return;
   }
   for (let i = 1; i < fx.points.length; i++) {
+    if (progress < 0.27 * (i - 1) / Math.max(1, fx.points.length - 2)) continue;
     const repeats = fx.reboundCounts?.[i] ?? 0;
     if (repeats > 0) {
       drawChainRebound(g, fx.points[i - 1], fx.points[i], repeats, progress, alpha, seed + i * 17);
@@ -67,7 +102,7 @@ export function drawLightning(g: Graphics, fx: WeaponEffect): void {
     }
     drawBolt(g, fx.points[i - 1], fx.points[i], 0x61dfff, alpha, seed + i * 17);
     const { x, y } = fx.points[i];
-    g.fillStyle(0xd7faff, alpha * 0.88).fillCircle(x, y, 4 * alpha);
+    impact(g, x, y, 4 + 4 * alpha, 0xc2f5ff, alpha);
   }
 }
 
@@ -85,10 +120,8 @@ function drawChainRebound(g: Graphics, from: Point, to: Point, repeats: number, 
   const a = travel < 0.5 ? from : bend;
   const b = travel < 0.5 ? bend : to;
   const along = travel < 0.5 ? travel * 2 : travel * 2 - 1;
-  g.fillStyle(0xe7d6ff, alpha).fillCircle(a.x + (b.x - a.x) * along, a.y + (b.y - a.y) * along, 4);
-  const radius = 10 + progress * 23;
-  g.lineStyle(2, violet, alpha * 0.8).strokeCircle(to.x, to.y, radius);
-  g.lineStyle(1.5, 0xf3ddff, alpha * 0.68).strokeCircle(to.x, to.y, radius * 0.66);
+  impact(g, a.x + (b.x - a.x) * along, a.y + (b.y - a.y) * along, 4.5, violet, alpha);
+  impact(g, to.x, to.y, 5 + progress * 12, violet, alpha * 0.85);
 }
 
 export function drawInfectionSmoke(g: Graphics, fx: WeaponEffect): void {
@@ -102,10 +135,11 @@ export function drawInfectionSmoke(g: Graphics, fx: WeaponEffect): void {
     const travel = Math.min(age * 2, 1);
     const x = origin.x + dx * travel + (noise(i + origin.x) - 0.5) * (12 + age * 24);
     const y = origin.y + dy * travel - age * 17 + (noise(i + 23) - 0.5) * 15;
-    const r = 3 + age * 10 + noise(i + 40) * 3 + fx.radius * 0.15;
+    const r = 3 + age * 8 + noise(i + 40) * 2 + fx.radius * 0.10;
     const opacity = (1 - age) * Math.min(1, age * 12);
-    g.fillStyle(0x416c3c, opacity * 0.57).fillCircle(x, y, r);
-    g.fillStyle(0xb2e67d, opacity * 0.42).fillCircle(x - r * 0.27, y - r * 0.2, r * 0.62);
+    g.fillStyle(0x416c3c, opacity * 0.63).fillCircle(x, y, r);
+    g.fillStyle(0xa6df7b, opacity * 0.52).fillCircle(x - r * 0.27, y - r * 0.2, r * 0.58);
+    g.fillStyle(0xd1f9a3, opacity * 0.8).fillRect(Math.round(x), Math.round(y - r * 0.46), 2, 2);
   }
 }
 
@@ -127,7 +161,7 @@ export function drawExplosion(ground: Graphics, g: Graphics, fx: WeaponEffect): 
   const age = 1 - fx.life / fx.duration;
   const spread = 1 - (1 - age) ** 3;
   const alpha = 1 - age;
-  ground.fillStyle(color, alpha * 0.18).fillCircle(x, y, fx.radius * (0.3 + 0.65 * spread));
+  ground.fillStyle(dark, alpha * 0.12).fillEllipse(x, y, fx.radius * (0.6 + spread), fx.radius * (0.36 + spread * 0.58));
 
   for (let i = 0; i < 18; i++) {
     const seed = i * 19 + Math.round(x);
@@ -138,10 +172,10 @@ export function drawExplosion(ground: Graphics, g: Graphics, fx: WeaponEffect): 
     const distance = (fx.radius - r) * (0.18 + spread * 0.82) * travel;
     const px = x + Math.cos(angle) * distance;
     const py = y + Math.sin(angle) * distance;
-    const size = r * (0.66 + spread * 0.34);
-    g.fillStyle(dark, alpha * 0.58).fillCircle(px, py, size);
-    g.fillStyle(color, alpha ** 1.6 * 0.8).fillCircle(px - size * 0.17, py + size * 0.12, size * 0.81);
-    g.fillStyle(bright, alpha ** 3 * 0.9).fillCircle(px - size * 0.24, py + size * 0.1, size * 0.43);
+    const size = Math.max(2, r * (0.25 + spread * 0.21));
+    g.fillStyle(dark, alpha * 0.72).fillRect(px - size, py - size, size * 2, size * 2);
+    g.fillStyle(color, alpha ** 1.6 * 0.85).fillRect(px - size * 0.55, py - size * 0.6, size, size * 1.25);
+    g.fillStyle(bright, alpha ** 2.5).fillRect(px - size * 0.5, py - size * 0.5, size * 0.54, size * 0.61);
     if (outer || i % 3 === 1) {
       const reach = Math.min(fx.radius, distance + size * 2.5);
       g.lineStyle(1.5 + alpha, bright, alpha * 0.86).lineBetween(px, py,
@@ -165,7 +199,6 @@ export function drawExplosion(ground: Graphics, g: Graphics, fx: WeaponEffect): 
 }
 
 export function drawGravityPull(g: Graphics, x: number, y: number, radius: number, age: number): void {
-  g.fillStyle(0x5f3ed0, 0.1).fillCircle(x, y, radius);
   for (let i = 0; i < 6; i++) {
     const angle = i * TAU / 6 + age * 0.65;
     g.lineStyle(2, 0x9b82ff, 0.35).beginPath().arc(x, y, radius, angle, angle + 0.54).strokePath();
@@ -187,7 +220,7 @@ export function drawFlame(ground: Graphics, g: Graphics, x: number, y: number, r
   const fade = Math.min(1, (duration - age) * 2.5);
   const tongueCount = Math.ceil(7 * density);
   const flameAlpha = fade * 7 * density / tongueCount;
-  ground.fillStyle(0xd54114, 0.16 * fade * density).fillEllipse(x, y, radius * 1.8, radius * 1.22);
+  ground.fillStyle(0xb54524, 0.13 * fade * density).fillEllipse(x, y, radius * 1.6, radius * 0.88);
   for (let i = 0; i < tongueCount; i++) {
     const angle = i * 2.4;
     const distance = Math.sqrt(i / tongueCount) * radius * 0.85;
@@ -225,10 +258,12 @@ export function drawRiftBarrier(g: Graphics, origin: Point, angle: number, lengt
     cracks.push({ x: origin.x + dx * length * i / steps - dy * offset, y: origin.y + dy * length * i / steps + dx * offset });
   }
   cracks.push(to);
-  g.lineStyle(halfWidth * 2, 0x582580, alpha * 0.2).lineBetween(origin.x, origin.y, to.x, to.y);
-  g.lineStyle(12, 0x110f25, alpha * 0.95).strokePoints(cracks);
-  g.lineStyle(7, 0xb266e8, alpha * 0.66).strokePoints(cracks);
-  g.lineStyle(2, 0xf3bfff, alpha * 0.83).strokePoints(cracks);
+  for (let i = 0; i < cracks.length - 1; i += 3) {
+    const segment = cracks.slice(i, i + 3);
+    g.lineStyle(6, 0x110f25, alpha * 0.95).strokePoints(segment);
+    g.lineStyle(2.6, 0xb266e8, alpha * 0.78).strokePoints(segment);
+    g.lineStyle(1, 0xe4b2f5, alpha * 0.8).strokePoints(segment);
+  }
   for (let i = 0; i < cracks.length; i++) {
     const { x, y } = cracks[i];
     const height = 7 + noise(i + 4) * 16;
@@ -253,7 +288,8 @@ export function drawFrostBarrel(g: Graphics, x: number, y: number, angle: number
 }
 
 export function drawFrostShot(g: Graphics, fx: WeaponEffect): void {
-  const [base, hit] = fx.points;
+  const base = fx.points[0];
+  const hit = fx.points[fx.points.length - 1];
   const dx = hit.x - base.x;
   const dy = hit.y - base.y;
   const distance = Math.hypot(dx, dy);
@@ -261,17 +297,32 @@ export function drawFrostShot(g: Graphics, fx: WeaponEffect): void {
   const x = base.x + dx * barrel;
   const y = base.y + dy * barrel;
   const alpha = fx.life / fx.duration;
-  g.lineStyle(8, 0x54caff, alpha * 0.24).lineBetween(x, y, hit.x, hit.y);
-  g.lineStyle(3, 0x9ae4ff, alpha * 0.85).lineBetween(x, y, hit.x, hit.y);
+  g.lineStyle(5, 0x34577e, alpha * 0.80).lineBetween(x, y, hit.x, hit.y);
+  g.lineStyle(2.8, 0x9ae4ff, alpha * 0.85).lineBetween(x, y, hit.x, hit.y);
   g.lineStyle(1, 0xe5fbff, alpha).lineBetween(x, y, hit.x, hit.y);
-  g.fillStyle(0xd8fbff, alpha).fillCircle(x, y, 5);
-  for (let i = 0; i < 7; i++) {
-    const a = i * TAU / 7;
-    const reach = 4 + (1 - alpha) * (11 + (i % 3) * 4);
-    const px = hit.x + Math.cos(a) * reach;
-    const py = hit.y + Math.sin(a) * reach;
-    g.lineStyle(2, 0xafedff, alpha).lineBetween(px, py, px + Math.cos(a) * 5, py + Math.sin(a) * 5);
+  impact(g, x, y, 6, 0xb4efff, alpha * 0.88);
+  for (const target of fx.points.slice(1)) frostShards(g, target, 14, alpha);
+}
+
+function frostShards(g: Graphics, target: Point, radius: number, alpha: number): void {
+  for (let i = 0; i < 6; i++) {
+    const angle = (i + 0.4) * TAU / 6;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    const reach = 4 + (1 - alpha) * radius * (0.4 + i % 3 * 0.22);
+    const x = target.x + dx * reach;
+    const y = target.y + dy * reach;
+    const length = 4 + Math.min(14, radius * 0.2);
+    g.fillStyle(i % 2 ? 0x78bfee : 0xd9f6ff, alpha * 0.9).fillTriangle(x - dy * 2, y + dx * 2,
+      x + dx * length, y + dy * length, x + dy * 2, y - dx * 2);
   }
+}
+
+export function drawFrostBurst(g: Graphics, fx: WeaponEffect): void {
+  const target = fx.points[0];
+  const alpha = fx.life / fx.duration;
+  frostShards(g, target, fx.radius, alpha);
+  impact(g, target.x, target.y, 6 + Math.min(18, fx.radius * 0.15) * alpha, 0xa0e3ff, alpha * 0.82);
 }
 
 function spearhead(g: Graphics, x: number, y: number, dx: number, dy: number, scale: number, alpha: number): void {
@@ -301,7 +352,7 @@ export function drawSpearStrike(g: Graphics, fx: WeaponEffect): void {
   const dy = to.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
   const alpha = fx.life / fx.duration;
-  g.lineStyle(20, 0xff9e4d, alpha * 0.25).lineBetween(from.x, from.y, to.x, to.y);
+  g.lineStyle(8, 0x624639, alpha * 0.65).lineBetween(from.x, from.y, to.x, to.y);
   g.lineStyle(6, 0xffd989, alpha * 0.85).lineBetween(from.x, from.y, to.x, to.y);
   g.lineStyle(2, 0xfffaf0, alpha).lineBetween(from.x, from.y, to.x, to.y);
   spearhead(g, to.x, to.y, dx / len, dy / len, 1.65, alpha);
@@ -383,8 +434,8 @@ export function drawEcho(ground: Graphics, g: Graphics, fx: WeaponEffect, alpha:
       const aim = fx.points[i];
       const x = origin.x + (aim.x - origin.x) * 0.38;
       const y = origin.y + (aim.y - origin.y) * 0.38;
-      g.lineStyle(9, 0x51dabe, alpha * 0.37).lineBetween(x, y, aim.x, aim.y);
-      g.lineStyle(3, 0xb9ffee, alpha * 0.9).lineBetween(x, y, aim.x, aim.y);
+      g.lineStyle(5, 0x418b7a, alpha * 0.48).lineBetween(x, y, aim.x, aim.y);
+      g.lineStyle(2, 0xb9ffee, alpha * 0.9).lineBetween(x, y, aim.x, aim.y);
     }
   }
 }

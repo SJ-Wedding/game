@@ -18,7 +18,11 @@ test('창 크기를 줄여도 균열 사수는 픽셀 렌더링과 방향별 스
   await expect(page.locator('canvas')).toHaveCSS('image-rendering', 'pixelated');
   for (const [key, frame, flipped] of [['KeyW', 2, false], ['KeyA', 0, true], ['KeyD', 0, false], ['KeyS', 1, false]] as const) {
     await page.keyboard.down(key);
-    await expect.poll(sprite).toEqual(['player', frame, 40, flipped, 50, 50, 14]);
+    await expect.poll(async () => {
+      const [texture, current, ...body] = await sprite();
+      return [texture, current >= 3 && current < 9, current % 3, ...body];
+    }).toEqual(['player', true, frame, 40, flipped, 50, 50, 14]);
+    await expect.poll(async () => (await sprite())[1]).toBe(frame + 6);
     await page.keyboard.up(key);
   }
   expect(errors).toEqual([]);

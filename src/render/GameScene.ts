@@ -10,16 +10,17 @@ import { ASSAULT_CONFIG } from '../config/spawns';
 import type { App } from '../app/App';
 import { BOSS_CHARGE_LENGTH } from '../core/boss';
 import type { GameSim } from '../core/sim';
-import type { Enemy, InputState, SimEvent } from '../core/types';
+import type { Enemy, InputState, Player, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
-import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
+import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, FUSION_ART_FRAME_SIZE, fusionCombat, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
 import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
 import {
-  daggerExtension, drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostShot, drawGravityPull, drawInfected,
+  daggerExtension, drawCastCharge, drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostBurst, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
+  drawMuzzleFlash,
 } from './weaponEffects';
-import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
+import { drawResonance, drawResonanceDirection, drawTempestTrail, resonanceArt, tempestArt, type FusionArt } from './fusionEffects';
 import { CRESCENT_WAVE_DURATION, drawCrescentWave } from './roanCrescent';
 import { drawFlailTrail, drawMaceImpact, drawMaceQuake, drawMaceWeapon, maceLean } from './roanMaceEffects';
 import { bladeMotion, drawBladePose, drawBladeSweep } from './roanBladeEffects';
@@ -55,6 +56,14 @@ export class GameScene extends Phaser.Scene {
   private visibleEnemies = 0;
   private readonly weaponImages: Phaser.GameObjects.Image[] = [];
   private visibleWeapons = 0;
+  private readonly fusionImages: Phaser.GameObjects.Image[] = [];
+  private visibleFusions = 0;
+  private lastShot: { at: number; angle: number } | null = null;
+  private motionTick = -1;
+  private motionX = 0;
+  private motionY = 0;
+  private walkDistance = 0;
+  private walking = false;
   private keys!: Record<'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SPACE', Phaser.Input.Keyboard.Key>;
   private particles: Particle[] = [];
   private renderedSim: GameSim | null = null;
@@ -77,6 +86,7 @@ export class GameScene extends Phaser.Scene {
       this.load.spritesheet(key, url, { frameWidth: CHARACTER_FRAME_SIZE, frameHeight: CHARACTER_FRAME_SIZE });
     }
     this.load.spritesheet('weapon-effects', weaponEffects, { frameWidth: 24, frameHeight: 24 });
+    this.load.spritesheet('fusion-combat', fusionCombat, { frameWidth: FUSION_ART_FRAME_SIZE, frameHeight: FUSION_ART_FRAME_SIZE });
     this.load.spritesheet('roan-weapons', ROAN_WEAPON_SHEET, { frameWidth: ROAN_WEAPON_FRAME.width, frameHeight: ROAN_WEAPON_FRAME.height });
     for (const [key, url] of Object.entries(WEAPON_SPRITES)) this.load.image(`weapon-${key}`, url);
   }
@@ -128,6 +138,12 @@ export class GameScene extends Phaser.Scene {
     const sim = this.app.sim;
     if (sim !== this.renderedSim) {
       this.particles.length = 0;
+      this.lastShot = null;
+      this.motionTick = -1;
+      this.walkDistance = 0;
+      this.walking = false;
+      this.motionX = sim?.player.x ?? 0;
+      this.motionY = sim?.player.y ?? 0;
       this.renderedSim = sim;
       if (sim) this.setArena(sim.seed);
     }
@@ -170,6 +186,11 @@ export class GameScene extends Phaser.Scene {
       const x = ev.x ?? 0;
       const y = ev.y ?? 0;
       switch (ev.type) {
+        case 'shoot': {
+          const sim = this.app.sim;
+          if (sim?.loadout.character === 'ranger') this.lastShot = { at: sim.elapsed, angle: sim.player.aim };
+          break;
+        }
         case 'kill':
           this.burst(x, y, PALETTE.chaser, 8, 160, 3);
           break;
@@ -262,17 +283,26 @@ export class GameScene extends Phaser.Scene {
     for (const blade of this.heldBlades) blade.setVisible(false);
     this.bossImage.setVisible(Boolean(sim?.boss && !sim.boss.dead));
     this.drawWeapons(sim);
-    if (!sim) return;
+    if (!sim) {
+      this.hideUnusedFusions(0);
+      return;
+    }
     const camera = this.cameras.main;
     const { displayWidth, displayHeight } = camera;
     const view = { x: camera.scrollX + (camera.width - displayWidth) / 2, y: camera.scrollY + (camera.height - displayHeight) / 2,
       width: displayWidth, height: displayHeight };
+    let fusionCount = 0;
     for (const effect of sim.weapons.effects) {
       if (effect.variant !== 'resonance') continue;
       drawResonance(ground, this.weaponEffects, effect);
       drawResonanceDirection(g, effect, view);
+      this.drawFusionArt(fusionCount++, resonanceArt(effect));
     }
-    for (const flight of sim.weapons.tempestFlights) drawTempestFlight(this.weaponEffects, flight);
+    for (const flight of sim.weapons.tempestFlights) {
+      drawTempestTrail(this.weaponEffects, flight);
+      this.drawFusionArt(fusionCount++, tempestArt(flight));
+    }
+    this.hideUnusedFusions(fusionCount);
     const t = sim.elapsed;
     for (const field of sim.weapons.mineFields) {
       if (!field.fusion) continue;
@@ -439,16 +469,30 @@ export class GameScene extends Phaser.Scene {
     const mace = attack?.motion === 'slam' || attack?.motion === 'spin' ? attack : undefined;
     const blade = stab || mace ? undefined : attack;
     const pose = blade ? bladeMotion(blade, progress) : undefined;
-    const attackX = Math.cos(attack?.angle ?? p.aim);
-    const attackY = Math.sin(attack?.angle ?? p.aim);
+    this.updatePlayerMotion(p, sim.tick);
+    const shot = this.lastShot && t - this.lastShot.at < 0.14 ? this.lastShot : null;
+    const charge = sim.loadout.character === 'lumen' && sim.loadout.weapon === 'chain' ? sim.weapons.chainCooldownRemaining : 0;
+    const charging = charge > 0 && charge < 0.16;
+    const discharge = sim.loadout.character === 'lumen' && sim.loadout.weapon === 'chain'
+      ? sim.weapons.effects.find((fx) => fx.variant !== 'resonance' && fx.kind === 'chain' && !fx.radius
+        && fx.points[1] && fx.duration - fx.life < 0.14 && Math.hypot(fx.points[0].x - p.x, fx.points[0].y - p.y) < 65) : undefined;
+    const deployment = sim.loadout.character === 'lumen' && sim.loadout.weapon === 'turret' && sim.weapons.devices.some((d) => d.kind === 'turret' && d.age < 0.23);
+    const castAngle = discharge ? Math.atan2(discharge.points[1].y - p.y, discharge.points[1].x - p.x) : p.aim;
+    const actionAngle = attack?.angle ?? shot?.angle ?? castAngle;
+    const attackX = Math.cos(actionAngle);
+    const attackY = Math.sin(actionAngle);
     const extension = stab ? daggerExtension(stabProgress) : 0;
-    const lean = mace ? mace.motion === 'spin' ? 3 * (1 - progress) : maceLean(progress) : pose?.lean ?? 9 * extension;
+    const recoil = shot ? 5 * (1 - (t - shot.at) / 0.14) ** 2 : 0;
+    const lean = mace ? mace.motion === 'spin' ? 3 * (1 - progress) : maceLean(progress) : pose?.lean ?? (9 * extension - recoil);
     const bodyX = Math.round(p.x + attackX * lean);
     const bodyY = Math.round(p.y + attackY * lean);
-    let facing = p.facing;
-    if (attack) facing = Math.abs(attackX) >= Math.abs(attackY) ? (attackX < 0 ? 'west' : 'east') : (attackY < 0 ? 'north' : 'south');
+    const activePose = Boolean(attack || shot || discharge || charging || deployment);
+    const facing = activePose
+      ? Math.abs(attackX) >= Math.abs(attackY) ? (attackX < 0 ? 'west' : 'east') : (attackY < 0 ? 'north' : 'south')
+      : p.facing;
     const texture = attack ? 'roan-thrust' : sim.loadout.character === 'roan' ? roanTexture(sim.roan.design) : characterTexture(sim.loadout);
-    const frame = facing === 'south' ? 1 : facing === 'north' ? 2 : 0;
+    const directionFrame = facing === 'south' ? 1 : facing === 'north' ? 2 : 0;
+    const frame = directionFrame + (activePose || dodging ? 9 : this.walking ? 3 + 3 * (Math.floor(this.walkDistance / 12) % 2) : 0);
     if (this.playerImage.texture.key !== texture) this.playerImage.setTexture(texture, frame);
     else if (Number(this.playerImage.frame.name) !== frame) this.playerImage.setFrame(frame);
     this.playerImage.setPosition(bodyX, bodyY)
@@ -456,6 +500,8 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(blink ? 0.45 : 1);
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
+    if (shot) drawMuzzleFlash(g, bodyX, bodyY, actionAngle, t - shot.at);
+    if (charging || deployment) drawCastCharge(g, bodyX + attackX * 19, bodyY + attackY * 14, t, charging ? 1 - charge / 0.16 : 0.75);
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
     const body = { x: bodyX, y: bodyY };
     const alpha = blink ? 0.45 : 1;
@@ -482,7 +528,7 @@ export class GameScene extends Phaser.Scene {
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;
-    if (sim.loadout.character !== 'lumen' && !attack) g.fillStyle(PALETTE.playerOutline, 1).fillTriangle(
+    if (sim.loadout.character !== 'lumen' && !activePose) g.fillStyle(PALETTE.playerOutline, 0.78).fillTriangle(
       p.x + ax * (aimMarker + 8), p.y + ay * (aimMarker + 8),
       p.x + ax * aimMarker - ay * 4, p.y + ay * aimMarker + ax * 4,
       p.x + ax * aimMarker + ay * 4, p.y + ay * aimMarker - ax * 4,
@@ -507,6 +553,27 @@ export class GameScene extends Phaser.Scene {
     for (const q of this.particles) {
       g.fillStyle(q.color, Math.max(0, q.life / q.max)).fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
     }
+  }
+
+  private updatePlayerMotion(p: Player, tick: number): void {
+    if (this.motionTick === tick) return;
+    const delta = Math.hypot(p.x - this.motionX, p.y - this.motionY);
+    this.walking = delta > 0.03;
+    this.walkDistance = this.walking ? (this.walkDistance + delta) % 24 : 0;
+    this.motionTick = tick;
+    this.motionX = p.x;
+    this.motionY = p.y;
+  }
+
+  private drawFusionArt(index: number, art: FusionArt): void {
+    const image = this.fusionImages[index] ??= this.add.image(0, 0, 'fusion-combat').setDepth(5.2);
+    image.setFrame(art.frame).setOrigin(art.originX ?? 0.5, art.originY ?? 0.5).setPosition(art.x, art.y)
+      .setScale(art.size / FUSION_ART_FRAME_SIZE).setRotation(art.rotation ?? 0).setAlpha(art.alpha).setVisible(true);
+  }
+
+  private hideUnusedFusions(count: number): void {
+    for (let i = count; i < this.visibleFusions; i++) this.fusionImages[i].setVisible(false);
+    this.visibleFusions = count;
   }
 
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
@@ -558,20 +625,26 @@ export class GameScene extends Phaser.Scene {
             this.weaponImage(count++, d.kind, d.x, d.y);
             break;
           case 'axe':
-            ground.lineStyle(5, 0xffb660, 0.36).lineBetween(d.x, d.y, d.x - Math.cos(d.angle) * 35, d.y - Math.sin(d.angle) * 35);
-            this.weaponImage(count++, d.kind, d.x, d.y, { rotation: d.age * 19, scale: 1.4 });
+            ground.lineStyle(3, d.age < 0.72 ? 0xffbe71 : 0x99e8ed, 0.65)
+              .lineBetween(d.x, d.y, d.x - Math.cos(d.angle) * 35, d.y - Math.sin(d.angle) * 35);
+            this.weaponImage(count++, d.kind, d.x, d.y, { rotation: d.age * 19, scale: Math.min(1.9, 0.92 + d.r / 31) });
             break;
-          case 'turret':
-            this.weaponImage(count++, d.kind, d.x, d.y, { scale: 1.3 });
+          case 'turret': {
+            const opening = Math.min(1, d.age / 0.23);
+            this.weaponImage(count++, d.kind, d.x, d.y - 6 * (1 - opening), { scale: 0.86 + opening * 0.43 });
+            if (opening < 1) drawCastCharge(g, d.x, d.y, d.age, 1 - opening);
             drawFrostBarrel(g, d.x, d.y, d.angle);
             break;
+          }
           case 'mine':
-            this.weaponImage(count++, d.kind, d.x, d.y);
+            this.weaponImage(count++, d.kind, d.x, d.y, { alpha: d.age >= (d.armAt ?? 0.4) ? 1 : 0.5 });
             break;
         }
       }
       for (const blade of sim.weapons.blades) {
         const angle = Math.atan2(blade.y - sim.player.y, blade.x - sim.player.x);
+        ground.lineStyle(2, 0xb7d3ed, 0.56).beginPath()
+          .arc(sim.player.x, sim.player.y, Math.hypot(blade.x - sim.player.x, blade.y - sim.player.y), angle - 0.47, angle - 0.1).strokePath();
         this.weaponImage(count++, 'orbit', blade.x, blade.y, { rotation: angle + Math.PI / 2, scale: 1.4 });
       }
 
@@ -606,14 +679,7 @@ export class GameScene extends Phaser.Scene {
         }
         if (fx.kind === 'turret') {
           if (fx.variant === 'frostBurst') {
-            const { x, y } = fx.points[0];
-            const alpha = fx.life / fx.duration;
-            ground.fillStyle(0x84d9ff, alpha * 0.16).fillCircle(x, y, fx.radius);
-            g.lineStyle(2, 0xb5eeff, alpha * 0.75).strokeCircle(x, y, fx.radius * (1 - alpha * 0.36));
-            for (let i = 0; i < 6; i++) {
-              const angle = i * Math.PI / 3;
-              g.lineBetween(x, y, x + Math.cos(angle) * fx.radius * 0.55, y + Math.sin(angle) * fx.radius * 0.55);
-            }
+            drawFrostBurst(g, fx);
           } else drawFrostShot(g, fx);
           continue;
         }
@@ -700,7 +766,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private lineTelegraph(x: number, y: number, dx: number, dy: number, len: number, halfW: number, k: number): void {
-    const g = this.groundEffects;
+    const g = this.g;
     const nx = -dy;
     const ny = dx;
     const pts = [
@@ -709,10 +775,18 @@ export class GameScene extends Phaser.Scene {
       { x: x - nx * halfW + dx * len, y: y - ny * halfW + dy * len },
       { x: x - nx * halfW, y: y - ny * halfW },
     ];
-    g.fillStyle(PALETTE.telegraph, 0.12 + 0.25 * k).fillPoints(pts, true);
-    g.lineStyle(2, PALETTE.telegraphEdge, 0.9).strokePoints(pts, true);
-    // 진행도 표시: 끝으로 차오르는 선
-    g.lineStyle(3, PALETTE.telegraphEdge, 1).lineBetween(x, y, x + dx * len * k, y + dy * len * k);
+    this.groundEffects.fillStyle(0xd73f6c, 0.12 + 0.12 * k).fillPoints(pts, true);
+    const at = (along: number, side: number) => ({ x: x + dx * along + nx * side, y: y + dy * along + ny * side });
+    for (let start = 0; start < len; start += 22) {
+      const end = Math.min(start + 13, len);
+      g.lineStyle(2, 0xff8eb7, start <= len * k ? 0.95 : 0.58);
+      for (const side of [-halfW, halfW]) g.strokePoints([at(start, side), at(end, side)]);
+    }
+    for (let start = 40; start < len; start += 64) {
+      const width = Math.min(9, halfW * 0.62);
+      g.lineStyle(2.5, 0xffb4d0, start <= len * k ? 1 : 0.55)
+        .strokePoints([at(start - 7, -width), at(start + 3, 0), at(start - 7, width)]);
+    }
   }
 
   private ringTelegraph(x: number, y: number, r: number, k: number): void {

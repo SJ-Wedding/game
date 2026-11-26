@@ -27,7 +27,7 @@ export const WEAPON_PREVIEWS = {
 
 export function weaponPreview() {
   const title = el('strong');
-  const image = el('img', { width: '344', height: '206', decoding: 'async' });
+  const image = el('img', { width: '432', height: '170', decoding: 'async' });
   const description = el('small');
   const tooltip = el('div', {
     id: 'status-weapon-preview', class: 'weapon-effect-preview', role: 'tooltip', popover: 'manual',

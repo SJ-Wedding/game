@@ -140,7 +140,11 @@ export function drawMaceImpact(ground: Graphics, g: Graphics, sweep: SwordSweep,
   const alpha = (1 - p) ** 1.35;
   const start = sweep.angle - sweep.width / 2;
   ground.lineStyle(3, color, alpha * 0.33).beginPath().arc(sweep.x, sweep.y, sweep.range, start, start + sweep.width).strokePath();
-  ground.lineStyle(3, color, alpha * 0.78).strokeEllipse(x, y, radius * (0.8 + p * 1.55), radius * (0.39 + p * 0.7));
+  if (p < 0.36) {
+    const flash = 1 - p / 0.36;
+    g.lineStyle(5, color, flash * 0.68).lineBetween(x - 3, y - radius * flash, x, y);
+    g.lineStyle(2, 0xffedc7, flash).lineBetween(x, y - radius * flash * 0.72, x, y + 3);
+  }
   drawDebris(ground, g, { x, y }, radius, p, color, heavy ? 10 : 7);
 }
 
