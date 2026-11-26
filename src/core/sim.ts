@@ -1043,7 +1043,7 @@ export class GameSim {
     p.hp = Math.min(p.hp, this.relics.maxHp);
   }
 
-  /** 로안 6·12·18레벨: 무기 · 상위 무기 · 각성 선택 */
+  /** 로안 12·24·36레벨: 무기 · 상위 무기 · 각성 선택 */
   private roanGearChoices(level: number): UpgradeChoice[] {
     const roan = this.roan;
     if (level === ROAN_GEAR_LEVELS.weapon && !roan.weapon) return ROAN_WEAPON_IDS.map((id) => ({ kind: 'roanGear', gear: { stage: 'weapon', id } }));

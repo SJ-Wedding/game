@@ -1,10 +1,10 @@
 /**
  * 로안 무기 타입 (로안 무기 타입 개편 기획안).
- * 6레벨에 기본 무기 4종 중 하나, 12레벨에 그 무기의 상위 무기, 18레벨에 상위 무기 각성.
+ * 12레벨에 기본 무기 4종 중 하나, 24레벨에 그 무기의 상위 무기, 36레벨에 상위 무기 각성.
  * 피해·간격은 검(검 피해 계수 SWORD.damage, 간격 SWORD.interval) 대비 배율, 거리는 px, 각도는 도.
  */
 
-export const ROAN_GEAR_LEVELS = { weapon: 6, upgrade: 12, awaken: 18 } as const;
+export const ROAN_GEAR_LEVELS = { weapon: 12, upgrade: 24, awaken: 36 } as const;
 export const DAGGER_THRUST = { damage: 0.35, range: 100, width: 10, widthPerMastery: 2, maxWidth: 24, duration: 0.18 } as const;
 export const SCIMITAR_THRUST_BONUSES = { widthPerMastery: 3, desertWindWidth: 6 } as const;
 export const TWIN_BLADE_DAMAGE_FACTOR = 0.5;
@@ -155,7 +155,7 @@ export type RoanUpgradeId = keyof typeof ROAN_UPGRADES;
 export const ROAN_UPGRADE_IDS = Object.keys(ROAN_UPGRADES) as RoanUpgradeId[];
 export const roanUpgradesOf = (weapon: RoanWeaponId) => ROAN_UPGRADE_IDS.filter((id) => ROAN_UPGRADES[id].weapon === weapon);
 
-/** 로안 장비 선택 (6레벨 무기 · 12레벨 상위 무기 · 18레벨 각성) */
+/** 로안 장비 선택 (12레벨 무기 · 24레벨 상위 무기 · 36레벨 각성) */
 export type RoanGearChoice =
   | { stage: 'weapon'; id: RoanWeaponId }
   | { stage: 'upgrade'; id: RoanUpgradeId }

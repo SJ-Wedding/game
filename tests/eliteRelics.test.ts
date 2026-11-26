@@ -30,8 +30,8 @@ function steps(s: GameSim, n: number): void {
 describe('균열 수호자 유물 후보', () => {
   const pool = (loadout: Loadout) => RELIC_IDS.filter((id) => RELICS[id].source === 'elite' && relicAllowed(id, loadout));
 
-  it('로안은 근접 6개·상위 무기 전용 39개·전체 공용 2개, 루멘은 무기별 15개의 균열 수호자 유물을 받는다', () => {
-    expect(pool(roan)).toHaveLength(47);
+  it('로안은 근접 5개·상위 무기 전용 39개·전체 공용 2개, 루멘은 무기별 15개의 균열 수호자 유물을 받는다', () => {
+    expect(pool(roan)).toHaveLength(46);
     expect(pool(chain)).toHaveLength(15);
     expect(pool(turret)).toHaveLength(15);
     expect(pool(chain).some((id) => id.startsWith('turret') || id === 'winterLantern')).toBe(false);

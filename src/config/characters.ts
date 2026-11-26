@@ -43,7 +43,7 @@ export const CHARACTER_UPGRADES = {
   swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 레이피어·할버드 찌르기 +${6 * n}° · 단검 계열 폭 +${DAGGER_THRUST.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
   swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}% (빠른 무기는 피해 효율 감소: 한손검 80% · 투척 도끼 70% · 레이피어 60% · 단검 35% · 쌍검 25%)` },
   swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
-  // ── 로안 기본 무기 전용 (6레벨에 고른 무기) ──
+  // ── 로안 기본 무기 전용 (12레벨에 고른 무기) ──
   swordComboDamage: { path: 'roan', form: 'sword', name: '칼날 벌리기', text: (n: number) => `연격 추가 베기 피해 +${pct(0.15 * n)}%p` },
   swordComboCycle: { path: 'roan', form: 'sword', name: '맥을 잇는 검', count: true, text: (n: number) => `연격 주기 −${n}타 (최소 2타)` },
   swordParry: { path: 'roan', form: 'sword', name: '칼날 막기', count: true, text: (n: number) => `베기에 닿은 적 탄 최대 ${n}개 지움` },
@@ -56,7 +56,7 @@ export const CHARACTER_UPGRADES = {
   axeArc: { path: 'roan', form: 'waraxe', name: '넓은 날', text: (n: number) => `베기 각도 +${Math.round(20 * n)}°` },
   axeWound: { path: 'roan', form: 'waraxe', name: '벌목꾼', text: (n: number) => `깊은 상처 최대 보너스 +${pct(0.15 * n)}%p` },
   axeSpeed: { path: 'roan', form: 'waraxe', name: '휘두르기 가속', text: (n: number) => `공격 간격 −${pct(1 - 0.92 ** n)}%` },
-  // ── 로안 상위 무기 전용 (12레벨에 고른 상위 무기) ──
+  // ── 로안 상위 무기 전용 (24레벨에 고른 상위 무기) ──
   onehandSpeed: { path: 'roan', form: 'onehand', name: '가벼운 손목', text: (n: number) => `공격 간격 −${pct(1 - 0.94 ** n)}%` },
   onehandArc: { path: 'roan', form: 'onehand', name: '넓은 연격', text: (n: number) => `연격 추가 베기 각도 +${Math.round(30 * n)}°` },
   greatswordWeight: { path: 'roan', form: 'greatsword', name: '무게 싣기', text: (n: number) => `피해 +${pct(0.12 * n)}%` },

@@ -91,7 +91,7 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   expect(errors).toEqual([]);
 });
 
-test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 공격이 바뀐다', async ({ page }) => {
+test('로안: 12레벨 무기, 24레벨 상위 무기를 고르면 디자인과 공격이 바뀐다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=553');
   await page.getByTestId('play').click();
@@ -106,8 +106,8 @@ test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 �
       while (sim.level < target && sim.phase === 'levelup') sim.choose(0);
     }
   }, level);
-  await levelTo(6);
-  await expect(page.getByRole('heading', { name: '로안 무기 선택 · Lv 6' })).toBeVisible();
+  await levelTo(12);
+  await expect(page.getByRole('heading', { name: '로안 무기 선택 · Lv 12' })).toBeVisible();
   await expect(page.locator('[data-gear-stage="weapon"]')).toHaveCount(4);
   await expect(page.locator('.gear-sprite')).toHaveCount(4);
   await expect(page.getByTestId('reroll')).toHaveCount(0);
@@ -115,8 +115,8 @@ test('로안: 6레벨 무기, 12레벨 상위 무기를 고르면 디자인과 �
   await expect.poll(async () => (await snap(page)).screen).toBe('playing');
   await expect(page.getByTestId('hud-sword-forms')).toHaveText('무기 · 단검');
 
-  await levelTo(12);
-  await expect(page.getByRole('heading', { name: '상위 무기 선택 · Lv 12' })).toBeVisible();
+  await levelTo(24);
+  await expect(page.getByRole('heading', { name: '상위 무기 선택 · Lv 24' })).toBeVisible();
   await expect(page.locator('[data-gear-stage="upgrade"]')).toHaveCount(3);
   const twinblades = page.locator('[data-sword-form="twinblades"]');
   await expect(twinblades).toContainText('직선 찌르기 2연타');
