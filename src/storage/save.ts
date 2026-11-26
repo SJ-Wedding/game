@@ -36,6 +36,8 @@ export interface SaveData {
   pendingRelicDraft?: RelicId[];
   /** 전판에 얻은 유물. 다음 판 시작 유물 선택지에서 뺀다 */
   previousRelics?: RelicId[];
+  /** 계정(클라우드) 저장 번호. 저장할 때마다 1씩 오르고, 서버와 비교해 더 새로운 쪽을 쓴다 */
+  cloudRev?: number;
 }
 
 export type LoadStatus = 'ok' | 'missing' | 'corrupt' | 'version' | 'unavailable';
@@ -107,6 +109,8 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   if (Array.isArray(migrated.pendingRelicDraft)) data.pendingRelicDraft = validRelicIds(migrated.pendingRelicDraft);
   if (Array.isArray(migrated.previousRelics)) data.previousRelics = validRelicIds(migrated.previousRelics);
   if (Number.isNaN(data.records.fastestWin)) data.records.fastestWin = null;
+  const cloudRev = Math.floor(num(migrated.cloudRev, 0));
+  if (cloudRev > 0) data.cloudRev = cloudRev;
   return { data, status: 'ok' };
 }
 
@@ -170,4 +174,39 @@ export function purchaseMeta(data: SaveData, id: string): SaveData | null {
   const r = buyMeta(data.meta.tokens, data.meta.purchases, id);
   if (!r) return null;
   return { ...data, meta: { ...data.meta, tokens: r.tokens, purchases: r.purchases } };
+}
+
+/** 서버(계정)에 저장되는 부분: 상점 강화 내역과 기록 */
+export interface CloudRow {
+  meta: unknown;
+  records: unknown;
+  rev: number;
+}
+
+/**
+ * 브라우저 저장과 서버 저장을 합친다.
+ * 상점 내역(토큰·구매)은 누적 획득 토큰이 더 많은 쪽, 같으면 저장 번호가 더 큰 쪽을 그대로 쓰고,
+ * 기록은 항목마다 더 좋은 값을 쓴다. 누적 획득 토큰은 줄지 않으므로 저장 번호가 빠진 옛 저장도 잃지 않는다.
+ * 서버 값은 브라우저 저장과 같은 검증을 거친다.
+ */
+export function mergeCloud(local: SaveData, remote: CloudRow | null): SaveData {
+  if (!remote) return local;
+  const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta, records: remote.records })).data;
+  const localRev = local.cloudRev ?? 0;
+  const remoteRev = Math.max(0, Math.floor(Number(remote.rev) || 0));
+  const a = local.records;
+  const b = parsed.records;
+  const fastest = [a.fastestWin, b.fastestWin].filter((v): v is number => v !== null);
+  return {
+    ...local,
+    meta: (parsed.meta.totalEarned !== local.meta.totalEarned ? parsed.meta.totalEarned > local.meta.totalEarned : remoteRev > localRev) ? parsed.meta : local.meta,
+    records: {
+      runs: Math.max(a.runs, b.runs),
+      wins: Math.max(a.wins, b.wins),
+      bestSurvival: Math.max(a.bestSurvival, b.bestSurvival),
+      bestKills: Math.max(a.bestKills, b.bestKills),
+      fastestWin: fastest.length ? Math.min(...fastest) : null,
+    },
+    cloudRev: Math.max(localRev, remoteRev),
+  };
 }

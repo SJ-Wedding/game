@@ -6,7 +6,7 @@ import { GameSim } from '../core/sim';
 import type { InputState, RunResult, SimEvent } from '../core/types';
 import type { DevOptions } from '../dev/devOptions';
 import { simOptionsFor } from '../dev/devOptions';
-import { purchaseMeta, recordRun, writeSave, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
+import { mergeCloud, purchaseMeta, recordRun, writeSave, type CloudRow, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
 import type { TokenReward } from '../core/meta';
 import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
@@ -29,6 +29,8 @@ export interface AppDeps {
   screens: Screens;
   /** 문서 객체 (테스트에서 교체 가능) */
   doc?: Document;
+  /** 계정 저장 (없으면 브라우저 저장만 쓴다) */
+  cloud?: CloudLink | null;
 }
 
 /**
@@ -36,6 +38,12 @@ export interface AppDeps {
  * - 전역 입력 리스너는 생성자에서 딱 한 번 등록한다 → 재시작해도 중복되지 않는다.
  * - 판마다 새 GameSim 을 만들고, 이전 판 객체는 버린다 → 스폰 상태가 이어지지 않는다.
  */
+/** 계정 저장 연결 (storage/cloud.ts 의 CloudSave) */
+export interface CloudLink {
+  pull(): Promise<CloudRow | null>;
+  push(data: SaveData): Promise<void>;
+}
+
 export class App {
   screen: Screen = 'title';
   sim: GameSim | null = null;
@@ -54,6 +62,7 @@ export class App {
   scene: SceneLink | null = null;
 
   private readonly storage: StorageLike | null;
+  private readonly cloud: CloudLink | null;
   private readonly sfx: Sfx;
   private readonly hud: Hud;
   private readonly screens: Screens;
@@ -66,6 +75,7 @@ export class App {
   constructor(deps: AppDeps) {
     this.save = deps.save;
     this.storage = deps.storage;
+    this.cloud = deps.cloud ?? null;
     this.dev = deps.dev;
     this.sfx = deps.sfx;
     this.hud = deps.hud;
@@ -299,6 +309,33 @@ export class App {
     }
   }
 
+  /** 상점 내역·기록이 바뀌었을 때: 저장 번호를 올리고 브라우저와 계정에 저장 */
+  private persistAccount(): void {
+    if (this.cloud) this.save = { ...this.save, cloudRev: (this.save.cloudRev ?? 0) + 1 };
+    writeSave(this.storage, this.save);
+    void this.cloud?.push(this.save);
+  }
+
+  /** 접속 시 한 번: 계정 저장을 받아 브라우저 저장과 합치고, 브라우저 쪽이 더 새로우면 올린다 */
+  async syncAccount(): Promise<void> {
+    if (!this.cloud) return;
+    const remote = await this.cloud.pull().catch(() => null);
+    const merged = mergeCloud(this.save, remote);
+    if (merged !== this.save) {
+      this.save = merged;
+      writeSave(this.storage, this.save);
+      if (this.screen === 'title') this.showTitle();
+      else if (this.screen === 'shop') this.showShop();
+    }
+    // 합친 결과가 서버와 다르면(브라우저 쪽이 더 새로움) 저장 번호를 올려 다시 올린다
+    const same = remote && JSON.stringify([remote.meta, remote.records]) === JSON.stringify([this.save.meta, this.save.records]);
+    if (!same) {
+      this.save = { ...this.save, cloudRev: Math.max(this.save.cloudRev ?? 0, remote?.rev ?? 0) + 1 };
+      writeSave(this.storage, this.save);
+      await this.cloud.push(this.save);
+    }
+  }
+
   showShop(focusItem?: string): void {
     this.screen = 'shop';
     this.screens.showShop(this.save.meta, this.shopTab, (tab) => {
@@ -311,7 +348,7 @@ export class App {
     const next = purchaseMeta(this.save, id);
     if (!next) return;
     this.save = next;
-    writeSave(this.storage, this.save);
+    this.persistAccount();
     this.showShop(id);
   }
 
@@ -329,7 +366,8 @@ export class App {
       if (result.assisted) this.assistedRelicDraft = draft;
       else this.save = { ...this.save, pendingRelicDraft: draft };
     }
-    writeSave(this.storage, this.save);
+    if (result.assisted) writeSave(this.storage, this.save);
+    else this.persistAccount();
     this.lastResult = result;
     this.lastNewRecords = newRecords;
     this.lastTokens = tokens;
