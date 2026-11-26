@@ -390,7 +390,8 @@ describe('4장: 리스크-리턴 및 유틸리티', () => {
   });
 
   it('썩어 가는 보석: 경험치 +100%, 바닥에 10초 지난 보석은 사라진다', () => {
-    const sim = withRelics('rottingGem');
+    const sim = makeSim({ god: true });
+    sim.relics.acquire('rottingGem');
     expect(sim.relics.xpMultiplier).toBe(2);
     sim.gems.push({ x: 100, y: 100, value: 5, pulled: false });
     for (let i = 0; i < 9 * 60; i++) sim.step(IDLE_INPUT);

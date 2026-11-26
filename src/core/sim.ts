@@ -7,7 +7,7 @@ import { ESSENCE_IDS, ESSENCE_MAX_STACK, OPENING_RELIC_LEVEL, validCarry, validR
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
-import { ENEMY_CONFIG, ENEMY_SCALING, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
+import { ENEMY_CONFIG, ENEMY_SCALING, MONSTER_STAT_MULTIPLIERS, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
 import { AUTO_COMBAT, COMBAT_REACH, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
@@ -33,6 +33,12 @@ function shotAttack(source: string): AttackId | undefined {
   return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' ? 'relic' : RoanCombat.isRoanShot(source) ? 'sword' : undefined;
 }
 import { applyUpgrade, luckFor, rollChoices, rollGrade, rollMasteryChoices, rollRunChoices, upgradeAvailable } from './upgrades';
+
+/** Scale defense as the ratio of prevented damage to damage taken. */
+function scaleMonsterDefense(damageTaken: number): number {
+  if (damageTaken >= 1) return damageTaken;
+  return damageTaken / (damageTaken + (1 - damageTaken) * MONSTER_STAT_MULTIPLIERS.defense);
+}
 
 export interface SimOptions {
   seed: number;
@@ -808,8 +814,9 @@ export class GameSim {
     const resistanceMultiplier = source === 'sword' ? 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce)
       : source && Object.hasOwn(WEAPON_FUSIONS, source) ? 1 - FUSION_ARMOR_PIERCE : 1;
     const armor = basic || source === 'sword' ? e.basicResistance * resistanceMultiplier : 0;
-    let damage = amount * this.relics.damageMultiplier(e, basic) * (1 - resistance * resistanceMultiplier) * (1 - armor);
-    if (e.kind === 'elite') damage /= eliteDurability;
+    const durability = e.kind === 'elite' ? eliteDurability : 1;
+    const damageTaken = (1 - resistance * resistanceMultiplier) * (1 - armor) / durability;
+    let damage = amount * this.relics.damageMultiplier(e, basic) * scaleMonsterDefense(damageTaken);
     if ((basic && this.relics.executes(e)) || (source === 'sword' && this.roan.executes(e))) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
@@ -840,7 +847,7 @@ export class GameSim {
     const basic = source === 'basic';
     const armor = basic ? BOSS_CONFIG.basicResistance
       : source === 'sword' ? BOSS_CONFIG.basicResistance * 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce) : 0;
-    const damage = amount * this.relics.damageMultiplier(b, basic) * (1 - armor);
+    const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor);
     b.hp = Math.max(0, b.hp - damage);
     this.recordAttackDamage(source, damage);
     b.flash = 0.06;

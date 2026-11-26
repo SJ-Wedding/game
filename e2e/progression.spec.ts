@@ -213,7 +213,7 @@ test.describe('성장 시스템', () => {
       for (const id of ['oath', 'buckle', 'crown', 'anchor']) sim.relics.acquire(id);
       sim.spawnBoss();
       sim.boss.state = 'idle';
-      sim.damageBoss(100000);
+      sim.damageBoss(sim.boss.maxHp);
     });
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await page.waitForTimeout(700);

@@ -5,6 +5,8 @@
 export type NormalEnemyKind = 'chaser' | 'charger' | 'spitter';
 export type EnemyKind = NormalEnemyKind | 'elite';
 
+export const MONSTER_STAT_MULTIPLIERS = { health: 10, attack: 10, defense: 5 } as const;
+
 export interface EnemyBaseConfig {
   /** 화면·결과에 표시되는 이름 */
   name: string;

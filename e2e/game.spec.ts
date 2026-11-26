@@ -110,8 +110,8 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.locator('.boss-bar')).toBeHidden();
     await expect.poll(async () => (await snap(page)).boss?.state ?? 'none', { timeout: 20_000 }).not.toMatch(/none|enter/);
     await expect(page.locator('.boss-bar')).toBeVisible();
-    // 보스 체력을 2%로 낮춘 뒤 자동 공격으로 마무리한다 (입력 없음)
-    await page.evaluate(() => (window as any).__rift.debug.setBossHp(0.02));
+    // 보스 체력을 낮춘 뒤 자동 공격으로 마무리한다 (입력 없음)
+    await page.evaluate(() => (window as any).__rift.debug.setBossHp(0.0001));
     await expect.poll(async () => (await snap(page)).screen, { timeout: 60_000 }).toBe('result');
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await expect(page.getByTestId('cause')).toContainText('처치했습니다');

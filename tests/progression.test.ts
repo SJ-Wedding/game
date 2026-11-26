@@ -231,9 +231,10 @@ describe('처치 드랍 아이템', () => {
 
     const near = sim.spawnEnemy('charger', p.x + 300, p.y);
     const far = sim.spawnEnemy('charger', p.x + 1200, p.y);
+    near.hp = 100;
     sim.useItem('bomb');
     expect(near.dead).toBe(true);
-    expect(far.dead).toBe(false);
+    expect(far.hp).toBe(far.maxHp);
 
     sim.pickups.push({ x: p.x + 900, y: p.y, kind: 'magnet', life: 1 });
     runTicks(sim, 70);

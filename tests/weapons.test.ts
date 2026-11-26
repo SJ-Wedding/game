@@ -520,8 +520,8 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageEnemy(target, 1000, 'echo');
   sim.damageEnemy(target, 1000, 'chain');
   sim.damageBoss(1000, 'storm');
-  expect(sim.damageByAttack.basic).toBeCloseTo(3.15);
-  expect(sim.damageByAttack.echo).toBeCloseTo(450);
+  expect(sim.damageByAttack.basic).toBeCloseTo(0.842246);
+  expect(sim.damageByAttack.echo).toBeCloseTo(140.625);
   expect(Object.keys(sim.damageByAttack)).toEqual(['basic', 'echo']);
   const boss = sim.boss!;
   boss.state = 'idle';
@@ -530,6 +530,6 @@ it('공격별 피해에 저항과 초과 피해를 반영하고 쓰러진 적이
   sim.damageBoss(1000, 'chain');
   sim.step(IDLE_INPUT);
   expect(boss.hp).toBe(0);
-  expect(sim.result?.damageByAttack).toEqual({ basic: expect.closeTo(3.15), echo: expect.closeTo(450), storm: 200 });
+  expect(sim.result?.damageByAttack).toEqual({ basic: expect.closeTo(0.842246), echo: expect.closeTo(140.625), storm: 200 });
   expect(sim.result?.combatTime).toBeCloseTo(1 / 60);
 });
