@@ -304,6 +304,29 @@ test.describe('성장 시스템', () => {
     }
   });
 
+  test('로안: 출혈 피해가 있는 판도 결과 화면이 열리고 출혈 피해량을 보여 준다', async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.goto('/?dev=1&seed=45&god=1');
+    await page.getByTestId('play').click();
+    await page.getByTestId('character-roan').click();
+    await expect.poll(async () => (await snap(page)).screen).toBe('playing');
+    await page.evaluate(() => {
+      const sim = (window as any).__rift.sim;
+      sim.roan.equip({ stage: 'weapon', id: 'dagger' });
+      const enemy = sim.spawnEnemy('chaser', 900, 900);
+      sim.damageEnemy(enemy, 7, 'bleed');
+      sim.spawnBoss();
+      sim.boss.state = 'idle';
+      sim.boss.hp = 30;
+      sim.damageBoss(100, 'bleed');
+    });
+    await expect(page.getByTestId('outcome')).toHaveText('승리');
+    const row = page.getByTestId('damage-breakdown').locator('[data-attack="bleed"]');
+    await expect(row).toContainText('출혈');
+    await expect(row.locator('td').nth(1)).toHaveText('2');
+    expect(errors).toEqual([]);
+  });
+
   test('도박꾼의 동전: 균열 수호자 처치 뒤 동전 화면이 열리고, 던지면 결과가 다음 보상 화면에 표시된다', async ({ page }) => {
     await startRun(page, '&seed=44&god=1');
     await page.evaluate(() => {
