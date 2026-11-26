@@ -2,7 +2,7 @@ import { AUTO_COMBAT } from '../config/player';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
-  DAGGER_BLEED_CHAIN, DAGGER_THRUST, ROAN_UPGRADES, ROAN_WEAPONS, SCIMITAR_CRESCENT, SCIMITAR_THRUST_BONUSES, TWIN_BLADE_DAMAGE_FACTOR,
+  DAGGER_BLEED_CHAIN, DAGGER_THRUST, ROAN_DAMAGE_MASTERY_EFFICIENCY, ROAN_SPEED_MASTERY_EFFICIENCY, ROAN_UPGRADE_DAMAGE_TAKEN, ROAN_UPGRADES, ROAN_WEAPONS, SCIMITAR_CRESCENT, SCIMITAR_THRUST_BONUSES, TWIN_BLADE_DAMAGE_FACTOR,
   type RoanDesign, type RoanGearChoice, type RoanMotion, type RoanUpgradeId, type RoanWeaponId,
 } from '../config/roan';
 import { bossInvulnerable } from './boss';
@@ -148,7 +148,7 @@ export class RoanCombat {
   }
 
   get damageTaken(): number {
-    const base = this.weapon ? ROAN_WEAPONS[this.weapon].damageTaken : 1;
+    const base = (this.weapon ? ROAN_WEAPONS[this.weapon].damageTaken : 1) * (this.upgrade ? ROAN_UPGRADE_DAMAGE_TAKEN[this.upgrade] ?? 1 : 1);
     return base * (this.gear('guardStance') && this.sim.relics.still ? 0.85 : 1);
   }
 
@@ -167,7 +167,7 @@ export class RoanCombat {
   private family(w: RoanWeaponId): boolean { return this.weapon === w; }
 
   get damage(): number {
-    let mul = 1 + SWORD.damagePerMastery * this.m('swordDamage');
+    let mul = 1 + SWORD.damagePerMastery * this.damageMasteryEfficiency * this.m('swordDamage');
     mul *= this.def.damage;
     if (this.upgrade === 'greatsword') mul *= 1 + 0.12 * this.m('greatswordWeight');
     if (this.gear('giantGrip')) mul *= 1.2;
@@ -181,8 +181,14 @@ export class RoanCombat {
     return this.sim.stats.damage * SWORD.damage * mul;
   }
 
+  /** 묵직한 일격 효율 (공격이 빠른 무기일수록 낮음) */
+  get damageMasteryEfficiency(): number {
+    return (this.upgrade && ROAN_DAMAGE_MASTERY_EFFICIENCY[this.upgrade]) ?? (this.weapon && ROAN_DAMAGE_MASTERY_EFFICIENCY[this.weapon]) ?? 1;
+  }
+
   get interval(): number {
-    let t = SWORD.interval * this.def.interval / this.sim.relics.fireRate * 0.9 ** this.m('swordSpeed')
+    const speedEff = (this.weapon && ROAN_SPEED_MASTERY_EFFICIENCY[this.weapon]) ?? 1;
+    let t = SWORD.interval * this.def.interval / this.sim.relics.fireRate * (1 - speedEff * (1 - 0.9 ** this.m('swordSpeed')))
       * (1 + SWORD.intervalPerDamageMastery * this.m('swordDamage'));
     if (this.family('dagger')) t *= 0.9 ** this.m('daggerSpeed');
     if (this.family('waraxe')) t *= 0.92 ** this.m('axeSpeed');

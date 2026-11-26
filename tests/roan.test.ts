@@ -141,7 +141,7 @@ describe('무기 특화 기능', () => {
     expect((s.damageByAttack.bleed ?? 0) - before).toBeGreaterThan(swordDamage * 0.15 * 5 * 0.9);
   });
 
-  it.each([undefined, 'stiletto', 'scimitar'] as const)('단검 계열 %s은 사거리 100px의 직선에서만 검 피해의 35%%로 찌른다', (upgrade) => {
+  it.each([undefined, 'stiletto', 'scimitar'] as const)('단검 계열 %s은 사거리 100px의 직선에서만 무기 피해 배율(단검 35%%, 시미터 38.5%%)로 찌른다', (upgrade) => {
     const s = make('dagger', upgrade);
     const ahead = target(s, 36);
     const edge = target(s, 100, 17);
@@ -150,7 +150,7 @@ describe('무기 특화 기능', () => {
     const behind = target(s, -60);
     swing(s);
     expect(s.swordSweep).toMatchObject({ range: 100, width: 0, lineWidth: 10, hits: 2 });
-    for (const enemy of [ahead, edge]) expect(enemy.maxHp - enemy.hp).toBeCloseTo(make('sword').roan.damage * 0.35);
+    for (const enemy of [ahead, edge]) expect(enemy.maxHp - enemy.hp).toBeCloseTo(make('sword').roan.damage * (upgrade ? ROAN_UPGRADES[upgrade].damage : ROAN_WEAPONS.dagger.damage));
     for (const enemy of [beside, beyond, behind]) expect(enemy.hp).toBe(enemy.maxHp);
   });
 
@@ -244,6 +244,29 @@ describe('무기 특화 기능', () => {
     expect(before - ahead.hp).toBeCloseTo(s.roan.damage * 1.3);
   });
 
+  it('묵직한 일격은 공격이 빠른 무기일수록 효율이 낮고, 빠른 회수는 단검 계열에서 절반만 적용된다', () => {
+    const at = (weapon: RoanWeaponId, upgrade?: RoanUpgradeId) => {
+      const base = make(weapon, upgrade);
+      const s = new GameSim({ seed: 41, god: true, loadout: roan, roanGear: gear(weapon, upgrade), presetUpgrades: { swordDamage: 1, swordSpeed: 1 } });
+      return { dmg: s.roan.damage / base.roan.damage - 1, interval: s.roan.interval / base.roan.interval };
+    };
+    for (const [weapon, upgrade, eff] of [['sword', 'greatsword', 1], ['sword', 'onehand', 0.8], ['sword', 'rapier', 0.6], ['waraxe', 'throwingaxe', 0.7],
+      ['dagger', undefined, 0.35], ['dagger', 'stiletto', 0.35], ['dagger', 'scimitar', 0.35], ['dagger', 'twinblades', 0.25], ['mace', 'maul', 1]] as const) {
+      const r = at(weapon, upgrade);
+      expect(r.dmg).toBeCloseTo(0.3 * eff);
+      expect(r.interval).toBeCloseTo((weapon === 'dagger' ? 0.95 : 0.9) * 1.03);
+    }
+  });
+
+  it('리밸런싱: 메이스·도끼는 받는 피해가 줄고 한손검은 받는 피해 −10%', () => {
+    expect(make('mace').roan.damageTaken).toBeCloseTo(0.7);
+    expect(make('mace', 'warmace').roan.damageTaken).toBeCloseTo(0.7);
+    expect(make('waraxe', 'halberd').roan.damageTaken).toBeCloseTo(0.68);
+    expect(make('sword', 'onehand').roan.damageTaken).toBeCloseTo(0.9);
+    expect(make('sword', 'greatsword').roan.damageTaken).toBeCloseTo(1);
+    expect(make('mace', 'warmace').roan.range).toBeCloseTo(150);
+  });
+
   it('쌍검: 출혈 중첩에 한도가 없다', () => {
     const s = make('dagger', 'twinblades');
     const e = target(s, 60);
@@ -264,7 +287,7 @@ describe('무기 특화 기능', () => {
       expect(strike).toMatchObject({ angle: 0, width: 0, lineWidth: 10, range: 100, motion: 'thrust', offHand: i % 2 === 1, hits: 1 });
       expect(Math.round((strike.at - s.swordSweeps[0].at) * 60)).toBe(i * 5);
     }
-    expect(ahead.maxHp - ahead.hp).toBeCloseTo(make('sword').roan.damage * 0.21 * count);
+    expect(ahead.maxHp - ahead.hp).toBeCloseTo(make('sword').roan.damage * ROAN_UPGRADES.twinblades.damage * count);
     expect(s.roan.bleeds.get(ahead)?.stacks).toBe(2 * count);
     expect(beside.hp).toBe(beside.maxHp);
     expect(beyond.hp).toBe(beyond.maxHp);

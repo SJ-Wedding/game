@@ -38,10 +38,10 @@ export const CHARACTER_UPGRADES = {
   turretSpeed: { path: 'turret', name: '압축 냉각기', text: (n: number) => `포탑 발사 간격 −${pct(1 - turretDelay(n))}%` },
   turretFrost: { path: 'turret', name: '빙결 탄두', text: (n: number) => `폭발 피해 ${pct(0.35 * n)}% · 폭발 반경 ${Math.round(frostRadius(n))}px · 둔화 ${(n * 0.8).toFixed(1)}초` },
   turretPierce: { path: 'turret', name: '철갑 노즐', count: true, text: (n: number) => `포탑탄 관통 +${n}마리` },
-  swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}%` },
+  swordSpeed: { path: 'roan', name: '빠른 회수', text: (n: number) => `공통 공격 간격 −${pct(1 - 0.9 ** n)}% (단검 계열은 절반)` },
   swordRange: { path: 'roan', name: '장검 손잡이', text: (n: number) => `모든 공격 거리 +${pct(0.12 * n)}% (무기 기본 거리의 최대 148%)` },
   swordArc: { path: 'roan', name: '넓은 베기', text: (n: number) => `베기 각도 +${20 * n}° (360°를 넘친 20°당 거리 +5%) · 레이피어·할버드 찌르기 +${6 * n}° · 단검 계열 폭 +${DAGGER_THRUST.widthPerMastery * n}px (최대 ${DAGGER_THRUST.maxWidth}px)` },
-  swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}%` },
+  swordDamage: { path: 'roan', name: '묵직한 일격', text: (n: number) => `모든 검격 피해 +${pct(SWORD.damagePerMastery * n)}% · 공통 공격 간격 +${pct(SWORD.intervalPerDamageMastery * n)}% (빠른 무기는 피해 효율 감소: 한손검 80% · 투척 도끼 70% · 레이피어 60% · 단검 35% · 쌍검 25%)` },
   swordPierce: { path: 'roan', name: '틈새 베기', text: (n: number) => `모든 검격이 몬스터 피해 저항 ${pct(1 - 0.85 ** n)}% 무시` },
   // ── 로안 기본 무기 전용 (6레벨에 고른 무기) ──
   swordComboDamage: { path: 'roan', form: 'sword', name: '칼날 벌리기', text: (n: number) => `연격 추가 베기 피해 +${pct(0.15 * n)}%p` },
