@@ -1,7 +1,7 @@
 import { ARENA_CONFIG } from '../config/arena';
-import { ENEMY_CONFIG, ENEMY_SCALING, type EnemyKind } from '../config/enemies';
+import { ENEMY_CONFIG, ENEMY_SCALING, MONSTER_STAT_MULTIPLIERS, type EnemyKind } from '../config/enemies';
 import { RUN_CONFIG } from '../config/run';
-import { clamp, dist } from './math';
+import { clamp, dist, lerp } from './math';
 import type { GameSim } from './sim';
 import type { Enemy } from './types';
 
@@ -10,7 +10,15 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
   const c = ENEMY_CONFIG[kind];
   const minutes = t / 60;
   const boosted = kind === 'charger' && t >= RUN_CONFIG.timeLimit;
-  const hp = Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes) * (boosted ? ENEMY_SCALING.overtimeChargerHp : 1));
+  const hp = MONSTER_STAT_MULTIPLIERS.health * Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes)
+    * (boosted ? ENEMY_SCALING.overtimeChargerHp : 1));
+  let dmgMul = MONSTER_STAT_MULTIPLIERS.attack * (1 + ENEMY_SCALING.damagePerMinute * minutes)
+    * (boosted ? ENEMY_SCALING.overtimeChargerDamage : 1);
+  const opening = ENEMY_SCALING.openingChaserDamage;
+  if (kind === 'chaser' && t < opening.rampUntil) {
+    const progress = clamp((t - opening.rampFrom) / (opening.rampUntil - opening.rampFrom), 0, 1);
+    dmgMul = lerp(MONSTER_STAT_MULTIPLIERS.attack * opening.multiplier, dmgMul, progress);
+  }
   return {
     id,
     kind,
@@ -23,7 +31,7 @@ export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t
     slowUntil: 0,
     rootedUntil: 0,
     fireSlowUntil: 0,
-    dmgMul: (1 + ENEMY_SCALING.damagePerMinute * minutes) * (boosted ? ENEMY_SCALING.overtimeChargerDamage : 1),
+    dmgMul,
     xp: c.xp,
     basicResistance: t >= ENEMY_SCALING.armorAt && (kind === 'charger' || kind === 'elite')
       ? ENEMY_SCALING.basicResistance : 0,

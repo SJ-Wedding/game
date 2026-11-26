@@ -5,6 +5,8 @@
 export type NormalEnemyKind = 'chaser' | 'charger' | 'spitter';
 export type EnemyKind = NormalEnemyKind | 'elite';
 
+export const MONSTER_STAT_MULTIPLIERS = { health: 10, attack: 10, defense: 5 } as const;
+
 export interface EnemyBaseConfig {
   /** 화면·결과에 표시되는 이름 */
   name: string;
@@ -151,6 +153,7 @@ export const ENEMY_SCALING = {
   armorAt: 540,
   basicResistance: 0.30,
   damagePerMinute: 0.02,
+  openingChaserDamage: { multiplier: 0.5, rampFrom: 55, rampUntil: 120 },
   eliteDurability: 1.5,
   overtimeChargerHp: 1.5,
   overtimeChargerDamage: 2,

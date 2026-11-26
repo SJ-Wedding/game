@@ -13,7 +13,7 @@ describe('시드 재현성', () => {
     };
     const a = play(2024);
     const b = play(2024);
-    expect(a.spawns.length).toBeGreaterThan(100);
+    expect(a.spawns.length).toBeGreaterThan(20);
     expect(b).toEqual(a);
   });
 

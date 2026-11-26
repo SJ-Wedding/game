@@ -1,4 +1,4 @@
-import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
+import { CHARACTERS, CHARACTER_UPGRADES, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
 import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, type RoanUpgradeId, type RoanWeaponId } from '../config/roan';
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
@@ -10,10 +10,10 @@ import { CHARACTER_SHEETS, characterTexture, roanTexture, WEAPON_TEXTURES } from
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
-import { META_STATS, META_UNLOCKS } from '../config/meta';
 import type { PlayerStats } from '../config/player';
 import { CATEGORY_LABEL } from '../config/upgrades';
-import { metaLevel, nextCost, type TokenReward } from '../core/meta';
+import type { TokenReward } from '../core/meta';
+import { buildShop, type ShopTab } from './shop';
 import type { UpgradePick } from '../core/stats';
 import { upgradeText } from '../core/upgrades';
 import { UPGRADE_BY_ID } from '../config/upgrades';
@@ -260,6 +260,7 @@ export class Screens {
     armory: boolean;
     specialist: boolean;
     masteryValue: (id: CharacterUpgradeId) => number;
+    lumenMasteryDamageBonus: (extraPoints: number) => number;
     fusions: Iterable<FusionId>;
     bonusChoices: number;
     notice?: string | null;
@@ -295,7 +296,7 @@ export class Screens {
             ? `이 무기 피해 보너스 +${Math.round((c.nextStack - 2) * WEAPON_DAMAGE_PER_RANK * 100)}% → +${Math.round((c.nextStack - 1) * WEAPON_DAMAGE_PER_RANK * 100)}%`
             : effect }),
           ...(mastery && CHARACTER_UPGRADES[mastery].path !== 'roan' ? [el('small', {
-            class: 'mastery-bonus', text: `시작 무기 피해 보너스 +${Math.round(gain * LUMEN.damagePerPoint * 100)}%`,
+            class: 'mastery-bonus', text: `선택 후 시작 무기 피해 보너스 +${Math.round(opts.lumenMasteryDamageBonus(gain) * 1000) / 10}%`,
           })] : []),
           ...(weapon ? [el('span', { class: 'desc', text: `이 등급의 무기 피해 보너스 +${Math.round(WEAPON_GRADE_DAMAGE[c.grade] * 100)}%` })] : []),
           ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',
@@ -550,40 +551,12 @@ export class Screens {
     ]);
   }
 
-  /** 강화 상점: 토큰으로 영구 강화 구매 */
-  showShop(meta: SaveMeta, onBuy: (id: string) => void, onBack: () => void): void {
-    const item = (id: string, name: string, desc: string, maxLevel: number) => {
-      const lv = metaLevel(meta.purchases, id);
-      const cost = nextCost(meta.purchases, id);
-      const btn = el('button', { class: 'buy', 'data-testid': `buy-${id}` }, [cost === null ? '최대' : `◆ ${cost}`]);
-      if (cost === null || meta.tokens < cost) btn.setAttribute('disabled', '');
-      btn.addEventListener('click', () => onBuy(id));
-      return el('li', { class: 'shop-item' }, [
-        el('div', {}, [el('strong', { text: name }), el('span', { class: 'lv', 'data-testid': `lv-${id}`, text: ` ${lv}/${maxLevel}` }), el('br'), el('small', { class: 'muted', text: desc })]),
-        btn,
-      ]);
-    };
-    const stats = META_STATS.map((m) => {
-      const pct = Math.round(Math.abs(m.pctPerLevel) * 100);
-      if (m.pctByLevel) return item(m.id, m.name, m.pctByLevel.map((v, i) => `Lv ${i + 1} +${Math.round(v * 100)}%`).join(' · '), m.maxLevel);
-      return item(m.id, m.name, `단계마다 ${pct}% ${m.pctPerLevel < 0 ? '감소' : '증가'}`, m.maxLevel);
-    });
-    const unlocks = META_UNLOCKS.map((u) => item(u.id, u.name, u.description, u.maxLevel));
-    const back = el('button', { class: 'primary', 'data-testid': 'shop-back', 'data-autofocus': '' }, ['돌아가기 ', el('kbd', { text: 'Esc' })]);
-    back.addEventListener('click', onBack);
-    this.mount(
-      'shop',
-      el('div', { class: 'panel shop' }, [
-        el('h2', { text: '강화 상점' }),
-        el('p', {}, ['보유 토큰 ', el('strong', { class: 'token', 'data-testid': 'shop-tokens', text: `◆ ${meta.tokens}` })]),
-        el('p', { class: 'muted', text: '판이 끝날 때마다 생존 시간·처치·엘리트·승리에 따라 토큰을 받습니다. 영구 강화는 다음 판부터 적용됩니다.' }),
-        el('div', { class: 'row shop-cols' }, [
-          el('div', {}, [el('h3', { text: '능력치' }), el('ul', { class: 'shop-list' }, stats)]),
-          el('div', {}, [el('h3', { text: '해금' }), el('ul', { class: 'shop-list' }, unlocks)]),
-        ]),
-        back,
-      ]),
-    );
+  showShop(meta: SaveMeta, tab: ShopTab, onSelect: (tab: ShopTab) => void,
+    onBuy: (id: string) => void, onBack: () => void, focusItem?: string): void {
+    const scrollTop = focusItem ? this.root.querySelector('.shop-content')?.scrollTop : undefined;
+    const panel = buildShop(meta, tab, onSelect, onBuy, onBack, focusItem);
+    this.mount('shop', panel);
+    if (scrollTop !== undefined) panel.querySelector('.shop-content')!.scrollTop = scrollTop;
   }
 
   showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void): void {

@@ -84,10 +84,8 @@ describe('균열 수호자 유물 후보', () => {
 describe('루멘 균열 수호자 유물', () => {
   it('마력 증폭 수정: 전용 강화 1점당 보너스 1.5배, 최대 체력 −10%', () => {
     const s = sim(chain, ['lumenCrystal'], { presetUpgrades: { chainLinks: 2 } });
-    const base = sim(chain, [], { presetUpgrades: { chainLinks: 2 } });
-    const points = (base.starterDamageMultiplier / LUMEN.baseDamage - 1) / LUMEN.damagePerPoint;
-    expect(points).toBeGreaterThan(0);
-    expect(s.starterDamageMultiplier).toBeCloseTo(LUMEN.baseDamage * (1 + points * LUMEN.damagePerPoint * 1.5));
+    const start = sim(chain);
+    expect(s.starterDamageMultiplier).toBeCloseTo(start.starterDamageMultiplier * (1 + 2 * LUMEN.damagePerPoint * 1.5));
     expect(s.relics.maxHp).toBeCloseTo(s.stats.maxHp * 0.9);
   });
 

@@ -1,4 +1,5 @@
 import { AUTO_COMBAT } from '../config/player';
+import { SHOP_TIMING } from '../config/characterShop';
 import { SWORD } from '../config/characters';
 import { RELICS, type RelicId } from '../config/relics';
 import {
@@ -21,6 +22,7 @@ export interface SwordStrike {
   /** 직선 찌르기의 전체 폭(px) */
   lineWidth?: number;
   offHand?: boolean;
+  throwing?: boolean;
   range: number;
   factor: number;
   armorPierce?: number;
@@ -44,6 +46,7 @@ export interface SwordSweep {
   lineWidth?: number;
   offHand?: boolean;
   wave?: true;
+  throwing?: boolean;
   range: number;
   at: number;
   kind: SwordStrike['kind'];
@@ -81,6 +84,7 @@ export class RoanCombat {
   private moveBoostUntil = -1;
   private danceStacks: number[] = [];
   private fencingUntil = -1;
+  private counterUntil = -1;
   private readonly armorHits = new WeakMap<Target, { hits: number; until: number }>();
   private readonly vital = new WeakMap<Target, number>();
   private readonly thrustMarks = new WeakMap<Target, number>();
@@ -190,7 +194,7 @@ export class RoanCombat {
     if (this.upgrade === 'onehand') t *= 0.94 ** this.m('onehandSpeed');
     if (this.gear('earthFury')) t *= 1.1;
     if (this.has('warriorBreath') && this.sim.player.hp <= this.sim.relics.maxHp * 0.5) t *= 0.85;
-    return Math.max(0.12, t);
+    return Math.max(0.12, t * (1 + this.sim.characterShopBonus('roanTempo')));
   }
 
   private get rawAngle(): number {
@@ -235,14 +239,14 @@ export class RoanCombat {
     let r = Math.min(base * SWORD.maxRange / SWORD.range, base * (1 + 0.12 * this.m('swordRange')));
     if (this.upgrade === 'greatsword') r *= 1 + 0.08 * this.m('greatswordReach');
     if (this.upgrade === 'halberd') r *= 1 + 0.1 * this.m('halberdPole');
-    return r * this.overflow;
+    return r * this.overflow * (1 + this.sim.characterShopBonus('roanReach'));
   }
 
   /** 플레일 회전 반경 */
   get flailRadius(): number {
     const max = 0.4 + 0.15 * this.m('flailSpin');
     return 70 * (1 + Math.min(max, 0.1 * this.flailStacks)) * (1 + 0.1 * this.m('flailChain'))
-      * Math.min(SWORD.maxRange / SWORD.range, 1 + 0.12 * this.m('swordRange'));
+      * Math.min(SWORD.maxRange / SWORD.range, 1 + 0.12 * this.m('swordRange')) * (1 + this.sim.characterShopBonus('roanReach'));
   }
 
   private get flailMaxed(): boolean {
@@ -312,7 +316,10 @@ export class RoanCombat {
   update(fire: boolean, dodgeStarted: boolean): void {
     const now = this.now;
     const p = this.sim.player;
-    if (dodgeStarted) this.fencingUntil = now + this.sim.stats.dodgeDuration + 2;
+    if (dodgeStarted) {
+      this.fencingUntil = now + this.sim.stats.dodgeDuration + 2;
+      if (this.sim.characterShopBonus('roanCounter')) this.counterUntil = now + SHOP_TIMING.roanCounter;
+    }
     compact(this.sweeps, (s) => now - s.at < SWORD.sweepDuration);
     for (let i = 0; i < this.timers.length;) {
       if (now + 1e-6 >= this.timers[i].at) this.timers.splice(i, 1)[0].run();
@@ -355,6 +362,12 @@ export class RoanCombat {
 
     const angle = p.aim;
     const u = this.upgrade;
+    let throwing = false;
+    if (u === 'throwingaxe') {
+      this.throws++;
+      const cycle = Math.max(1, (this.awakened ? 2 : 3) - this.m('throwReturn'));
+      throwing = this.throws % cycle === 0;
+    }
     let hits = 0;
     if (this.motion === 'spin') {
       // 플레일: 타격 지점을 중심으로 360° 회전
@@ -371,7 +384,7 @@ export class RoanCombat {
         const offHand = i % 2 === 1;
         const run = () => this.strike({
           angle: twinBlades ? angle : angle + (offHand ? 0.18 : -0.18),
-          width: this.angle * Math.PI / 180, lineWidth: this.lineWidth, offHand: twinBlades ? offHand : undefined,
+          width: this.angle * Math.PI / 180, lineWidth: this.lineWidth, offHand, throwing: throwing || undefined,
           range: this.range, factor: each * bonus, kind: i ? 'extra' : 'main',
         });
         if (i === 0) hits = run();
@@ -409,14 +422,10 @@ export class RoanCombat {
     }
     if (u === 'maul') this.maulShock(end);
     if (u === 'morningstar' && hits) this.shards(center ?? end, (this.awakened ? 5 : 3) + this.m('morningSpikes'));
-    if (u === 'throwingaxe') {
-      this.throws++;
-      const cycle = Math.max(1, (this.awakened ? 2 : 3) - this.m('throwReturn'));
-      if (this.throws % cycle === 0) {
-        const factor = 0.8 + 0.15 * this.m('throwSpin');
-        this.throwAxe(angle, factor);
-        if (this.gear('twinThrow')) this.throwAxe(angle + 0.2, factor * 0.6);
-      }
+    if (throwing) {
+      const factor = 0.8 + 0.15 * this.m('throwSpin');
+      this.throwAxe(angle, factor);
+      if (this.gear('twinThrow')) this.throwAxe(angle + 0.2, factor * 0.6);
     }
     if (u === 'greatsword' && this.gear('heavyMomentum') && hits >= 4) this.cdCut = Math.max(this.cdCut, 0.25);
     if (this.has('chargeStance')) this.moveBoostUntil = this.now + 0.4;
@@ -463,7 +472,12 @@ export class RoanCombat {
       hits = hits.sort((a, b) => dist(x, y, a.x, a.y) - dist(x, y, b.x, b.y)).slice(0, limit);
     }
     const now = this.now;
-    const base = this.damage * s.factor;
+    let counter = 0;
+    if (hits.length && !s.wave && s.kind !== 'shock' && now < this.counterUntil) {
+      counter = this.sim.characterShopBonus('roanCounter');
+      this.counterUntil = -1;
+    }
+    const base = this.damage * s.factor * (1 + counter);
     const p = sim.player;
     let near = 0;
     if (this.has('meleeInstinct')) for (const e of sim.enemies) if (!e.dead && dist(p.x, p.y, e.x, e.y) <= 100 + e.r) near++;
@@ -552,8 +566,9 @@ export class RoanCombat {
       }
     }
     this.sweeps.push({
-      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, wave: s.wave, range: s.range, at: now, kind: s.kind,
-      motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.motion,
+      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, wave: s.wave, throwing: s.throwing,
+      range: s.range, at: now, kind: s.kind,
+      motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.upgrade === 'halberd' ? 'slash' : this.motion,
       design: this.design, color: this.color, blocked, hits: hits.length,
     });
     return hits.length;

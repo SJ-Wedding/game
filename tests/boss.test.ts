@@ -41,6 +41,17 @@ describe('보스 등장', () => {
     expect(boss.hp).toBe(boss.maxHp);
   });
 
+  it('잿불 군주는 체력과 공격력이 10배이며 기본 사격에 강화된 방어력을 적용한다', () => {
+    const sim = makeSim({ startTime: RUN_CONFIG.bossAt });
+    const boss = sim.boss!;
+    expect(boss.maxHp).toBe(105000);
+    expect([BOSS_CONFIG.contactDamage, BOSS_CONFIG.ring.damage, BOSS_CONFIG.charge.damage, BOSS_CONFIG.meteor.damage])
+      .toEqual([200, 140, 260, 220]);
+    boss.state = 'idle';
+    sim.damageBoss(100, 'basic');
+    expect(boss.maxHp - boss.hp).toBeCloseTo(37.5);
+  });
+
   it('체력이 60%가 되면 2페이즈로 전환한다', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.bossAt, god: true });
     runTicks(sim, 120);
@@ -60,7 +71,7 @@ describe('승리와 패배', () => {
     runUntil(sim, delay - 1 / RUN_CONFIG.tickRate);
     expect(sim.player.hp).toBe(hp);
     runTicks(sim, 2);
-    expect(sim.player.hp).toBe(hit ? hp - damage : hp);
+    expect(sim.player.hp).toBe(hit ? Math.max(0, hp - damage) : hp);
     expect(sim.lastDamageSource).toBe(hit ? BOSS_CONFIG.attackNames.meteor : null);
   });
 
@@ -94,7 +105,7 @@ describe('승리와 패배', () => {
     const normal = createEnemy(0, 'charger', 1000, 1000, RUN_CONFIG.timeLimit - 1 / RUN_CONFIG.tickRate);
     const overtime = createEnemy(0, 'charger', 1000, 1000, RUN_CONFIG.timeLimit);
     const scaledHp = ENEMY_CONFIG.charger.hp * (1 + ENEMY_SCALING.hpPerMinute * RUN_CONFIG.timeLimit / 60);
-    expect(overtime.maxHp).toBe(Math.round(scaledHp * 1.5));
+    expect(overtime.maxHp).toBe(10 * Math.round(scaledHp * 1.5));
     expect(overtime.dmgMul).toBeCloseTo(normal.dmgMul * 2, 3);
   });
 

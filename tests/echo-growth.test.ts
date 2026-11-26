@@ -54,7 +54,7 @@ describe('메아리 사격 처치 성장', () => {
       if (!sim.playerShots.length) continue;
       expect(sim.playerShots).toHaveLength(50);
       expect(new Set(sim.playerShots.map((shot) => `${shot.x},${shot.y}`)).size).toBe(10);
-      const damage = sim.stats.damage * 1.15 * 1.6 * 1.4 * 1.8;
+      const damage = sim.weapons.baseDamage * 1.15 * 1.6 * 1.4 * 1.8;
       expect(sim.playerShots[0].damage).toBeCloseTo(damage);
       expect(sim.playerShots[5].damage).toBeCloseTo(damage * 0.65);
       expect(sim.playerShots[45].damage).toBeCloseTo(damage * 0.30);
@@ -88,7 +88,7 @@ describe('메아리 사격 처치 성장', () => {
     const target = sim.spawnEnemy('chaser', sim.player.x + 120, sim.player.y);
     target.hp = 1e6;
     sim.weapons.update(1 / 60);
-    const damage = sim.stats.damage * WEAPON_FUSIONS.volley.damage * 1.4;
+    const damage = sim.weapons.baseDamage * WEAPON_FUSIONS.volley.damage * 1.25 * 1.4;
     expect(sim.damageByAttack.volley).toBeCloseTo(damage);
     sim.tick += 58; // 기본 1.2초에서 처치 성장으로 0.96초가 됨
     sim.weapons.update(1 / 60);

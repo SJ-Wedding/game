@@ -4,6 +4,7 @@ import { ENEMY_CONFIG, ENEMY_SCALING } from '../src/config/enemies';
 import { SPAWN_EVENTS, SPAWN_PHASES } from '../src/config/spawns';
 import { BALANCE_REFERENCE_META } from '../src/config/meta';
 import { Bot, playToEnd } from '../src/core/bot';
+import { createEnemy, updateEnemies } from '../src/core/enemies';
 import { GameSim } from '../src/core/sim';
 import { runUntil } from './helpers';
 
@@ -27,30 +28,31 @@ describe('15분 설계', () => {
     for (let t = 0; t < RUN_CONFIG.timeLimit; t += 1) expect(at(t)).toBeDefined();
   });
 
-  const seeds = [101, 102, 103, 104, 105, 106];
-  const runs = seeds.map((seed) => {
-    // 밸런스 기준: 영구 강화 중간 단계(BALANCE_REFERENCE_META, 토큰 145개)
-    const sim = new GameSim({ seed, meta: BALANCE_REFERENCE_META });
-    playToEnd(sim, new Bot(seed));
-    return { seed, sim, result: sim.result! };
-  });
-
-  it('첫 레벨업은 초반 경험치 절반 적용으로 20초 이내', () => {
-    for (const { sim } of runs) {
-      expect(sim.firstLevelUpAt).not.toBeNull();
-      expect(sim.firstLevelUpAt!).toBeGreaterThan(8);
-      expect(sim.firstLevelUpAt!).toBeLessThanOrEqual(20);
+  it('강화된 몬스터를 상대로 표준 봇은 보스가 등장하기 전에 사망한다', () => {
+    for (const seed of [101, 102, 103, 104, 105, 106]) {
+      const sim = new GameSim({ seed, meta: BALANCE_REFERENCE_META });
+      playToEnd(sim, new Bot(seed));
+      expect(sim.result).toMatchObject({ outcome: 'defeat', cause: 'death' });
+      expect(sim.result!.survivalTime).toBeLessThan(RUN_CONFIG.bossAt);
     }
   });
+});
 
-  it('표준 봇(기준 영구 강화)의 승리는 전투 시간 13:30~15:00 사이에 끝난다', () => {
-    const wins = runs.filter((r) => r.result.outcome === 'victory');
-    expect(wins.length).toBeGreaterThanOrEqual(3);
-    for (const w of wins) {
-      expect(w.result.survivalTime).toBeGreaterThanOrEqual(RUN_CONFIG.bossAt);
-      expect(w.result.survivalTime).toBeLessThanOrEqual(RUN_CONFIG.timeLimit);
-    }
-  });
+it.each([
+  ['chaser', 150, 40], ['charger', 420, 90], ['spitter', 300, 60], ['elite', 10500, 150],
+] as const)('%s의 시작 체력은 %d이고 접촉 피해는 %d다', (kind, hp, attack) => {
+  const sim = new GameSim({ seed: 1 });
+  const enemy = sim.spawnEnemy(kind, sim.player.x, sim.player.y);
+  expect(enemy.hp).toBe(hp);
+  expect(enemy.maxHp).toBe(hp);
+  sim.player.hp = 200;
+  updateEnemies(sim, 0);
+  expect(200 - sim.player.hp).toBe(attack);
+});
+
+it.each([[54, 40], [90, 62.83077], [120, 83.2], [480, 92.8]])('그림자 망령은 %d초에 생성되면 접촉 피해를 %d로 적용한다', (time, damage) => {
+  const enemy = createEnemy(1, 'chaser', 900, 900, time);
+  expect(ENEMY_CONFIG.chaser.contactDamage * enemy.dmgMul).toBeCloseTo(damage);
 });
 
 it('8분부터 증원이 늘고 이미 등장한 적도 추가 피해 감소를 얻는다', () => {
@@ -65,9 +67,9 @@ it('8분부터 증원이 늘고 이미 등장한 적도 추가 피해 감소를 
   expect(enemy.hp).toBe(980);
   sim.tick += 60;
   sim.damageEnemy(enemy, 20, 'echo');
-  expect(enemy.hp).toBe(963);
+  expect(enemy.hp).toBeCloseTo(969.375);
   sim.damageEnemy(enemy, 20, 'volley');
-  expect(enemy.hp).toBe(944.5);
+  expect(enemy.hp).toBeCloseTo(954.21371);
 });
 
 it('9분에 나온 갑주 적은 기본탄 저항과 후반 피해 감소를 함께 적용한다', () => {
@@ -77,17 +79,16 @@ it('9분에 나온 갑주 적은 기본탄 저항과 후반 피해 감소를 함
   expect(late.maxHp).toBeGreaterThan(early.maxHp);
   expect(late.basicResistance).toBe(0.30);
   sim.damageEnemy(late, 20, 'basic');
-  expect(late.maxHp - late.hp).toBeCloseTo(11.13);
+  expect(late.maxHp - late.hp).toBeCloseTo(4.01226);
   sim.damageEnemy(late, 20, 'echo');
-  expect(late.maxHp - late.hp).toBeCloseTo(27.03);
+  expect(late.maxHp - late.hp).toBeCloseTo(12.74852);
 });
 
-it('균열 수호자는 기본 체력 1050과 받는 피해를 1.5로 나누는 내구도를 갖는다', () => {
+it('균열 수호자의 강화된 내구도는 받는 피해를 3.5로 나눈다', () => {
   const sim = new GameSim({ seed: 2 });
   const elite = sim.spawnEnemy('elite', 900, 900);
-  expect(elite.maxHp).toBe(1050);
   sim.damageEnemy(elite, 90, 'echo');
-  expect(elite.maxHp - elite.hp).toBe(60);
+  expect(elite.maxHp - elite.hp).toBeCloseTo(90 / 3.5);
 });
 
 it.each([[600, 50], [660, 60], [720, 70], [810, 80]])('%d초의 첫 일반 웨이브는 %d마리를 생성한다', (startTime, count) => {
@@ -115,7 +116,7 @@ it('세 방향 증원을 2초 전에 예고하고 예고한 시각에 70마리�
   expect(reinforcements).toHaveLength(70);
   for (const enemy of reinforcements) {
     expect(enemy.xp).toBe(ENEMY_CONFIG[enemy.kind].xp * 0.5);
-    expect(enemy.dmgMul).toBeCloseTo((1 + ENEMY_SCALING.damagePerMinute * 730 / 60) * 1.3);
+    expect(enemy.dmgMul).toBeCloseTo(10 * (1 + ENEMY_SCALING.damagePerMinute * 730 / 60) * 1.3);
   }
   expect(sim.assaultWarning).toBeNull();
 });

@@ -1,4 +1,4 @@
-import { CHARACTER_MAX_HP, type CharacterId } from '../config/characters';
+import { CHARACTER_MAX_HP, RANGER, type CharacterId } from '../config/characters';
 import { GRADES, GRADE_INDEX, type GradeId } from '../config/grades';
 import { PLAYER_BASE_STATS, type PlayerStats, type StatKey } from '../config/player';
 import { ALL_UPGRADES, UPGRADE_BY_ID, type UpgradeEffect, type UpgradeId } from '../config/upgrades';
@@ -39,6 +39,7 @@ export interface StatOverrides { maxHp?: number; moveSpeedMul: number; dodgeCool
 
 export function baseStats(character: CharacterId = 'ranger', overrides?: StatOverrides): PlayerStats {
   const out = { ...PLAYER_BASE_STATS, maxHp: CHARACTER_MAX_HP[character] } as PlayerStats;
+  if (character === 'ranger') out.damage = RANGER.basicDamage;
   if (overrides) {
     if (overrides.maxHp !== undefined) out.maxHp = overrides.maxHp;
     if (overrides.dodgeCooldown !== undefined) out.dodgeCooldown = overrides.dodgeCooldown;

@@ -25,6 +25,7 @@ export const SPECIAL_WEAPON_POWER: Record<WeaponId, number> = {
   turret: 1.35, flame: 1.85, barrier: 1.65, spear: 1.55, mark: 1.65,
   echo: 1.6, gravity: 1.55,
 };
+export const STARTER_HIT_FACTOR = { chain: 1.85, turret: 0.86 } as const;
 
 export const ECHO_GROWTH = {
   stages: 50,
@@ -100,7 +101,8 @@ export const WEAPON_FUSIONS = {
 
 export type FusionId = keyof typeof WEAPON_FUSIONS;
 export const FUSION_IDS = Object.keys(WEAPON_FUSIONS) as FusionId[];
-export const FUSION_ARMOR_PIERCE = 0.5;
+export const FUSION_ARMOR_PIERCE = 0.6;
+export const FUSION_DAMAGE_MULTIPLIER = 1.25;
 export const FUSION_RELIC_DAMAGE_BONUS = 0.15;
 
 export function isFusionIngredient(fusions: Iterable<FusionId>, weapon: string): boolean {

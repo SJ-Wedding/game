@@ -49,8 +49,8 @@ test.describe('성장 시스템', () => {
     await page.keyboard.press('Tab');
     await expect(page.locator('#overlay[data-screen="status"]')).toBeVisible();
     await expect(page.getByTestId('stat-fireRate')).toHaveText('1.20회/초');
-    await expect(page.getByTestId('stat-damage')).toHaveText('9');
-    await expect(page.getByTestId('stat-maxHp')).toHaveText('70');
+    await expect(page.getByTestId('stat-damage')).toHaveText('26');
+    await expect(page.getByTestId('stat-maxHp')).toHaveText('100');
     const a = await snap(page);
     expect(a.paused).toBe(true);
     await page.waitForTimeout(800);
@@ -204,7 +204,7 @@ test.describe('성장 시스템', () => {
     await page.getByTestId('character-ranger').click();
     await waitElapsed(page, 0.5);
     const s = await snap(page);
-    expect(s.stats!.damage).toBeCloseTo(9 * 1.04, 5);
+    expect(s.stats!.damage).toBeCloseTo(26 * 1.04, 5);
   });
   test('승리 후 키보드로 재시작해도 유물 팝업을 거쳐야 하고, 선택 전 새로고침해도 후보가 유지된다', async ({ page }) => {
     await startRun(page, '&seed=39');
@@ -213,7 +213,7 @@ test.describe('성장 시스템', () => {
       for (const id of ['oath', 'buckle', 'crown', 'anchor']) sim.relics.acquire(id);
       sim.spawnBoss();
       sim.boss.state = 'idle';
-      sim.damageBoss(100000);
+      sim.damageBoss(sim.boss.maxHp);
     });
     await expect(page.getByTestId('outcome')).toHaveText('승리');
     await page.waitForTimeout(700);

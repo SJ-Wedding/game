@@ -305,7 +305,7 @@ describe('초반 전투 유물', () => {
     expect(sim.playerShots).toHaveLength(2);
     expect(sim.playerShots[0].damage).toBeCloseTo(sim.stats.damage * 1.55 * 0.82);
     expect(sim.relics.fireRate).toBeCloseTo(sim.stats.fireRate * 0.75);
-    expect(enemy.maxHp - enemy.hp).toBeCloseTo(sim.stats.damage * 1.85);
+    expect(enemy.maxHp - enemy.hp).toBeCloseTo(sim.weapons.baseDamage * 1.85);
   });
 
   it('균열 가속기는 지뢰 설치 주기를 앞당기며 일반 회복량은 줄이지 않는다', () => {

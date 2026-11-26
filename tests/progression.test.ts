@@ -15,12 +15,18 @@ import { makeSim, runTicks } from './helpers';
 
 const rawXp = (level: number) => PROGRESSION_CONFIG.xpBase + PROGRESSION_CONFIG.xpGrowth * Math.pow(level - 1, PROGRESSION_CONFIG.xpExponent);
 
-describe('시작 능력치 감소', () => {
-  it('시작 능력치는 이전보다 낮다 (공격 속도 절반 포함)', () => {
-    expect(PLAYER_BASE_STATS).toMatchObject({ maxHp: 70, damage: 9, fireRate: 1.2, moveSpeed: 190, dodgeCooldown: 3.0, pickupRadius: 75 });
+describe('시작 능력치', () => {
+  it('균열 사수는 체력 100으로 시작한다', () => {
+    expect(PLAYER_BASE_STATS).toMatchObject({ maxHp: 100, damage: 9, fireRate: 1.2, moveSpeed: 190, dodgeCooldown: 3.0, pickupRadius: 75 });
     const sim = makeSim();
-    expect(sim.player.hp).toBe(70);
+    expect(sim.player.hp).toBe(100);
     expect(sim.rerollsLeft).toBe(PROGRESSION_CONFIG.baseRerolls);
+  });
+
+  it.each(['chain', 'turret'] as const)('루멘은 %s를 선택해도 체력 85로 시작한다', (weapon) => {
+    const sim = makeSim({ loadout: { character: 'lumen', weapon } });
+    expect(sim.stats.maxHp).toBe(85);
+    expect(sim.player.hp).toBe(85);
   });
 });
 
@@ -52,7 +58,7 @@ describe('레벨업 보상 등급', () => {
     const common = computeStats([{ id: 'power', grade: 'common' }]).damage;
     const legend = computeStats([{ id: 'power', grade: 'legendary' }]).damage;
     expect(legend).toBeGreaterThan(common);
-    expect(legend).toBeCloseTo(PLAYER_BASE_STATS.damage * 1.66, 5);
+    expect(legend).toBeCloseTo(26 * 1.66, 5);
   });
 
   it('등급 분포는 설정 확률을 따르고, 행운이 높으면 상위 등급이 늘어난다', () => {
@@ -115,9 +121,9 @@ describe('영구 강화 (토큰 상점)', () => {
   it('영구 강화는 시작 능력치에 곱해지고, 그 위에 판 강화가 적용된다', () => {
     const meta = metaBonus({ damage: 5, fireRate: 5, dodge: 5 });
     const layers = statLayers([{ id: 'power', grade: 'common' }], meta);
-    expect(layers.base.damage).toBe(9);
-    expect(layers.meta.damage).toBeCloseTo(9 * 1.2);
-    expect(layers.final.damage).toBeCloseTo(9 * 1.2 * 1.22);
+    expect(layers.base.damage).toBe(26);
+    expect(layers.meta.damage).toBeCloseTo(26 * 1.2);
+    expect(layers.final.damage).toBeCloseTo(26 * 1.2 * 1.22);
     expect(layers.meta.fireRate).toBeCloseTo(1.44);
     expect(layers.meta.dodgeCooldown).toBeCloseTo(3.0 * 0.85);
   });
@@ -231,9 +237,10 @@ describe('처치 드랍 아이템', () => {
 
     const near = sim.spawnEnemy('charger', p.x + 300, p.y);
     const far = sim.spawnEnemy('charger', p.x + 1200, p.y);
+    near.hp = 100;
     sim.useItem('bomb');
     expect(near.dead).toBe(true);
-    expect(far.dead).toBe(false);
+    expect(far.hp).toBe(far.maxHp);
 
     sim.pickups.push({ x: p.x + 900, y: p.y, kind: 'magnet', life: 1 });
     runTicks(sim, 70);

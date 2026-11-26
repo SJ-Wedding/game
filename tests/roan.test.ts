@@ -71,7 +71,8 @@ describe('로안 무기 선택', () => {
 
   it('무기마다 최대 체력·받는 피해·이동 속도·회피 대기시간이 다르다', () => {
     const base = make();
-    expect(base.stats.maxHp).toBe(160);
+    expect(base.stats.maxHp).toBe(150);
+    expect(base.player.hp).toBe(150);
     for (const id of ROAN_WEAPON_IDS) {
       const s = make(id);
       const w = ROAN_WEAPONS[id];
@@ -353,8 +354,12 @@ describe('상위 무기', () => {
     swing(s);
     swing(s);
     expect(s.playerShots.filter((p) => p.source === 'thrownAxe')).toHaveLength(0);
+    expect(s.swordSweep).toMatchObject({ offHand: false, throwing: undefined });
     swing(s);
     expect(s.playerShots.filter((p) => p.source === 'thrownAxe')).toHaveLength(1);
+    expect(s.swordSweep).toMatchObject({ offHand: false, throwing: true });
+    steps(s, 5);
+    expect(s.swordSweep).toMatchObject({ offHand: true, throwing: true });
   });
 
   it('할버드는 찌르기와 베기를 번갈아 하고 일반 적을 밀쳐낸다', () => {
@@ -365,7 +370,7 @@ describe('상위 무기', () => {
     expect(e.x).toBeGreaterThan(x);
     expect(s.swordSweep!.motion).toBe('thrust');
     swing(s);
-    expect(s.swordSweep!.motion).toBe('thrust');
+    expect(s.swordSweep!.motion).toBe('slash');
   });
 });
 

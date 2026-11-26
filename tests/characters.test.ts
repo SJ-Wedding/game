@@ -7,6 +7,7 @@ import { GameSim } from '../src/core/sim';
 import { IDLE_INPUT } from '../src/core/types';
 
 const roan: Loadout = { character: 'roan' };
+const ranger: Loadout = { character: 'ranger' };
 const chain: Loadout = { character: 'lumen', weapon: 'chain' };
 const turret: Loadout = { character: 'lumen', weapon: 'turret' };
 
@@ -16,6 +17,51 @@ function makeTarget(sim: GameSim, dx: number, dy = 0) {
   enemy.speed = 0;
   return enemy;
 }
+
+it.each([
+  [roan, 'sword', 45, 4, 3.63], [ranger, 'basic', 26, 6, 4.17],
+  [chain, 'chain', 51, 3, 4.50], [turret, 'turret', 18.5, 9, 4.48],
+] as const)('$0.character의 시작 공격 $1은 체력 150인 적을 목표 시간에 처치한다', (loadout, source, hitDamage, hits, killTime) => {
+  const sim = new GameSim({ seed: 11, god: true, loadout });
+  const enemy = makeTarget(sim, 100);
+  enemy.hp = enemy.maxHp = 150;
+  let firstHit: number | undefined;
+  for (let i = 0; i < 360 && !enemy.dead; i++) {
+    sim.step(IDLE_INPUT);
+    sim.enemies = sim.enemies.filter((target) => target === enemy);
+    if (firstHit === undefined && enemy.hp < enemy.maxHp) {
+      firstHit = sim.elapsed;
+      expect(enemy.maxHp - enemy.hp).toBeCloseTo(hitDamage);
+    }
+  }
+  expect(enemy.dead).toBe(true);
+  expect(sim.hitsByAttack[source]).toBe(hits);
+  expect(Math.abs(sim.elapsed - firstHit! - killTime)).toBeLessThan(0.08);
+});
+
+it.each([[5, 9, 0], [6, 15, 1], [17, 15, 1], [18, 15, 2]])('균열 사수 Lv %d의 무기 기준 피해는 %d, 기본탄 관통은 %d이다', (presetLevel, damage, pierce) => {
+  const sim = new GameSim({ seed: 11, god: true, presetLevel });
+  makeTarget(sim, 300);
+  sim.step(IDLE_INPUT);
+  expect(sim.weapons.baseDamage).toBeCloseTo(damage);
+  expect(sim.playerShots[0].pierceLeft ?? 0).toBe(pierce);
+});
+
+it('루멘의 숙련 피해 보너스는 +120%가 되면 더 오르지 않는다', () => {
+  const sim = new GameSim({ seed: 11, loadout: chain, presetUpgrades: { chainLinks: 30 } });
+  expect(sim.weapons.specialistHitDamage()).toBeCloseTo(51 * 2.2);
+  expect(sim.lumenMasteryDamageBonus(2)).toBe(1.2);
+});
+
+it.each([[11, 0], [12, 0.15], [23, 0.15], [24, 0.25]])('루멘 Lv %d의 전용 무기는 몬스터 피해 저항을 %f만큼 무시한다', (presetLevel, penetration) => {
+  const sim = new GameSim({ seed: 11, loadout: chain, startTime: 480, presetLevel });
+  const enemy = makeTarget(sim, 100);
+  sim.damageEnemy(enemy, 100, 'chain');
+  const retainedDamage = 1 - 0.15 * (1 - penetration);
+  expect(1000 - enemy.hp).toBeCloseTo(100 * retainedDamage / (retainedDamage + (1 - retainedDamage) * 5));
+  sim.damageEnemy(enemy, 100, 'relic');
+  expect(sim.damageByAttack.relic).toBeCloseTo(53.125);
+});
 
 describe('캐릭터와 중첩 강화', () => {
   it.each([chain, turret, roan])('전용 빌드 $character 의 시작과 모든 강화 보상은 서로의 공격을 섞지 않는다', (loadout) => {

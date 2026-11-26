@@ -22,6 +22,7 @@ import {
 import { drawResonance, drawResonanceDirection, drawTempestFlight } from './fusionEffects';
 import { CRESCENT_WAVE_DURATION, drawCrescentWave } from './roanCrescent';
 import { drawFlailTrail, drawMaceImpact, drawMaceQuake, drawMaceWeapon, maceLean } from './roanMaceEffects';
+import { bladeMotion, drawBladePose, drawBladeSweep } from './roanBladeEffects';
 
 interface Particle {
   x: number;
@@ -44,6 +45,7 @@ export class GameScene extends Phaser.Scene {
   private weaponEffects!: Phaser.GameObjects.Graphics;
   private g!: Phaser.GameObjects.Graphics;
   private playerImage!: Phaser.GameObjects.Image;
+  private heldBlades: Phaser.GameObjects.Image[] = [];
   private bossImage!: Phaser.GameObjects.Image;
   private arenaFloor!: Phaser.GameObjects.Image;
   private arenaBorder!: Phaser.GameObjects.Graphics;
@@ -89,6 +91,7 @@ export class GameScene extends Phaser.Scene {
     this.bossImage = this.add.image(0, 0, this.arenaSprites, ARENA_ACTOR_FRAMES.boss).setDepth(3).setVisible(false);
     this.setArena(0);
     this.playerImage = this.add.image(0, 0, 'player', 1).setDepth(5).setScale(1.25).setVisible(false);
+    this.heldBlades = [0, 1].map(() => this.add.image(0, 0, 'roan-weapons').setDepth(5.25).setVisible(false));
     this.weaponEffects = this.add.graphics().setDepth(5.5);
     this.g = this.add.graphics().setDepth(6);
     const kb = this.input.keyboard!;
@@ -256,6 +259,7 @@ export class GameScene extends Phaser.Scene {
     for (let i = enemyCount; i < this.visibleEnemies; i++) this.enemyImages[i].setVisible(false);
     this.visibleEnemies = enemyCount;
     this.playerImage.setVisible(sim !== null);
+    for (const blade of this.heldBlades) blade.setVisible(false);
     this.bossImage.setVisible(Boolean(sim?.boss && !sim.boss.dead));
     this.drawWeapons(sim);
     if (!sim) return;
@@ -403,7 +407,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // 6) 플레이어 투사체
-    for (const s of sim.playerShots) drawPlayerShot(g, s);
+    for (const s of sim.playerShots) drawPlayerShot(g, s, t);
 
     // 7) 적 투사체 (가장 위에 — 놓치지 않도록)
     for (const s of sim.enemyShots) {
@@ -424,18 +428,21 @@ export class GameScene extends Phaser.Scene {
     ground.fillStyle(0x070a11, 0.65).fillCircle(p.x, p.y + 2, p.r + 3);
     ground.lineStyle(2, col, blink ? 0.45 : 0.85).strokeCircle(p.x, p.y, p.r + 7);
     let latestSweep: GameSim['swordSweep'] = null;
-    for (const sweep of sim.swordSweeps) if (!sweep.wave) latestSweep = sweep;
+    for (const sweep of sim.swordSweeps) {
+      if (!sweep.wave && sweep.kind !== 'shock') latestSweep = sweep;
+    }
     const sweepAge = latestSweep ? t - latestSweep.at : SWORD.sweepDuration;
+    const progress = sweepAge / SWORD.sweepDuration;
     const stabProgress = sweepAge / DAGGER_THRUST.duration;
     const stab = latestSweep?.lineWidth !== undefined && stabProgress < 1 ? latestSweep : undefined;
-    const maceProgress = sweepAge / SWORD.sweepDuration;
-    const mace = latestSweep && latestSweep.kind !== 'shock' && maceProgress < 1
-      && (latestSweep.motion === 'slam' || latestSweep.motion === 'spin') ? latestSweep : undefined;
-    const attack = stab ?? mace;
+    const attack = latestSweep && progress < 1 && (latestSweep.lineWidth === undefined || stab) ? latestSweep : undefined;
+    const mace = attack?.motion === 'slam' || attack?.motion === 'spin' ? attack : undefined;
+    const blade = stab || mace ? undefined : attack;
+    const pose = blade ? bladeMotion(blade, progress) : undefined;
     const attackX = Math.cos(attack?.angle ?? p.aim);
     const attackY = Math.sin(attack?.angle ?? p.aim);
     const extension = stab ? daggerExtension(stabProgress) : 0;
-    const lean = mace ? mace.motion === 'spin' ? 3 * (1 - maceProgress) : maceLean(maceProgress) : 9 * extension;
+    const lean = mace ? mace.motion === 'spin' ? 3 * (1 - progress) : maceLean(progress) : pose?.lean ?? 9 * extension;
     const bodyX = Math.round(p.x + attackX * lean);
     const bodyY = Math.round(p.y + attackY * lean);
     let facing = p.facing;
@@ -450,10 +457,9 @@ export class GameScene extends Phaser.Scene {
     if (p.hurtFlash > 0) this.playerImage.setTint(PALETTE.playerHurt);
     else this.playerImage.clearTint();
     for (const sweep of sim.swordSweeps) this.drawSwordSweep(sweep, t);
-    this.drawRoanSwings(sim, t);
+    const body = { x: bodyX, y: bodyY };
+    const alpha = blink ? 0.45 : 1;
     if (stab) {
-      const body = { x: bodyX, y: bodyY };
-      const alpha = blink ? 0.45 : 1;
       if (stab.design === 'twinblades') {
         const previous = sim.swordSweeps.at(-2);
         const previousProgress = previous?.design === 'twinblades' && previous.offHand !== stab.offHand
@@ -464,7 +470,15 @@ export class GameScene extends Phaser.Scene {
       }
       drawDaggerThrust(this.weaponEffects, body, stab.angle, extension, stabProgress, stab.design, alpha, stab.offHand);
     }
-    if (mace) drawMaceWeapon(this.weaponEffects, { x: bodyX, y: bodyY }, p, mace, maceProgress, sweepAge, blink ? 0.45 : 1);
+    if (mace) drawMaceWeapon(this.weaponEffects, body, p, mace, progress, sweepAge, alpha);
+    if (blade && pose) {
+      const { frame, gripX, gripY } = roanWeaponFrame(blade.design);
+      for (const [i, weapon] of drawBladePose(this.weaponEffects, body, blade, pose, progress, alpha).entries()) {
+        this.heldBlades[i].setFrame(frame).setOrigin((weapon.flip ? ROAN_WEAPON_FRAME.width - gripX : gripX) / ROAN_WEAPON_FRAME.width,
+          gripY / ROAN_WEAPON_FRAME.height).setPosition(weapon.x, weapon.y).setRotation(weapon.direction + Math.PI / 2)
+          .setScale(weapon.scale).setFlipX(weapon.flip).setAlpha(alpha).setVisible(true);
+      }
+    }
     const ax = Math.cos(p.aim);
     const ay = Math.sin(p.aim);
     const aimMarker = this.playerImage.displayWidth / 2 + 2;
@@ -495,45 +509,6 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  /** 로안 무기 휘두르기 모션: 판정마다 무기 이미지를 궤적을 따라 움직인다 */
-  private readonly swingImages = new Map<object, Phaser.GameObjects.Image>();
-
-  private drawRoanSwings(sim: GameSim, now: number): void {
-    const live = new Set<object>();
-    for (const sweep of sim.swordSweeps) {
-      if (sweep.kind === 'shock' || sweep.lineWidth !== undefined || sweep.motion === 'slam' || sweep.motion === 'spin') continue;
-      const progress = (now - sweep.at) / SWORD.sweepDuration;
-      if (progress >= 1) continue;
-      live.add(sweep);
-      const { frame, gripX, gripY } = roanWeaponFrame(sweep.design);
-      let img = this.swingImages.get(sweep);
-      if (!img) {
-        img = this.add.image(0, 0, 'roan-weapons', frame).setDepth(6).setScale(2)
-          .setOrigin(gripX / ROAN_WEAPON_FRAME.width, gripY / ROAN_WEAPON_FRAME.height);
-        this.swingImages.set(sweep, img);
-      }
-      const s = Math.min(1, progress / 0.6);
-      const ease = 1 - (1 - s) ** 2;
-      const { x, y, angle, width, range } = sweep;
-      let a = angle;
-      let px = x;
-      let py = y;
-      if (sweep.motion === 'thrust') {
-        const reach = range * 0.45 * Math.sin(Math.PI * s);
-        px += Math.cos(angle) * reach;
-        py += Math.sin(angle) * reach;
-      } else {
-        a = angle - width / 2 + width * ease;
-      }
-      img.setPosition(px, py).setRotation(a + Math.PI / 2).setAlpha(Math.min(1, (1 - progress) * 3));
-    }
-    for (const [key, img] of this.swingImages) {
-      if (live.has(key)) continue;
-      img.destroy();
-      this.swingImages.delete(key);
-    }
-  }
-
   private drawSwordSweep(sweep: NonNullable<GameSim['swordSweep']>, now: number): void {
     if (sweep.wave) {
       drawCrescentWave(this.groundEffects, this.weaponEffects, sweep, (now - sweep.at) / CRESCENT_WAVE_DURATION);
@@ -543,8 +518,7 @@ export class GameScene extends Phaser.Scene {
     if (progress >= 1 || sweep.lineWidth !== undefined) return;
     const g = this.weaponEffects;
     const fade = (1 - progress) ** 1.6;
-    const { x, y, angle, width, range, motion, kind } = sweep;
-    const color = kind === 'combo' ? 0xe9fff3 : sweep.color;
+    const { x, y, range, motion, kind, color } = sweep;
     if (kind === 'shock') {
       this.groundEffects.fillStyle(color, fade * 0.16).fillCircle(x, y, range);
       g.lineStyle(3, color, fade * 0.8).strokeCircle(x, y, range * (0.6 + 0.4 * progress));
@@ -553,15 +527,7 @@ export class GameScene extends Phaser.Scene {
     } else if (motion === 'spin') {
       drawFlailTrail(this.groundEffects, sweep, now - sweep.at, progress);
     } else {
-      const start = angle - width / 2;
-      const point = (a: number, r: number) => ({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
-      const steps = Math.max(8, Math.ceil(width * 9));
-      const edge = Array.from({ length: steps + 1 }, (_, i) => point(start + i * width / steps, range));
-      const inside = edge.map((_, i) => point(start + i * width / steps, range - 18 - 16 * Math.sin(Math.PI * i / steps)));
-      this.groundEffects.fillStyle(color, fade * 0.10).fillPoints([{ x, y }, ...edge], true);
-      g.fillStyle(color, fade * 0.45).fillPoints([...edge, ...inside.reverse()], true);
-      g.lineStyle(10, color, fade * 0.24).strokePoints(edge);
-      g.lineStyle(3, 0xfff2d5, fade * 0.98).strokePoints(edge);
+      drawBladeSweep(this.groundEffects, g, sweep, progress);
     }
     for (const burst of sweep.blocked) {
       const radius = 5 + 16 * progress;
