@@ -1,5 +1,5 @@
 import shopIcons from '../assets/shop-icons.png';
-import { CHARACTER_SHOP_IDS, CHARACTER_SHOP_ITEMS, characterShopAmount, type CharacterShopId } from '../config/characterShop';
+import { CHARACTER_SHOP_ITEMS, characterShopAmount, type CharacterShopId } from '../config/characterShop';
 import { META_STATS, META_UNLOCKS } from '../config/meta';
 import { WEAPONS } from '../config/weapons';
 import { metaLevel, nextCost } from '../core/meta';
@@ -10,6 +10,11 @@ const TABS = ['common', 'ranger', 'lumen', 'roan'] as const;
 export type ShopTab = (typeof TABS)[number];
 const LABELS: Record<ShopTab, string> = { common: '공용', ranger: '균열 사수', lumen: '루멘', roan: '로안' };
 const PORTRAITS: Record<ShopTab, number> = { common: 18, ranger: 20, lumen: 21, roan: 22 };
+const ITEM_ICONS: Record<CharacterShopId, number> = {
+  rangerAim: 0, rangerPierce: 1, rangerTuning: 2, rangerFusion: 3, rangerParts: 4, rangerEscape: 5, rangerExtraPierce: 1,
+  lumenCycle: 6, lumenWard: 7, lumenChainRange: 8, lumenChainRepeat: 9, lumenTurretRange: 10, lumenTurretSlow: 11, lumenTurretPierce: 10,
+  roanReach: 12, roanArmor: 13, roanCounter: 14, roanTempo: 15, roanPierce: 16, roanRepair: 17,
+};
 const RANGER_LABELS: Partial<Record<CharacterShopId, string>> = {
   rangerAim: '사거리', rangerPierce: '관통 후 피해', rangerTuning: '특수 무기 피해',
   rangerParts: '융합 짝 우선 확률', rangerEscape: '회피 후 이동 속도',
@@ -78,7 +83,7 @@ export function buildShop(meta: SaveMeta, activeTab: ShopTab, onSelect: (tab: Sh
     const items = CHARACTER_SHOP_ITEMS.filter((item) => item.character === activeTab);
     const completed = items.filter((item) => metaLevel(meta.purchases, item.id) >= item.maxLevel).length;
     content.append(el('p', { class: 'shop-progress', text: `전용 강화 ${completed} / ${items.length} 완성` }),
-      el('ul', { class: 'shop-list shop-grid' }, items.map((item) => {
+      el('ul', { class: `shop-list shop-grid${items.length > 6 ? ' shop-grid-dense' : ''}` }, items.map((item) => {
         const level = metaLevel(meta.purchases, item.id);
         const next = Math.min(item.maxLevel, level + 1);
         const amount = `${level > 0 && next > level ? `${characterShopAmount(item, level)} → ` : ''}${characterShopAmount(item, next)}`;
@@ -88,7 +93,7 @@ export function buildShop(meta: SaveMeta, activeTab: ShopTab, onSelect: (tab: Sh
         ];
         const effect = `${RANGER_LABELS[item.id] ?? item.effect} ${amount}`;
         const detail = `${item.effect} ${amount}${conditions.length ? ` · ${conditions.join(' · ')}` : ''}`;
-        return row(item.id, item.name, effect, item.maxLevel, { image: icon(CHARACTER_SHOP_IDS.indexOf(item.id)), conditions, detail });
+        return row(item.id, item.name, effect, item.maxLevel, { image: icon(ITEM_ICONS[item.id]), conditions, detail });
       })));
   }
 

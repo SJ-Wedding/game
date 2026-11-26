@@ -18,12 +18,12 @@ function target(sim: GameSim, distance: number) {
 }
 
 describe('캐릭터 전용 상점', () => {
-  it('캐릭터별 6개 5단계를 같은 토큰으로 구매하고 기존 공용 구매와 함께 저장한다', () => {
+  it('기존 5단계 강화를 같은 토큰으로 구매하고 공용 구매와 함께 저장한다', () => {
     let save = defaultSave();
     save.meta = { ...save.meta, tokens: 500, purchases: { hp: 2 } };
-    expect(CHARACTER_SHOP_ITEMS).toHaveLength(18);
+    expect(CHARACTER_SHOP_ITEMS).toHaveLength(20);
     for (const character of ['ranger', 'lumen', 'roan']) {
-      expect(CHARACTER_SHOP_ITEMS.filter((entry) => entry.character === character)).toHaveLength(6);
+      expect(CHARACTER_SHOP_ITEMS.filter((entry) => entry.character === character && entry.maxLevel === 5)).toHaveLength(6);
     }
     for (const [i, cost] of CHARACTER_SHOP_COSTS.entries()) {
       expect(purchaseMeta({ ...save, meta: { ...save.meta, tokens: cost - 1 } }, 'rangerAim')).toBeNull();
@@ -35,6 +35,49 @@ describe('캐릭터 전용 상점', () => {
     expect(purchaseMeta(save, 'rangerAim')).toBeNull();
     expect(parseSave(JSON.stringify(save)).data.meta).toEqual({ tokens: 100, totalEarned: 0, purchases: { hp: 2, rangerAim: 5 } });
     expect(parseSave(JSON.stringify({ ...save, meta: { ...save.meta, purchases: { hp: 2 } } })).data.meta.purchases).toEqual({ hp: 2 });
+  });
+
+  it('관통 영구 강화는 각 100토큰으로 한 번만 구매할 수 있고 새로고침 후에도 유지된다', () => {
+    const save = defaultSave();
+    save.meta.tokens = 99;
+    expect(purchaseMeta(save, 'rangerExtraPierce')).toBeNull();
+    expect(purchaseMeta(save, 'lumenTurretPierce')).toBeNull();
+    save.meta.tokens = 250;
+    const ranger = purchaseMeta(save, 'rangerExtraPierce')!;
+    expect(ranger.meta.tokens).toBe(150);
+    const both = purchaseMeta(ranger, 'lumenTurretPierce')!;
+    const restored = parseSave(JSON.stringify(both)).data;
+    expect(restored.meta).toEqual({ tokens: 50, totalEarned: 0, purchases: { rangerExtraPierce: 1, lumenTurretPierce: 1 } });
+    expect(purchaseMeta(restored, 'rangerExtraPierce')).toBeNull();
+    expect(purchaseMeta(restored, 'lumenTurretPierce')).toBeNull();
+  });
+
+  it('균열 사수 관통 탄두는 첫 레벨부터 적용되고 레벨 관통과 유물에 더해진다', () => {
+    const meta = { rangerExtraPierce: 1 };
+    for (const [sim, hits] of [
+      [makeSim(), 1],
+      [makeSim({ meta }), 2],
+      [makeSim({ meta, presetLevel: 6, carryRelics: ['awl'] }), 4],
+    ] as const) {
+      const enemies = [50, 90, 130, 170, 210].map((distance) => target(sim, distance));
+      for (let i = 0; i < 22; i++) sim.step(IDLE_INPUT);
+      expect(enemies.map((enemy) => enemy.hp < enemy.maxHp)).toEqual(enemies.map((_, i) => i < hits));
+    }
+  });
+
+  it('루멘 서리 관통탄은 포탑 일반 사격에만 적용되고 철갑 노즐과 중첩된다', () => {
+    const meta = { lumenTurretPierce: 1 };
+    expect(makeSim({ loadout: chain, meta }).characterShopBonus('lumenTurretPierce')).toBe(0);
+    expect(makeSim({ presetUpgrades: { turret: 1 }, meta }).characterShopBonus('lumenTurretPierce')).toBe(0);
+    for (const [sim, hits] of [
+      [makeSim({ loadout: turret }), 1],
+      [makeSim({ loadout: turret, meta }), 2],
+      [makeSim({ loadout: turret, meta, presetUpgrades: { turretPierce: 1 } }), 3],
+    ] as const) {
+      const enemies = [70, 100, 130, 160].map((distance) => target(sim, distance));
+      sim.weapons.update(1 / 60);
+      expect(enemies.map((enemy) => enemy.hp < enemy.maxHp)).toEqual(enemies.map((_, i) => i < hits));
+    }
   });
 
   it('선택한 캐릭터와 루멘의 시작 무기에 해당하는 효과만 적용한다', () => {

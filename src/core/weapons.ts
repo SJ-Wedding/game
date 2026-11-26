@@ -856,7 +856,7 @@ export class WeaponSystem {
       this.trace('turret', [turret, target], 0, 0.26);
       for (const t of targets) strike(t, 0.6);
     } else {
-      const pierce = this.sim.mastery('turretPierce');
+      const pierce = this.sim.mastery('turretPierce') + this.sim.characterShopBonus('lumenTurretPierce');
       if (pierce > 0) {
         const ux = Math.cos(angle);
         const uy = Math.sin(angle);

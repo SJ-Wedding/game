@@ -2,7 +2,6 @@ import type { CharacterId, LumenWeapon } from './characters';
 import { ROAN_GEAR_LEVELS } from './roan';
 
 export const CHARACTER_SHOP_COSTS = [15, 35, 65, 110, 175] as const;
-export const CHARACTER_SHOP_MAX_LEVEL = CHARACTER_SHOP_COSTS.length;
 export const SHOP_TIMING = { rangerEscape: 1, manaWard: 60, roanCounter: 1.5 } as const;
 
 interface CharacterShopDef {
@@ -11,17 +10,20 @@ interface CharacterShopDef {
   name: string;
   effect: string;
   step: number;
-  unit: '%' | '%p' | '초';
+  unit: '%' | '%p' | '초' | '마리';
+  costs?: readonly number[];
   minLevel?: number;
 }
 
 export const CHARACTER_SHOP = {
+  rangerExtraPierce: { character: 'ranger', name: '관통 탄두', effect: '기본탄 관통', step: 1, unit: '마리', costs: [100] },
   rangerAim: { character: 'ranger', name: '정밀 조준', effect: '기본탄 조준 거리·사거리', step: 0.03, unit: '%' },
   rangerPierce: { character: 'ranger', name: '관통 탄피', effect: '기본탄 관통 후 피해', step: 0.04, unit: '%' },
   rangerTuning: { character: 'ranger', name: '무기 조율', effect: '일반 특수 무기 피해', step: 0.02, unit: '%', minLevel: 6 },
   rangerFusion: { character: 'ranger', name: '융합 냉각기', effect: '융합 발동 간격', step: -0.02, unit: '%' },
   rangerParts: { character: 'ranger', name: '재료 선별', effect: '미획득 융합 짝 후보 확률', step: 0.05, unit: '%p', minLevel: 12 },
   rangerEscape: { character: 'ranger', name: '이탈 기동', effect: `회피 후 ${SHOP_TIMING.rangerEscape}초간 이동 속도`, step: 0.04, unit: '%' },
+  lumenTurretPierce: { character: 'lumen', weapon: 'turret', name: '서리 관통탄', effect: '포탑 일반 사격 관통', step: 1, unit: '마리', costs: [100] },
   lumenCycle: { character: 'lumen', name: '마력 순환', effect: '번개 발동·포탑 설치 간격', step: -0.02, unit: '%', minLevel: 6 },
   lumenWard: { character: 'lumen', name: '마력 장벽', effect: `피격 1회 피해 (${SHOP_TIMING.manaWard}초 재충전)`, step: -0.06, unit: '%' },
   lumenChainRange: { character: 'lumen', weapon: 'chain', name: '도전선 보강', effect: '다음 적 연쇄 거리', step: 0.04, unit: '%' },
@@ -37,10 +39,14 @@ export const CHARACTER_SHOP = {
 } as const satisfies Record<string, CharacterShopDef>;
 
 export type CharacterShopId = keyof typeof CHARACTER_SHOP;
-export const CHARACTER_SHOP_IDS = Object.keys(CHARACTER_SHOP) as CharacterShopId[];
-export const CHARACTER_SHOP_ITEMS = CHARACTER_SHOP_IDS.map((id) => ({ id, ...CHARACTER_SHOP[id], maxLevel: CHARACTER_SHOP_MAX_LEVEL, costs: CHARACTER_SHOP_COSTS }));
+export const CHARACTER_SHOP_ITEMS = (Object.keys(CHARACTER_SHOP) as CharacterShopId[]).map((id) => {
+  const item = CHARACTER_SHOP[id];
+  const costs = 'costs' in item ? item.costs : CHARACTER_SHOP_COSTS;
+  return { id, ...item, maxLevel: costs.length, costs };
+});
 
 export function characterShopAmount(def: Pick<CharacterShopDef, 'step' | 'unit'>, level: number): string {
-  const magnitude = Math.round(Math.abs(def.step) * level * (def.unit === '초' ? 100 : 10000)) / 100;
+  const scale = def.unit === '%' || def.unit === '%p' ? 100 : 1;
+  const magnitude = Math.round(Math.abs(def.step) * level * scale * 100) / 100;
   return `${def.step < 0 && level ? '−' : '+'}${magnitude}${def.unit}`;
 }

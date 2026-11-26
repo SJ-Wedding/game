@@ -513,7 +513,8 @@ export class GameSim {
     const life = this.basicProjectileRange / speed;
     const mods = this.relics.volley();
     const levelPierce = RANGER.pierceLevels.filter((level) => this.level >= level).length;
-    const pierceLeft = Math.max(levelPierce, this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl')) + mods.pierce;
+    const pierceLeft = Math.max(levelPierce, this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl'))
+      + mods.pierce + this.characterShopBonus('rangerExtraPierce');
     const damage = this.relics.shotDamage() * mods.damage;
     const shoot = (a: number, back: number) => {
       const c = Math.cos(a);
