@@ -54,7 +54,8 @@ for (const [weapon, name] of starters) {
     await expect.poll(async () => page.evaluate((key) => (window as any).__rift.sim.damageByAttack[key] ?? 0, weapon)).toBeGreaterThan(0);
     expect((await snap(page)).shotsFired).toBe(0);
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('heading', { name: '마도공 루멘 · Lv 1' })).toBeVisible();
+    const status = page.getByRole('dialog', { name: '상태창' });
+    await expect(status.getByText('마도공 루멘 · Lv 1')).toBeVisible();
     await expect(page.getByTestId('stat-damage')).toHaveText(weapon === 'chain' ? '51' : '18.5');
     await expect(page.getByRole('button', { name: `${name} Lv 1` })).toBeVisible();
     await expect(page.getByText('특수 무기 합체 조합식')).toHaveCount(0);
@@ -86,7 +87,7 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   await page.keyboard.press('Tab');
   const status = page.locator('.status');
   await expect(status).toBeVisible();
-  await expect(status.getByRole('heading', { name: '철검 수호자 로안 · Lv 1' })).toBeVisible();
+  await expect(status.getByText('철검 수호자 로안 · Lv 1')).toBeVisible();
   await expect(status.getByRole('rowheader', { name: '베기 거리' })).toBeVisible();
   await expect(status.locator('.mastery-stack').filter({ hasText: name })).toContainText('1스택');
   await expect(status.locator('.mastery-total')).not.toBeEmpty();

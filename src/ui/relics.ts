@@ -1,6 +1,7 @@
 import { RELICS, relicDescription, type RelicId } from '../config/relics';
 import type { FusionId } from '../config/weapons';
 import { el } from './dom';
+import { relicArt } from './art';
 
 export const COMPACT_RELIC_LIMIT = 6;
 
@@ -17,8 +18,7 @@ export function relicInventory(ids: Iterable<RelicId>, context: 'hud' | 'pause' 
         'aria-label': relic.name,
         'aria-describedby': tooltip,
         'data-relic': id,
-        text: relic.symbol,
-    });
+    }, [relicArt(id), ...(context === 'status' ? [el('span', { text: relic.name })] : [])]);
     if (options.inspect) {
       const inspect = options.inspect;
       button.addEventListener('pointerenter', () => inspect(id));

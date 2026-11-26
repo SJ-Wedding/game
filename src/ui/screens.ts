@@ -1,12 +1,14 @@
-import { CHARACTERS, CHARACTER_UPGRADES, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
+import { CHARACTERS, CHARACTER_MAX_HP, CHARACTER_UPGRADES, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
 import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, type RoanUpgradeId, type RoanWeaponId } from '../config/roan';
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
+import titleArt from '../assets/title-art.webp';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, WEAPON_MAX_RANK, isFusionIngredient, type echoGrowth, type FusionId, WEAPON_DAMAGE_PER_RANK, WEAPON_RANK_EFFECTS, WEAPON_GRADE_DAMAGE, weaponRankEffect } from '../config/weapons';
 import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, type EssenceId, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
-import { weaponPreview } from './weaponPreview';
-import { CHARACTER_SHEETS, characterTexture, roanTexture, WEAPON_TEXTURES } from '../render/textures';
+import { WEAPON_PREVIEWS, weaponPreview } from './weaponPreview';
+import { relicArt, shopSprite } from './art';
+import { CHARACTER_SHEETS, roanTexture, WEAPON_TEXTURES } from '../render/textures';
 import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
@@ -84,6 +86,7 @@ export class Screens {
 
   private mount(name: Screens['current'], panel: HTMLElement): void {
     this.current = name;
+    if (name !== 'shop') panel.classList.add('ui-panel', 'ui-frame');
     this.root.replaceChildren(panel);
     this.root.classList.remove('hidden');
     this.root.dataset.screen = name;
@@ -113,45 +116,41 @@ export class Screens {
   showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null, account?: { username: string | null }): void {
     const play = el('button', { class: 'primary big', 'data-testid': 'play', 'data-autofocus': '' }, ['플레이 ', el('kbd', { text: 'Enter' })]);
     play.addEventListener('click', h.onPlay);
-    const shop = el('button', { class: 'shop-btn', 'data-testid': 'open-shop' }, ['강화 상점 · ', el('span', { class: 'token', 'data-testid': 'title-tokens', text: `◆ ${meta.tokens}` })]);
+    const shop = el('button', { class: 'shop-btn', 'data-testid': 'open-shop', text: '강화 상점' });
     shop.addEventListener('click', h.onShop);
 
-    const rec = el('div', { class: 'records', 'data-testid': 'records' }, [
-      el('h3', { text: '최고 기록' }),
-      el('dl', {}, [
-        el('dt', { text: '최장 생존' }),
-        el('dd', { 'data-testid': 'best-survival', text: records.bestSurvival > 0 ? formatTime(records.bestSurvival) : '-' }),
-        el('dt', { text: '최다 처치' }),
-        el('dd', { 'data-testid': 'best-kills', text: records.bestKills > 0 ? String(records.bestKills) : '-' }),
-        el('dt', { text: '최단 승리' }),
-        el('dd', { 'data-testid': 'fastest-win', text: records.fastestWin !== null ? formatTime(records.fastestWin) : '-' }),
-        el('dt', { text: '승리 / 플레이' }),
-        el('dd', { 'data-testid': 'runs', text: `${records.wins} / ${records.runs}` }),
-      ]),
+    const rec = el('dl', { class: 'records ui-metrics', 'data-testid': 'records', 'aria-label': '최고 기록' }, [
+      metric('최장 생존', records.bestSurvival > 0 ? formatTime(records.bestSurvival) : '-', 'best-survival'),
+      metric('최다 처치', records.bestKills > 0 ? String(records.bestKills) : '-', 'best-kills'),
+      metric('최단 승리', records.fastestWin !== null ? formatTime(records.fastestWin) : '-', 'fastest-win'),
+      metric('승리 / 플레이', `${records.wins} / ${records.runs}`, 'runs'),
     ]);
 
     const controls = el('div', { class: 'controls' }, [
       el('h3', { text: '조작' }),
       el('ul', {}, [
         el('li', {}, [el('kbd', { text: 'W A S D' }), ' 이동']),
-        el('li', {}, [el('kbd', { text: '자동' }), ' 가장 가까운 적을 조준해 공격']),
         el('li', {}, [el('kbd', { text: 'Space' }), ' 회피 (잠깐 무적)']),
         el('li', {}, [el('kbd', { text: 'Tab' }), ' 상태창 (능력치 확인)']),
         el('li', {}, [el('kbd', { text: 'Esc' }), ' 일시정지']),
       ]),
+      el('p', { class: 'muted', text: '가까운 적을 자동으로 조준해 공격합니다.' }),
     ]);
 
-    const children: HTMLElement[] = [
-      el('h1', { class: 'logo', text: '균열 아레나' }),
-      el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
-      el('div', { class: 'row buttons' }, [play, shop]),
-      ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
-      el('div', { class: 'row' }, [controls, rec]),
-      this.volumeControl(volume, h.onVolume),
-    ];
-
-    if (dev) children.push(this.devPanel(dev, h.onDevChange));
-    this.mount('title', el('div', { class: 'panel title' }, children));
+    this.mount('title', el('div', { class: 'panel title' }, [
+      el('div', { class: 'title-layout ui-scroll' }, [
+        el('section', { class: 'title-menu' }, [
+          el('h1', { class: 'logo' }, ['균열 ', el('span', { text: '아레나' })]),
+          el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
+          el('div', { class: 'title-actions' }, [play, shop, el('span', { class: 'title-tokens token ui-frame', 'data-testid': 'title-tokens', 'aria-label': `보유 토큰 ${meta.tokens}` }, [shopSprite(19, '◆'), ` ${meta.tokens}`])]),
+          ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
+          controls,
+          this.volumeControl(volume, h.onVolume),
+          ...(dev ? [this.devPanel(dev, h.onDevChange)] : []),
+        ]),
+        el('div', { class: 'title-showcase' }, [el('img', { class: 'title-art', src: titleArt, alt: '' }), rec]),
+      ]),
+    ]));
   }
 
   private accountLine(username: string | null, onAccount: () => void): HTMLElement {
@@ -202,46 +201,54 @@ export class Screens {
     const cards = entries.map((loadout) => {
       const id = loadout.character;
       const info = CHARACTERS[id];
-      return this.characterCard(loadout, info.name, info.description, `character-${id}`, () => onChoose(id), id === 'ranger');
+      const signature = id === 'ranger' ? '기본 공격 · 자동 사격' : id === 'lumen' ? '시작 무기 · 연쇄 번개 / 서리 포탑' : `근접 무기 선택 · Lv ${ROAN_GEAR_LEVELS.weapon}`;
+      return this.characterCard({
+        title: info.name, description: info.description, signature, testId: `character-${id}`,
+        onClick: () => onChoose(id), focus: id === 'ranger', color: id === 'lumen' ? '#ffda79' : info.color,
+        art: [shopSprite(id === 'ranger' ? 20 : id === 'lumen' ? 21 : 22)], extra: `시작 체력 ${CHARACTER_MAX_HP[id]}`,
+      });
     });
     this.showCharacterCards('characters', '캐릭터 선택', cards, onBack);
   }
 
   showLumenWeapons(onChoose: (id: LumenWeapon) => void, onBack: () => void): void {
     const cards = LUMEN_WEAPONS.map((weapon, index) =>
-      this.characterCard({ character: 'lumen', weapon }, WEAPONS[weapon].name,
-        weapon === 'chain' ? '가까운 적에서 시작해 먼 적으로 번개를 튕깁니다. 이미 맞힌 적에게 돌아오면 피해가 줄어듭니다.'
+      this.characterCard({
+        title: WEAPONS[weapon].name,
+        description: weapon === 'chain' ? '가까운 적에서 시작해 먼 적으로 번개를 튕깁니다. 이미 맞힌 적에게 돌아오면 피해가 줄어듭니다.'
           : '포탑을 설치해 적을 둔화시킵니다. 설치 대수와 포격 효과를 키웁니다.',
-        `lumen-${weapon}`, () => onChoose(weapon), index === 0));
+        signature: weapon === 'chain' ? '전용 강화 · 연쇄 횟수 · 되튐 피해' : '전용 강화 · 설치 대수 · 관통',
+        testId: `lumen-${weapon}`, onClick: () => onChoose(weapon), focus: index === 0,
+        art: [el('img', { class: 'character-attack sample', src: weapon === 'chain' ? chainPreview : turretPreview, alt: '' }),
+          el('img', { class: 'weapon-icon', src: WEAPON_TEXTURES[weapon], alt: '' })],
+        color: weapon === 'chain' ? '#75d9ff' : '#ffda79',
+      }));
     this.showCharacterCards('lumen-weapon', '루멘의 시작 무기', cards, onBack);
   }
 
-  private characterCard(loadout: Loadout, title: string, description: string, testId: string,
-    onClick: () => void, focus: boolean): HTMLButtonElement {
-    const url = CHARACTER_SHEETS[characterTexture(loadout)];
-    const fx = loadout.character === 'lumen' ? loadout.weapon : loadout.character;
-    const portrait = el('span', { class: 'character-pixel' });
-    portrait.style.backgroundImage = `url("${url}")`;
-    const effect = fx === 'chain' || fx === 'turret'
-      ? el('img', { src: fx === 'chain' ? chainPreview : turretPreview, alt: '', class: 'character-attack sample' })
-      : el('span', { class: `character-attack ${fx}` });
+  private characterCard({ title, description, signature, testId, onClick, focus, art, color, extra }: {
+    title: string; description: string; signature: string; testId: string; color: string;
+    onClick: () => void; focus: boolean; art: HTMLElement[]; extra?: string;
+  }): HTMLButtonElement {
     const card = el('button', { class: 'character-card', type: 'button', 'data-testid': testId, ...(focus ? { 'data-autofocus': '' } : {}) }, [
-      el('span', { class: 'character-preview', 'aria-hidden': 'true' }, [effect, portrait]),
+      el('span', { class: 'character-preview', 'aria-hidden': 'true' }, art),
       el('strong', { text: title }),
       el('span', { class: 'muted', text: description }),
+      el('span', { class: 'character-signature', text: signature }),
+      ...(extra ? [el('span', { class: 'character-extra', text: extra })] : []),
     ]);
-    card.style.setProperty('--character-color', CHARACTERS[loadout.character].color);
+    card.style.setProperty('--character-color', color);
     card.addEventListener('click', onClick);
     return card;
   }
 
   private showCharacterCards(screen: 'characters' | 'lumen-weapon', title: string, cards: HTMLButtonElement[], onBack: () => void): void {
-    const back = el('button', { class: 'character-back', type: 'button', 'data-testid': 'character-back' }, ['뒤로 ', el('kbd', { text: 'Esc' })]);
+    const back = el('button', { class: 'character-back', type: 'button', 'data-testid': 'character-back' }, ['돌아가기 ', el('kbd', { text: 'Esc' })]);
     back.addEventListener('click', onBack);
     this.mount(screen, el('div', { class: `panel character-select ${screen}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'character-heading' }, [
-      el('h2', { id: 'character-heading', text: title }),
-      el('div', { class: 'character-cards' }, cards),
-      back,
+      el('header', { class: 'ui-heading' }, [el('h2', { id: 'character-heading', text: title }), ...(screen === 'lumen-weapon' ? [shopSprite(21)] : [])]),
+      el('div', { class: 'character-cards ui-scroll' }, cards),
+      el('footer', { class: 'ui-actions' }, [back, el('small', { class: 'muted' }, [el('kbd', { text: 'Enter' }), ' 선택'])]),
     ]));
   }
 
@@ -289,18 +296,16 @@ export class Screens {
     this.mount(
       'pause',
       el('div', { class: 'panel pause' }, [
-        el('h2', { text: '일시정지' }),
-        el('p', { class: 'muted', text: reason === 'hidden' ? '탭이 숨겨져 자동으로 멈췄습니다. 전투 시간과 적 생성도 멈춰 있습니다.' : '전투 시간과 적 생성이 멈춰 있습니다.' }),
-        resume,
-        status,
-        this.volumeControl(volume, h.onVolume),
-        ...(relics.length ? [
-          el('h3', { text: '보유 유물' }),
-          el('div', { class: 'relic-slots' }, relicInventory(relics.slice(-COMPACT_RELIC_LIMIT), 'pause', { fusions })),
-          ...(relics.length > COMPACT_RELIC_LIMIT ? [el('small', { class: 'muted', text: `전체 유물 ${relics.length}개 · 상태 보기에서 확인` })] : []),
-        ] : []),
-        el('div', { class: 'row buttons' }, [restart, title]),
-        el('small', { class: 'muted', text: '처음부터 다시 / 타이틀로 이동하면 이번 판은 기록되지 않습니다.' }),
+        el('header', {}, [el('h2', { text: '일시정지' }),
+          el('p', { class: 'muted', text: reason === 'hidden' ? '탭이 숨겨져 자동으로 멈췄습니다. 전투 시간과 적 생성도 멈춰 있습니다.' : '전투 시간과 적 생성이 멈춰 있습니다.' })]),
+        el('div', { class: 'pause-content ui-scroll' }, [resume, status, this.volumeControl(volume, h.onVolume),
+          ...(relics.length ? [
+            el('h3', { text: '보유 유물' }),
+            el('div', { class: 'relic-slots' }, relicInventory(relics.slice(-COMPACT_RELIC_LIMIT), 'pause', { fusions })),
+            ...(relics.length > COMPACT_RELIC_LIMIT ? [el('small', { class: 'muted', text: `전체 유물 ${relics.length}개 · 상태 보기에서 확인` })] : []),
+          ] : [])]),
+        el('footer', { class: 'pause-footer' }, [el('div', { class: 'row buttons' }, [restart, title]),
+          el('small', { class: 'muted', text: '처음부터 다시 / 타이틀로 이동하면 이번 판은 기록되지 않습니다.' })]),
       ]),
     );
   }
@@ -399,7 +404,7 @@ export class Screens {
       } else if (c.kind === 'relic') {
         const relic = RELICS[c.id];
         btn.append(
-          el('span', { class: 'relic-symbol', 'aria-hidden': 'true', text: relic.symbol }),
+          relicArt(c.id),
           el('strong', { class: 'name', text: relic.name }),
           el('span', { class: 'desc', text: relicDescription(c.id, opts.fusions) }),
         );
@@ -423,6 +428,10 @@ export class Screens {
       } else {
         btn.append(el('span', { class: 'cat', text: '회복' }), el('strong', { class: 'name', text: c.name }), el('span', { class: 'desc', text: c.description }));
       }
+      const graphic = btn.querySelector<HTMLElement>('.weapon-icon, .gear-sprite, .relic-art, .relic-symbol')
+        ?? (c.kind === 'fusion' ? el('img', { class: 'fusion-art', src: WEAPON_PREVIEWS[c.id], alt: '' })
+          : shopSprite(c.kind === 'upgrade' ? ({ attack: 1, survival: 2, mobility: 4 }[c.def.category]) : 4));
+      btn.prepend(el('span', { class: 'choice-art ui-frame', 'aria-hidden': 'true' }, [graphic]));
       btn.append(el('kbd', { class: 'key', text: String(i + 1) }));
       btn.addEventListener('click', () => opts.onChoose(i));
       return btn;
@@ -432,12 +441,12 @@ export class Screens {
     reroll.addEventListener('click', opts.onReroll);
     this.mount(
       'levelup',
-      el('div', { class: 'panel levelup' }, [
-        el('h2', { text: opts.title }),
-        ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
-        el('p', { class: 'muted', text: gearStage === 'weapon' ? `무기 하나를 고르세요 (클릭 또는 1~${opts.choices.length}). 이번 판 동안 이 무기로 싸우고, 무기마다 체력·속도·회피가 다릅니다.` : gearStage === 'upgrade' ? `상위 무기를 고르세요 (클릭 또는 1~${opts.choices.length}). 이 상위 무기의 전용 강화와 유물이 나옵니다.` : gearStage === 'awaken' ? '고른 상위 무기를 각성합니다 (클릭 또는 1).' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` }),
-        el('div', { class: cards.length > 3 ? 'cards many' : 'cards' }, cards),
-        ...(formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
+      el('div', { class: `panel levelup${reward ? ' levelup-reward' : ''}` }, [
+        el('header', {}, [el('h2', { text: opts.title }),
+          ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
+          el('p', { class: 'muted', text: gearStage === 'weapon' ? `무기 하나를 고르세요 (클릭 또는 1~${opts.choices.length}). 이번 판 동안 이 무기로 싸우고, 무기마다 체력·속도·회피가 다릅니다.` : gearStage === 'upgrade' ? `상위 무기를 고르세요 (클릭 또는 1~${opts.choices.length}). 이 상위 무기의 전용 강화와 유물이 나옵니다.` : gearStage === 'awaken' ? '고른 상위 무기를 각성합니다 (클릭 또는 1).' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` })]),
+        el('div', { class: 'choices-scroll ui-scroll' }, [el('div', { class: cards.length > 3 ? 'cards many' : 'cards', style: `--choice-count: ${cards.length}` }, cards)]),
+        el('footer', {}, formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),
     );
   }
@@ -499,14 +508,17 @@ export class Screens {
       const cumulative = mastery ? list.reduce((sum, pick) => sum + characterUpgradeValue(mastery, pick.grade), 0) : 0;
       return el('li', { 'data-upgrade-id': id, class: mastery ? 'mastery-stack' : '' }, [
         item, ...stackDetails(list),
+        ...(def.weapon ? [el('span', { class: 'preview-hint', 'aria-hidden': 'true', text: '미리보기' })] : []),
         ...(mastery ? [el('small', { class: 'mastery-total', text: CHARACTER_UPGRADES[mastery].text(cumulative) })] : []),
       ]);
     });
     if (opts.loadout.character === 'lumen' && !grouped.has(opts.loadout.weapon)) {
       const weapon = opts.loadout.weapon;
-      picks.unshift(el('li', {}, [preview.trigger(weapon, `${WEAPONS[weapon].name} Lv ${opts.starterRank ?? 1}`)]));
+      picks.unshift(el('li', {}, [preview.trigger(weapon, `${WEAPONS[weapon].name} Lv ${opts.starterRank ?? 1}`),
+        el('span', { class: 'preview-hint', 'aria-hidden': 'true', text: '미리보기' })]));
     }
-    picks.unshift(...opts.fusions.map((id) => el('li', {}, [preview.trigger(id, `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`, 'fusion-chip')])));
+    picks.unshift(...opts.fusions.map((id) => el('li', {}, [preview.trigger(id, `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`, 'fusion-chip'),
+      el('span', { class: 'preview-hint', 'aria-hidden': 'true', text: '미리보기' })])));
     const close = el('button', { class: 'primary', 'data-testid': 'status-close', 'data-autofocus': '' }, ['닫기 ', el('kbd', { text: 'Esc' })]);
     close.addEventListener('click', opts.onClose);
     const recipes = el('details', { class: 'fusion-recipes', ...(opts.recipesOpen ? { open: '' } : {}) }, [
@@ -527,47 +539,62 @@ export class Screens {
     const statsTab = el('button', { type: 'button', role: 'tab', id: 'status-stats-tab', 'aria-controls': 'status-stats-pane', text: '능력치·강화' });
     const relicsTab = el('button', { type: 'button', role: 'tab', id: 'status-relics-tab', 'aria-controls': 'status-relics-pane', text: `보유 유물 ${opts.relics.length}개` });
     const statsPane = el('section', { class: 'status-pane', id: 'status-stats-pane', role: 'tabpanel', 'aria-labelledby': statsTab.id }, [
-        ...(!specialist && opts.recipesOpen ? [recipes] : []),
-        el('table', { class: 'stat-table' }, [
+      el('div', { class: 'status-stats ui-frame' }, [el('h3', { text: '능력치' }), el('table', { class: 'stat-table' }, [
           el('thead', {}, [el('tr', {}, [el('th', { text: '능력치' }), el('th', { text: '시작' }), el('th', { text: '영구 강화' }), el('th', { text: '현재' })])]),
           el('tbody', {}, rows),
-        ]),
+      ])]),
+      el('div', { class: 'status-build ui-frame' }, [
+        ...(!specialist && opts.recipesOpen ? [recipes] : []),
         ...(opts.roan ? [this.roanStatus(opts.roan)] : []),
         el('h3', { text: '이번 판 강화 스택 (점 색 = 등급)' }),
         el('ul', { class: 'upgrades' }, picks.length ? picks : [el('li', { class: 'muted', text: '아직 없음' })]),
         ...(opts.echo ? [this.echoStatus(opts.echo.growth, opts.echo.luck, opts.fusions.includes('volley'))] : []),
         ...(!specialist && !opts.recipesOpen ? [recipes] : []),
-        el('p', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` }),
+      ]),
     ]);
     const relicName = el('strong');
     const relicEffect = el('p');
-    const relicDetail = el('div', { id: 'status-relic-detail', class: 'status-relic-detail', 'aria-live': 'polite' }, [relicName, relicEffect]);
+    const art = el('span', { class: 'status-relic-art ui-frame', 'aria-hidden': 'true' });
+    const relicDetail = el('div', { id: 'status-relic-detail', class: 'status-relic-detail ui-frame', 'aria-live': 'polite' }, [
+      el('div', { class: 'relic-detail-heading' }, [art, relicName]), relicEffect,
+    ]);
+    const relicSlots = el('div', { class: 'relic-slots status-relic-scroll', 'data-testid': 'status-relics' });
+    let inspected: RelicId | undefined;
     const inspect = (id: RelicId) => {
+      if (id === inspected) return;
+      inspected = id;
+      art.replaceChildren(relicArt(id));
       relicName.textContent = RELICS[id].name;
       relicEffect.textContent = relicDescription(id, opts.fusions);
+      for (const button of relicSlots.querySelectorAll<HTMLButtonElement>('[data-relic]')) {
+        button.setAttribute('aria-pressed', String(button.dataset.relic === id));
+      }
     };
+    relicSlots.append(...relicInventory(opts.relics, 'status', { inspect }));
     const relicsPane = el('section', { class: 'status-pane', id: 'status-relics-pane', role: 'tabpanel', 'aria-labelledby': relicsTab.id },
       opts.relics.length ? [
-        el('div', { class: 'relic-slots status-relic-scroll', 'data-testid': 'status-relics' }, relicInventory(opts.relics, 'status', { inspect })),
+        el('div', { class: 'status-relic-inventory ui-frame' }, [el('h3', { text: '보유 유물' }), relicSlots]),
         relicDetail,
       ] : [el('p', { class: 'muted', text: '이번 판에 획득한 유물이 없습니다.' })]);
     if (opts.relics.length) inspect(opts.relics[0]);
+    const content = el('div', { class: 'status-content ui-scroll' }, [statsPane, relicsPane]);
     const select = (showRelics: boolean) => {
       statsTab.setAttribute('aria-selected', String(!showRelics));
       relicsTab.setAttribute('aria-selected', String(showRelics));
       statsPane.classList.toggle('hidden', showRelics);
       relicsPane.classList.toggle('hidden', !showRelics);
+      content.scrollTop = 0;
     };
     statsTab.addEventListener('click', () => select(false));
     relicsTab.addEventListener('click', () => select(true));
     select(opts.relicsOpen);
-    this.mount('status', el('div', { class: 'panel status' }, [
-        el('h2', { text: `${specialist ? CHARACTERS[opts.loadout.character].name : '상태'} · Lv ${opts.level}` }),
-        el('p', { class: 'muted', text: '상태창을 보는 동안 전투 시간이 멈춥니다.' }),
+    this.mount('status', el('div', { class: 'panel status', role: 'dialog', 'aria-label': '상태창', 'aria-modal': 'true' }, [
+        el('header', { class: 'ui-heading' }, [el('h2', { text: '상태창' }),
+          el('span', { class: 'ui-context', text: `${CHARACTERS[opts.loadout.character].name} · Lv ${opts.level}` })]),
         el('div', { class: 'status-tabs', role: 'tablist', 'aria-label': '상태창 분류' }, [statsTab, relicsTab]),
-        statsPane,
-        relicsPane,
-        close,
+        content,
+        el('footer', { class: 'ui-actions' }, [close,
+          el('span', { class: 'muted', 'data-testid': 'status-extra', text: `새로고침 남은 횟수 ${opts.rerollsLeft} · 부활 ${opts.revivesLeft > 0 ? '가능' : '없음'}` })]),
         preview.tooltip,
     ]));
   }
@@ -642,36 +669,33 @@ export class Screens {
     this.mount(
       'result',
       el('div', { class: `panel result ${win ? 'win' : 'lose'}` }, [
-        el('h2', { class: 'outcome', 'data-testid': 'outcome', text: win ? '승리' : '패배' }),
-        el('p', { class: 'cause', 'data-testid': 'cause', text: cause }),
-        ...(result.loadout && result.loadout.character !== 'ranger' ? [el('p', {
-          class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : ''),
-        })] : []),
-        newRecords.length ? el('div', { class: 'badges' }, newRecords.map((r) => el('span', { class: 'badge', text: NEW_RECORD_LABEL[r] }))) : el('div'),
-        el('dl', { class: 'stats' }, [
-          el('dt', { text: '생존 시간' }),
-          el('dd', { 'data-testid': 'result-time', text: formatTime(result.survivalTime) }),
-          el('dt', { text: '처치 수' }),
-          el('dd', { 'data-testid': 'result-kills', text: String(result.kills) }),
-          el('dt', { text: '도달 레벨' }),
-          el('dd', { text: String(result.level) }),
+        el('header', { class: 'result-heading' }, [
+          el('div', { class: 'ui-heading' }, [el('h2', { class: 'outcome', 'data-testid': 'outcome', text: win ? '승리' : '패배' }),
+            el('p', { class: 'cause ui-context', 'data-testid': 'cause', text: cause })]),
+          ...(result.loadout ? [el('p', {
+            class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : ''),
+          })] : []),
         ]),
-        el('h3', { text: '선택한 강화' }),
-        el('ul', { class: 'upgrades', 'data-testid': 'result-upgrades' }, ups),
-        tokens
-          ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
-              el('strong', { class: 'token', text: `획득 토큰 ◆ ${tokens.total}` }),
-              el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}) — 타이틀의 강화 상점에서 사용` }),
-            ])
-          : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
-        this.damageBreakdown(result),
-        restart,
-        el('div', { class: 'row buttons' }, [title]),
-        el('small', { class: 'muted' }, [
-          win ? 'Enter · Space · R 키로 다음 판 캐릭터 선택' : 'Enter · Space · R 키로 다시 시작',
-          el('br'),
-          `시드 ${result.seed}${result.assisted ? ' · 개발 옵션 사용 (기록 미반영)' : ''}`,
+        el('div', { class: 'result-scroll ui-scroll' }, [
+          el('dl', { class: 'stats ui-metrics' }, [
+            metric('생존 시간', formatTime(result.survivalTime), 'result-time'),
+            metric('처치 수', String(result.kills), 'result-kills'),
+            metric('도달 레벨', String(result.level)),
+            ...(tokens ? [metric('획득 토큰', String(tokens.total), undefined, true)] : []),
+          ]),
+          ...(newRecords.length ? [el('div', { class: 'badges' }, newRecords.map((r) => el('span', { class: 'badge', text: NEW_RECORD_LABEL[r] })))] : []),
+          el('div', { class: 'result-report' }, [this.damageBreakdown(result),
+            el('section', { class: 'result-build ui-frame' }, [el('h3', { text: '이번 판 강화' }),
+              el('ul', { class: 'upgrades', 'data-testid': 'result-upgrades' }, ups),
+              tokens ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
+                el('strong', { class: 'token' }, [shopSprite(19), `획득 토큰 ◆ ${tokens.total}`]),
+                el('small', { class: 'muted', text: `생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}` }),
+              ]) : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
+            ]),
+          ]),
         ]),
+        el('footer', { class: 'ui-actions' }, [title,
+          el('small', { class: 'muted', text: `시드 ${result.seed}${result.assisted ? ' · 개발 옵션 사용 (기록 미반영)' : ''}` }), restart]),
       ]),
     );
   }
@@ -697,7 +721,7 @@ export class Screens {
         el('td', { text: dps > 0 && dps < 0.1 ? '<0.1' : n1(dps) }),
       ]);
     });
-    return el('details', { class: 'result-damage', open: '', 'data-testid': 'damage-breakdown' }, [
+    return el('details', { class: 'result-damage ui-frame', open: '', 'data-testid': 'damage-breakdown' }, [
       el('summary', { text: '공격별 피해량 · DPS' }),
       el('small', { class: 'muted', text: '초과 피해를 포함한 총 피해량 ÷ 전체 전투 시간.' }),
       el('div', { class: 'result-damage-scroll' }, [
@@ -723,8 +747,9 @@ export class Screens {
     const buttons = ids.map((id) => {
       const relic = RELICS[id];
       const button = el('button', { class: 'relic-pick', type: 'button', 'aria-pressed': 'false', 'data-relic': id }, [
-        el('strong', { text: `${relic.symbol} ${relic.name}` }),
-        el('small', { text: relicDescription(id) }),
+        el('span', { class: 'carry-art ui-frame' }, [relicArt(id)]),
+        el('span', { class: 'carry-copy' }, [el('strong', { text: relic.name }), el('small', { text: relicDescription(id) })]),
+        el('span', { class: 'carry-check', 'aria-hidden': 'true' }),
       ]);
       button.addEventListener('click', () => {
         if (selected.has(id)) selected.delete(id);
@@ -739,13 +764,20 @@ export class Screens {
     });
     (buttons[0] ?? back).setAttribute('data-autofocus', '');
     this.mount('carry', el('div', { class: 'panel carry', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'carry-title' }, [
-      el('h2', { id: 'carry-title', text: '다음 판에 가져갈 유물' }),
-      el('p', { class: 'muted', text: ids.length ? `유물을 최대 ${CARRY_LIMIT}개 고르세요.` : '선택한 캐릭터로 가져갈 수 있는 유물이 없습니다.' }),
-      ...(ids.length ? [count, el('div', { class: 'carry-grid' }, buttons)] : []),
-      el('div', { class: 'row buttons' }, [back, start]),
+      el('header', {}, [el('div', { class: 'ui-heading' }, [el('h2', { id: 'carry-title', text: '다음 판에 가져갈 유물' }),
+        ...(ids.length ? [el('span', { class: 'ui-context' }, ['선택 ', count])] : [])]),
+        el('p', { class: 'muted', text: ids.length ? `유물을 최대 ${CARRY_LIMIT}개 고르세요.` : '선택한 캐릭터로 가져갈 수 있는 유물이 없습니다.' })]),
+      el('div', { class: 'ui-scroll' }, [el('div', { class: 'carry-grid' }, buttons)]),
+      el('footer', { class: 'ui-actions' }, [back, start]),
     ]));
   }
 
+}
+
+function metric(label: string, value: string, testId?: string, token = false): HTMLElement {
+  return el('div', { class: 'ui-frame' }, [el('dt', { text: label }), el('dd', {
+    text: value, ...(testId ? { 'data-testid': testId } : {}), ...(token ? { class: 'token' } : {}),
+  })]);
 }
 
 type Fmt = (v: number) => string;

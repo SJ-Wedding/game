@@ -11,6 +11,7 @@ import { formatTime } from '../core/math';
 import type { GameSim } from '../core/sim';
 import type { SimEvent } from '../core/types';
 import { Cached, el, josa } from './dom';
+import { WEAPON_PREVIEWS } from './weaponPreview';
 
 
 /**
@@ -23,6 +24,7 @@ export class Hud {
   private hpText: HTMLElement;
   private xpFill: HTMLElement;
   private xpText: HTMLElement;
+  private xpCount: HTMLElement;
   private dodgeFill: HTMLElement;
   private dodgeText: HTMLElement;
   private dodgeBox: HTMLElement;
@@ -55,7 +57,8 @@ export class Hud {
     this.hpFill = el('div', { class: 'fill' });
     this.hpText = el('span', { class: 'label', 'data-testid': 'hud-hp' });
     this.xpFill = el('div', { class: 'fill' });
-    this.xpText = el('span', { class: 'label', 'data-testid': 'hud-xp' });
+    this.xpText = el('span', { class: 'xp-level', 'data-testid': 'hud-xp' });
+    this.xpCount = el('span', { class: 'xp-count' });
     this.dodgeFill = el('div', { class: 'fill' });
     this.dodgeText = el('span', { class: 'label', 'data-testid': 'hud-dodge' });
     this.dodgeBox = el('div', { class: 'bar dodge' }, [this.dodgeFill, this.dodgeText]);
@@ -65,7 +68,7 @@ export class Hud {
     this.kills = el('div', { class: 'kills', 'data-testid': 'hud-kills' });
     this.bossFill = el('div', { class: 'fill' });
     this.bossText = el('span', { class: 'label', 'data-testid': 'hud-boss' });
-    this.bossBox = el('div', { class: 'boss-bar hidden' }, [
+    this.bossBox = el('div', { class: 'boss-bar ui-frame hidden' }, [
       el('div', { class: 'boss-name', text: BOSS_CONFIG.name }),
       el('div', { class: 'bar boss' }, [this.bossFill, this.bossText]),
     ]);
@@ -77,23 +80,26 @@ export class Hud {
     this.xpGainText = el('span', { class: 'xp-recent', 'data-testid': 'xp-recent' });
     this.relicSlots = el('div', { class: 'relic-slots' });
     this.moreRelics = el('button', { class: 'relic-overflow hidden', type: 'button', 'data-testid': 'hud-more-relics' });
-    this.relicBox = el('section', { class: 'hud-relics hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
+    this.relicBox = el('section', { class: 'hud-relics ui-frame hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
       el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots, this.moreRelics,
     ]);
 
     root.append(
-      el('div', { class: 'hud-left' }, [
-        el('div', { class: 'bar hp' }, [this.hpFill, this.hpText]),
-        el('div', { class: 'bar xp' }, [this.xpFill, this.xpText]),
+      el('div', { class: 'hud-left ui-frame' }, [
+        this.hpText,
+        el('div', { class: 'bar hp' }, [this.hpFill]),
         this.dodgeBox,
         this.swordForms,
-        this.xpGainText,
       ]),
-      el('div', { class: 'hud-center' }, [this.timer, this.timerSub]),
-      el('div', { class: 'hud-right' }, [this.kills, this.recipes, this.relicBox]),
+      el('div', { class: 'hud-center ui-frame' }, [this.timer, this.timerSub]),
+      el('div', { class: 'hud-right' }, [el('div', { class: 'hud-kills ui-frame' }, [this.kills]), this.relicBox, this.recipes]),
       this.bossBox,
       this.banner,
       this.chips,
+      el('div', { class: 'hud-xp ui-frame' }, [
+        this.xpText, el('div', { class: 'bar xp' }, [this.xpFill]), this.xpCount, this.xpGainText,
+        el('kbd', { text: 'Tab', title: '상태창' }),
+      ]),
     );
   }
 
@@ -156,7 +162,8 @@ export class Hud {
 
     const need = sim.xpNeeded;
     c.style(this.xpFill, 'xp', 'width', `${(100 * sim.xp) / need}%`);
-    c.text(this.xpText, 'xp', `Lv ${sim.level}  ·  경험치 ${Math.floor(sim.xp)} / ${need}`);
+    c.text(this.xpText, 'level', `Lv ${sim.level}`);
+    c.text(this.xpCount, 'xp', `${Math.floor(sim.xp)} / ${need} XP`);
 
     const ready = p.dodgeCd <= 0;
     c.style(this.dodgeFill, 'dodge', 'width', `${ready ? 100 : (100 * (1 - p.dodgeCd / sim.relics.dodgeCooldown)).toFixed(0)}%`);
@@ -190,12 +197,10 @@ export class Hud {
     if (sim.pickOrder.length !== this.lastPicks) {
       this.lastPicks = sim.pickOrder.length;
       this.chips.replaceChildren(
-        ...[...sim.weapons.fusions].map((id) => el('span', {
-          class: 'chip fusion-chip', text: `${WEAPON_FUSIONS[id].name} Lv ${WEAPON_MAX_RANK}`,
-        })),
+        ...[...sim.weapons.fusions].map((id) => weaponBadge(WEAPON_FUSIONS[id].name, WEAPON_MAX_RANK, WEAPON_PREVIEWS[id], true)),
         ...ALL_UPGRADES.filter((u) => sim.stacks[u.id] > 0 && !isFusionIngredient(sim.weapons.fusions, u.id)).map((u) =>
           u.weapon
-            ? el('span', { class: 'chip attack weapon-chip' }, [el('img', { src: WEAPON_TEXTURES[u.weapon], alt: '' }), `${u.name} Lv ${sim.stacks[u.id]}`])
+            ? weaponBadge(u.name, sim.stacks[u.id], WEAPON_TEXTURES[u.weapon])
             : el('span', { class: `chip ${u.category}`, text: `${u.name} ${sim.stacks[u.id]}` }),
         ),
       );
@@ -240,4 +245,10 @@ export class Hud {
       this.banner.classList.remove('show');
     }
   }
+}
+
+function weaponBadge(name: string, level: number, src: string, fusion = false): HTMLElement {
+  return el('span', { class: `chip weapon-chip ui-frame${fusion ? ' fusion-chip' : ''}` }, [
+    el('img', { src, alt: '' }), el('span', { class: 'shop-icon-text', text: `${name} ` }), `Lv ${level}`,
+  ]);
 }

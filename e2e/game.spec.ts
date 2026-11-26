@@ -235,9 +235,14 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     // 개발 옵션 없이 10초 이상 실제로 싸운 뒤(자동 공격으로 처치 발생) 쓰러진다 → 기록에 반영됨
     await page.getByTestId('play').click();
     await page.getByTestId('character-ranger').click();
+    await page.evaluate(() => { (window as any).__rift.sim.player.invuln = 30; });
     await expect.poll(async () => (await snap(page)).kills ?? 0, { timeout: 60_000 }).toBeGreaterThan(0);
     await waitElapsed(page, 10);
-    await page.evaluate(() => (window as any).__rift.sim.hurtPlayer(9999, '시험용 일격'));
+    expect(await page.evaluate(() => {
+      const { sim } = (window as any).__rift;
+      sim.player.invuln = 0;
+      return sim.hurtPlayer(9999, '시험용 일격');
+    })).toBe(true);
     await expect.poll(async () => (await snap(page)).screen, { timeout: 10_000 }).toBe('result');
     const s = await snap(page);
     expect(s.result!.cause).toBe('death');

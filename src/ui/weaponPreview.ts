@@ -21,7 +21,7 @@ import { el } from './dom';
 
 type PreviewId = WeaponId | FusionId;
 
-const PREVIEWS = {
+export const WEAPON_PREVIEWS = {
   axe, barrier, bastion, chain, echo, eclipse, flame, gravity, inferno, infection, mark, mine, orbit, spear, storm, tempest, turret, volley,
 } satisfies Record<PreviewId, string>;
 
@@ -42,7 +42,7 @@ export function weaponPreview() {
     active = button;
     title.textContent = name;
     description.textContent = fusion?.effect ?? weapon.description;
-    image.src = PREVIEWS[id];
+    image.src = WEAPON_PREVIEWS[id];
     image.alt = `${name} 인게임 효과`;
     if (!tooltip.matches(':popover-open')) tooltip.showPopover();
 
