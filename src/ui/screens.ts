@@ -655,13 +655,12 @@ export class Screens {
     const primary = result.loadout?.character === 'roan' ? 'sword' : result.loadout?.character === 'lumen' ? result.loadout.weapon : 'basic';
     const sources = new Set<AttackId>([primary, ...(Object.keys(totals) as AttackId[]), ...(result.fusions ?? [])]);
     for (const { id } of result.upgrades) {
-      const weapon = UPGRADE_BY_ID[id].weapon;
+      const weapon = UPGRADE_BY_ID[id]?.weapon;
       if (weapon && !isFusionIngredient(result.fusions ?? [], weapon)) sources.add(weapon);
     }
     const duration = result.combatTime ?? result.survivalTime;
     const rows = [...sources].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0)).map((source) => {
-      const name = source === 'basic' ? '기본 사격' : source === 'sword' ? '검 베기' : source === 'bomb' ? '균열 폭탄' : source === 'relic' ? '유물 효과'
-        : source in WEAPON_FUSIONS ? WEAPON_FUSIONS[source as FusionId].name : WEAPONS[source as keyof typeof WEAPONS].name;
+      const name = attackName(source);
       const damage = totals[source] ?? 0;
       const dps = duration > 0 ? damage / duration : 0;
       const hits = result.hitsByAttack?.[source] ?? 0;
@@ -743,3 +742,12 @@ const STATUS_ROWS: [keyof PlayerStats, string, Fmt][] = [
   ['luck', '행운', n1],
   ['projectileRange', '기본탄 사거리', n1],
 ];
+
+/** 결과 화면의 공격 이름. 이름이 없는 공격이 생겨도 결과 화면이 멈추지 않게 id 를 그대로 보여 준다. */
+function attackName(source: AttackId): string {
+  const fixed: Partial<Record<AttackId, string>> = { basic: '기본 사격', sword: '검 베기', bleed: '출혈', bomb: '균열 폭탄', relic: '유물 효과' };
+  if (fixed[source]) return fixed[source];
+  if (Object.hasOwn(WEAPON_FUSIONS, source)) return WEAPON_FUSIONS[source as FusionId].name;
+  if (Object.hasOwn(WEAPONS, source)) return WEAPONS[source as keyof typeof WEAPONS].name;
+  return String(source);
+}
