@@ -6,14 +6,14 @@ import { GameSim } from '../core/sim';
 import type { InputState, RunResult, SimEvent } from '../core/types';
 import type { DevOptions } from '../dev/devOptions';
 import { simOptionsFor } from '../dev/devOptions';
-import { mergeCloud, purchaseMeta, recordRun, writeSave, type CloudRow, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
+import { defaultSave, mergeCloud, purchaseMeta, recordRun, writeSave, type CloudRow, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
 import type { TokenReward } from '../core/meta';
 import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
 import type { ShopTab } from '../ui/shop';
 
-export type Screen = 'title' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop';
+export type Screen = 'title' | 'account' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop';
 
 /** 렌더러(Phaser 씬)가 App 에 제공하는 기능 */
 export interface SceneLink {
@@ -42,7 +42,18 @@ export interface AppDeps {
 export interface CloudLink {
   pull(): Promise<CloudRow | null>;
   push(data: SaveData): Promise<void>;
+  register(username: string, password: string, data: SaveData): Promise<{ ok: true } | { ok: false; error: string }>;
+  login(username: string, password: string): Promise<({ ok: true } | { ok: false; error: string }) & { row?: CloudRow }>;
+  logout(): Promise<boolean>;
 }
+
+const ACCOUNT_ERRORS: Record<string, string> = {
+  username_taken: '이미 사용 중인 아이디입니다.',
+  invalid_credentials: '아이디 또는 비밀번호가 맞지 않습니다.',
+  weak_password: '비밀번호는 6자 이상이어야 합니다.',
+  invalid_username: '아이디는 영문 소문자·숫자·밑줄(_) 3~16자입니다.',
+  offline: '서버에 연결할 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
+};
 
 export class App {
   screen: Screen = 'title';
@@ -63,6 +74,10 @@ export class App {
 
   private readonly storage: StorageLike | null;
   private readonly cloud: CloudLink | null;
+  /** 로그인한 아이디 (게스트면 null) */
+  account: string | null = null;
+  /** 회원가입·로그인 창에 입력하던 아이디 (오류 뒤 다시 그릴 때 유지) */
+  private accountDraft = '';
   private readonly sfx: Sfx;
   private readonly hud: Hud;
   private readonly screens: Screens;
@@ -111,9 +126,68 @@ export class App {
         onShop: () => this.showShop(),
         onVolume: (v) => this.setVolume(v),
         onDevChange: (s) => this.applyDevPanel(s),
+        ...(this.cloud ? { onAccount: () => this.showAccount() } : {}),
       },
       this.dev.enabled ? this.devPanelState() : null,
+      this.cloud ? { username: this.account } : undefined,
     );
+  }
+
+  // ───────────────────────── 아이디 계정 ─────────────────────────
+
+  showAccount(message?: string, busy = false): void {
+    this.screen = 'account';
+    this.screens.showAccount({ username: this.account, message, busy, draft: this.accountDraft }, {
+      onRegister: (u, p) => void this.registerAccount(u, p),
+      onLogin: (u, p) => void this.loginAccount(u, p),
+      onLogout: () => void this.logoutAccount(),
+      onClose: () => this.showTitle(),
+    });
+  }
+
+  private accountError(error: string): string {
+    return ACCOUNT_ERRORS[error] ?? `처리하지 못했습니다 (${error}).`;
+  }
+
+  /** 회원가입: 지금 진행 상황을 아이디 계정으로 옮긴다 */
+  async registerAccount(username: string, password: string): Promise<void> {
+    if (!this.cloud) return;
+    this.accountDraft = username;
+    if (!/^[a-z0-9_]{3,16}$/.test(username)) return this.showAccount(ACCOUNT_ERRORS.invalid_username);
+    if (password.length < 6) return this.showAccount(ACCOUNT_ERRORS.weak_password);
+    this.showAccount('가입하는 중…', true);
+    const r = await this.cloud.register(username, password, this.save);
+    if (this.screen !== 'account') return;
+    if (!r.ok) return this.showAccount(this.accountError(r.error));
+    this.account = username;
+    this.showAccount('가입했습니다. 다른 브라우저에서도 이 아이디로 로그인하세요.');
+  }
+
+  /** 로그인: 이 브라우저의 상점 내역을 계정 데이터로 바꾼다 (기록은 더 좋은 값을 남김) */
+  async loginAccount(username: string, password: string): Promise<void> {
+    if (!this.cloud) return;
+    this.accountDraft = username;
+    if (!username || !password) return this.showAccount('아이디와 비밀번호를 입력하세요.');
+    this.showAccount('로그인하는 중…', true);
+    const r = await this.cloud.login(username, password);
+    if (this.screen !== 'account') return;
+    if (!r.ok || !r.row) return this.showAccount(this.accountError(r.ok ? 'unknown' : r.error));
+    this.account = r.row.account ?? username;
+    this.save = mergeCloud(this.save, r.row, true);
+    writeSave(this.storage, this.save);
+    this.showTitle();
+  }
+
+  /** 로그아웃: 계정 연결을 끊고 이 브라우저는 새 게스트로 시작한다 (계정 데이터는 서버에 그대로) */
+  async logoutAccount(): Promise<void> {
+    if (!this.cloud) return;
+    this.showAccount('로그아웃하는 중…', true);
+    const ok = await this.cloud.logout();
+    if (!ok) return this.showAccount(ACCOUNT_ERRORS.offline);
+    this.account = null;
+    this.save = { ...defaultSave(), settings: this.save.settings };
+    writeSave(this.storage, this.save);
+    this.showTitle();
   }
 
   startRun(retry = false): void {
@@ -320,13 +394,14 @@ export class App {
   async syncAccount(): Promise<void> {
     if (!this.cloud) return;
     const remote = await this.cloud.pull().catch(() => null);
+    this.account = remote?.account ?? null;
     const merged = mergeCloud(this.save, remote);
     if (merged !== this.save) {
       this.save = merged;
       writeSave(this.storage, this.save);
-      if (this.screen === 'title') this.showTitle();
-      else if (this.screen === 'shop') this.showShop();
+      if (this.screen === 'shop') this.showShop();
     }
+    if (this.screen === 'title') this.showTitle();
     // 합친 결과가 서버와 다르면(브라우저 쪽이 더 새로움) 저장 번호를 올려 다시 올린다
     const same = remote && JSON.stringify([remote.meta, remote.records]) === JSON.stringify([this.save.meta, this.save.records]);
     if (!same) {
@@ -451,6 +526,7 @@ export class App {
         }
         break;
       case 'shop':
+      case 'account':
         if (e.code === 'Escape' && !e.repeat) this.showTitle();
         break;
       case 'levelup': {

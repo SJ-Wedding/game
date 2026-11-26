@@ -9,16 +9,19 @@ function memoryStorage() {
 
 interface Call { url: string; method: string; headers: Record<string, string>; body: unknown }
 
-/** Supabase 인증·REST 를 흉내 내는 가짜 서버 */
+/** Supabase 인증과 supabase/accounts.sql 의 서버 함수를 흉내 내는 가짜 서버 */
 function fakeServer() {
   const calls: Call[] = [];
-  const rows = new Map<string, { meta: unknown; records: unknown; rev: number }>();
+  const profiles = new Map<string, { meta: unknown; records: unknown; rev: number }>();
+  const accounts = new Map<string, { password: string; meta: unknown; records: unknown; rev: number }>();
+  const links = new Map<string, string>();
   let signups = 0;
   const fetchFn = async (url: string, init?: RequestInit) => {
     const headers = (init?.headers ?? {}) as Record<string, string>;
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ url, method: init?.method ?? 'GET', headers, body });
     const ok = (json: unknown) => ({ ok: true, status: 200, json: async () => json });
+    const fail = (message: string) => ({ ok: false, status: 400, json: async () => ({ code: 'P0001', message }) });
     if (url.endsWith('/auth/v1/signup')) {
       signups++;
       return ok({ access_token: `at${signups}`, refresh_token: `rt${signups}`, expires_in: 3600, user: { id: `user-${signups}`, is_anonymous: true } });
@@ -26,20 +29,45 @@ function fakeServer() {
     if (url.includes('/auth/v1/token?grant_type=refresh_token')) {
       return ok({ access_token: 'at-refreshed', refresh_token: 'rt-refreshed', expires_in: 3600, user: { id: 'user-1' } });
     }
-    const user = headers.Authorization?.replace('Bearer ', '') ?? '';
-    if (!user) return { ok: false, status: 401, json: async () => ({}) };
-    if (url.includes('/rest/v1/profiles?select=')) {
-      const id = decodeURIComponent(url.split('user_id=eq.')[1]);
-      return ok(rows.has(id) ? [rows.get(id)] : []);
-    }
-    if (url.includes('/rest/v1/profiles?on_conflict=user_id')) {
-      const b = body as { user_id: string; meta: unknown; records: unknown; rev: number };
-      rows.set(b.user_id, { meta: b.meta, records: b.records, rev: b.rev });
-      return ok(null);
+    const token = headers.Authorization?.replace('Bearer ', '') ?? '';
+    if (!token) return { ok: false, status: 401, json: async () => ({}) };
+    const uid = token === 'at-refreshed' ? 'user-1' : `user-${token.slice(2)}`;
+    const fn = url.split('/rest/v1/rpc/')[1];
+    const linked = links.get(uid);
+    switch (fn) {
+      case 'pull_save': {
+        if (linked) { const a = accounts.get(linked)!; return ok([{ account: linked, meta: a.meta, records: a.records, rev: a.rev }]); }
+        const p = profiles.get(uid);
+        return ok(p ? [{ account: null, ...p }] : []);
+      }
+      case 'push_save': {
+        const row = { meta: body.p_meta, records: body.p_records, rev: body.p_rev };
+        if (linked) accounts.set(linked, { ...accounts.get(linked)!, ...row });
+        else profiles.set(uid, row);
+        return ok(null);
+      }
+      case 'register_account':
+        if (!/^[a-z0-9_]{3,16}$/.test(body.p_username)) return fail('invalid_username');
+        if (body.p_password.length < 6) return fail('weak_password');
+        if (accounts.has(body.p_username)) return fail('username_taken');
+        accounts.set(body.p_username, { password: body.p_password, meta: body.p_meta, records: body.p_records, rev: body.p_rev });
+        links.set(uid, body.p_username);
+        profiles.delete(uid);
+        return ok(null);
+      case 'login_account': {
+        const name = String(body.p_username).toLowerCase();
+        const a = accounts.get(name);
+        if (!a || a.password !== body.p_password) return fail('invalid_credentials');
+        links.set(uid, name);
+        return ok([{ account: name, meta: a.meta, records: a.records, rev: a.rev }]);
+      }
+      case 'logout_account':
+        links.delete(uid);
+        return ok(null);
     }
     return { ok: false, status: 404, json: async () => ({}) };
   };
-  return { fetchFn, calls, rows, get signups() { return signups; } };
+  return { fetchFn, calls, profiles, accounts, get signups() { return signups; } };
 }
 
 const withMeta = (tokens: number, purchases: Record<string, number>, rev?: number): SaveData => ({
@@ -68,7 +96,7 @@ describe('계정 저장 (익명 계정)', () => {
     let now = 1000;
     const cloud = new CloudSave(storage, server.fetchFn, { url: 'https://x.supabase.co', key: 'pk' }, () => now);
     await cloud.push(withMeta(30, { damage: 2 }, 3));
-    expect(server.rows.get('user-1')).toMatchObject({ rev: 3, meta: { tokens: 30, purchases: { damage: 2 } } });
+    expect(server.profiles.get('user-1')).toMatchObject({ rev: 3, meta: { tokens: 30, purchases: { damage: 2 } } });
     now += 4000;
     const row = await cloud.pull();
     expect(server.calls.some((c) => c.url.includes('grant_type=refresh_token'))).toBe(true);
@@ -76,10 +104,42 @@ describe('계정 저장 (익명 계정)', () => {
     expect(row).toMatchObject({ rev: 3, meta: { tokens: 30 } });
   });
 
+  it('아이디로 회원가입하면 다른 브라우저에서 로그인해 같은 데이터를 쓰고, 로그아웃하면 게스트로 돌아간다', async () => {
+    const server = fakeServer();
+    const cfg = { url: 'https://x.supabase.co', key: 'pk' };
+    const first = new CloudSave(memoryStorage(), server.fetchFn, cfg, () => 1000);
+    await first.push(withMeta(31, { xp: 2 }, 1));
+    expect(await first.register('Bad Name', 'secret1', withMeta(31, {}, 1))).toEqual({ ok: false, error: 'invalid_username' });
+    expect(await first.register('tester', '123', withMeta(31, {}, 1))).toEqual({ ok: false, error: 'weak_password' });
+    expect(await first.register('tester', 'secret1', withMeta(31, { xp: 2 }, 1))).toEqual({ ok: true });
+    expect(await first.pull()).toMatchObject({ account: 'tester', meta: { tokens: 31 } });
+
+    const second = new CloudSave(memoryStorage(), server.fetchFn, cfg, () => 1000);
+    expect(await second.register('tester', 'other12', withMeta(0, {}, 1))).toEqual({ ok: false, error: 'username_taken' });
+    expect(await second.login('tester', 'wrong1')).toEqual({ ok: false, error: 'invalid_credentials' });
+    const login = await second.login('tester', 'secret1');
+    expect(login).toMatchObject({ ok: true, row: { account: 'tester', meta: { tokens: 31, purchases: { xp: 2 } } } });
+
+    await second.push(withMeta(50, { xp: 3 }, 4));
+    expect(await first.pull()).toMatchObject({ account: 'tester', rev: 4, meta: { tokens: 50 } });
+
+    expect(await second.logout()).toBe(true);
+    expect(await second.pull()).toBeNull();
+    expect(await first.pull()).toMatchObject({ account: 'tester' });
+  });
+
+  it('로그인하면 상점 내역은 계정 쪽을 그대로 쓴다', () => {
+    const local = withMeta(200, { damage: 5 }, 9);
+    const merged = mergeCloud(local, { account: 'tester', meta: { tokens: 3, totalEarned: 13, purchases: { xp: 1 } }, records: {}, rev: 2 }, true);
+    expect(merged.meta).toEqual({ tokens: 3, totalEarned: 13, purchases: { xp: 1 } });
+    expect(merged.cloudRev).toBe(2);
+  });
+
   it('서버에 닿지 않아도 예외 없이 끝난다', async () => {
     const cloud = new CloudSave(memoryStorage(), async () => { throw new Error('offline'); });
     expect(await cloud.pull()).toBeNull();
     await expect(cloud.push(defaultSave())).resolves.toBeUndefined();
+    expect(await cloud.login('tester', 'secret1')).toEqual({ ok: false, error: 'offline' });
   });
 });
 

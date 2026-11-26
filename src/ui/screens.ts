@@ -36,8 +36,17 @@ export interface DevPanelState {
 export interface TitleHandlers {
   onPlay: () => void;
   onShop: () => void;
+  /** 계정 저장을 쓸 때만 있음 */
+  onAccount?: () => void;
   onVolume: (v: number) => void;
   onDevChange?: (s: DevPanelState) => void;
+}
+
+export interface AccountHandlers {
+  onRegister: (username: string, password: string) => void;
+  onLogin: (username: string, password: string) => void;
+  onLogout: () => void;
+  onClose: () => void;
 }
 
 export interface PauseHandlers {
@@ -57,7 +66,7 @@ const NEW_RECORD_LABEL: Record<NewRecord, string> = {
 
 export class Screens {
   private root: HTMLElement;
-  current: 'none' | 'title' | 'pause' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' = 'none';
+  current: 'none' | 'title' | 'account' | 'pause' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' = 'none';
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -101,7 +110,7 @@ export class Screens {
     return el('label', { class: 'volume' }, ['음량', input, value]);
   }
 
-  showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null): void {
+  showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null, account?: { username: string | null }): void {
     const play = el('button', { class: 'primary big', 'data-testid': 'play', 'data-autofocus': '' }, ['플레이 ', el('kbd', { text: 'Enter' })]);
     play.addEventListener('click', h.onPlay);
     const shop = el('button', { class: 'shop-btn', 'data-testid': 'open-shop' }, ['강화 상점 · ', el('span', { class: 'token', 'data-testid': 'title-tokens', text: `◆ ${meta.tokens}` })]);
@@ -136,12 +145,56 @@ export class Screens {
       el('h1', { class: 'logo', text: '균열 아레나' }),
       el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
       el('div', { class: 'row buttons' }, [play, shop]),
+      ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
       el('div', { class: 'row' }, [controls, rec]),
       this.volumeControl(volume, h.onVolume),
     ];
 
     if (dev) children.push(this.devPanel(dev, h.onDevChange));
     this.mount('title', el('div', { class: 'panel title' }, children));
+  }
+
+  private accountLine(username: string | null, onAccount: () => void): HTMLElement {
+    const btn = el('button', { class: 'small', 'data-testid': 'open-account', text: username ? '계정 관리' : '회원가입 · 로그인' });
+    btn.addEventListener('click', onAccount);
+    return el('p', { class: 'account-line', 'data-testid': 'account-line' }, [
+      el('span', { text: username ? `계정 ${username} · 모든 브라우저에서 이어서 플레이` : '게스트 · 이 브라우저에만 저장됩니다' }),
+      ' ', btn,
+    ]);
+  }
+
+  /** 아이디 계정: 회원가입·로그인(게스트) 또는 로그아웃(로그인 상태) */
+  showAccount(state: { username: string | null; message?: string; busy?: boolean; draft?: string }, h: AccountHandlers): void {
+    const message = el('p', { class: 'account-message', 'data-testid': 'account-message', role: 'status', text: state.message ?? '' });
+    const back = el('button', { 'data-testid': 'account-close', text: '닫기' });
+    back.addEventListener('click', h.onClose);
+    if (state.username) {
+      const logout = el('button', { 'data-testid': 'account-logout', text: '로그아웃' });
+      logout.addEventListener('click', h.onLogout);
+      if (state.busy) logout.setAttribute('disabled', '');
+      this.mount('account', el('div', { class: 'panel account', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'account-title' }, [
+        el('h2', { id: 'account-title', text: `계정 · ${state.username}` }),
+        el('p', { class: 'muted', text: '다른 브라우저에서 같은 아이디로 로그인하면 상점 강화 내역과 기록을 이어서 씁니다. 로그아웃하면 이 브라우저는 새 게스트로 시작합니다.' }),
+        message,
+        el('div', { class: 'row buttons' }, [logout, back]),
+      ]));
+      return;
+    }
+    const user = el('input', { type: 'text', 'data-testid': 'account-username', autocomplete: 'username', maxlength: '16', placeholder: '아이디 (영문 소문자·숫자·_ 3~16자)', 'data-autofocus': '' });
+    user.value = state.draft ?? '';
+    const pass = el('input', { type: 'password', 'data-testid': 'account-password', autocomplete: 'current-password', placeholder: '비밀번호 (6자 이상)' });
+    const register = el('button', { class: 'primary', 'data-testid': 'account-register', text: '회원가입' });
+    const login = el('button', { 'data-testid': 'account-login', text: '로그인' });
+    register.addEventListener('click', () => h.onRegister(user.value.trim().toLowerCase(), pass.value));
+    login.addEventListener('click', () => h.onLogin(user.value.trim().toLowerCase(), pass.value));
+    if (state.busy) for (const b of [register, login]) b.setAttribute('disabled', '');
+    this.mount('account', el('div', { class: 'panel account', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'account-title' }, [
+      el('h2', { id: 'account-title', text: '회원가입 · 로그인' }),
+      el('p', { class: 'muted', text: '이메일 없이 아이디와 비밀번호만 씁니다. 회원가입하면 지금 진행 상황이 계정에 저장되고, 다른 브라우저에서 로그인하면 계정 데이터로 바뀝니다.' }),
+      el('div', { class: 'account-form' }, [user, pass]),
+      message,
+      el('div', { class: 'row buttons' }, [register, login, back]),
+    ]));
   }
 
   showCharacters(onChoose: (id: CharacterId) => void, onBack: () => void): void {
