@@ -389,15 +389,38 @@ export function drawEcho(ground: Graphics, g: Graphics, fx: WeaponEffect, alpha:
   }
 }
 
-export function drawPlayerShot(g: Graphics, shot: Projectile): void {
+function drawFlyingAxe(g: Graphics, shot: Projectile, dx: number, dy: number, now: number): void {
+  const { x, y, r } = shot;
+  const scale = r / 12;
+  const spin = now * 28;
+  const sx = Math.cos(spin) * scale;
+  const sy = Math.sin(spin) * scale;
+  const point = (forward: number, side: number) => ({ x: x + sx * forward - sy * side, y: y + sy * forward + sx * side });
+  const butt = point(-15, 0);
+  const neck = point(11, 0);
+  g.lineStyle(8 * scale, 0xffa377, 0.29).lineBetween(x - dx * r * 2.5, y - dy * r * 2.5, x, y);
+  g.lineStyle(2 * scale, 0xffd4ad, 0.55).lineBetween(x - dx * r * 2, y - dy * r * 2, x, y);
+  g.lineStyle(7 * scale, 0x151a2a, 1).lineBetween(butt.x, butt.y, neck.x, neck.y);
+  g.lineStyle(4 * scale, 0xa56e46, 1).lineBetween(butt.x, butt.y, neck.x, neck.y);
+  g.fillStyle(0x151a2a, 1).fillPoints([point(4, -5), point(16, -5), point(19, 11), point(14, 17), point(5, 18),
+    point(-2, 12), point(2, 5)], true);
+  g.fillStyle(0x879caf, 1).fillPoints([point(5, -2), point(14, -2), point(16, 10), point(12, 14), point(6, 15),
+    point(2, 11), point(5, 4)], true);
+  g.fillStyle(0xe9f0e8, 1).fillPoints([point(2, 11), point(8, 11), point(13, 8), point(16, 10), point(12, 14), point(6, 15)], true);
+}
+
+export function drawPlayerShot(g: Graphics, shot: Projectile, now: number): void {
   const { x, y, vx, vy, r } = shot;
   const speed = Math.hypot(vx, vy);
   const dx = speed ? vx / speed : 1;
   const dy = speed ? vy / speed : 0;
-  if (shot.source === 'thrownAxe' || shot.source === 'weaponThrow' || shot.source === 'smallAxe') {
-    // 회전하며 날아가는 도끼·무기
+  if (shot.source === 'thrownAxe' || shot.source === 'smallAxe') {
+    drawFlyingAxe(g, shot, dx, dy, now);
+    return;
+  }
+  if (shot.source === 'weaponThrow') {
     const spin = (x + y) * 0.08;
-    const len = shot.source === 'smallAxe' ? r * 1.4 : r * 1.8;
+    const len = r * 1.8;
     g.lineStyle(3, 0x8a5a33, 1).lineBetween(x - Math.cos(spin) * len, y - Math.sin(spin) * len, x + Math.cos(spin) * len, y + Math.sin(spin) * len);
     g.fillStyle(0xe8eef2, 1).fillTriangle(
       x + Math.cos(spin) * len, y + Math.sin(spin) * len,

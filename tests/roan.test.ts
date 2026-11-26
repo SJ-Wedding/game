@@ -353,8 +353,12 @@ describe('상위 무기', () => {
     swing(s);
     swing(s);
     expect(s.playerShots.filter((p) => p.source === 'thrownAxe')).toHaveLength(0);
+    expect(s.swordSweep).toMatchObject({ offHand: false, throwing: undefined });
     swing(s);
     expect(s.playerShots.filter((p) => p.source === 'thrownAxe')).toHaveLength(1);
+    expect(s.swordSweep).toMatchObject({ offHand: false, throwing: true });
+    steps(s, 5);
+    expect(s.swordSweep).toMatchObject({ offHand: true, throwing: true });
   });
 
   it('할버드는 찌르기와 베기를 번갈아 하고 일반 적을 밀쳐낸다', () => {
@@ -365,7 +369,7 @@ describe('상위 무기', () => {
     expect(e.x).toBeGreaterThan(x);
     expect(s.swordSweep!.motion).toBe('thrust');
     swing(s);
-    expect(s.swordSweep!.motion).toBe('thrust');
+    expect(s.swordSweep!.motion).toBe('slash');
   });
 });
 

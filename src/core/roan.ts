@@ -21,6 +21,7 @@ export interface SwordStrike {
   /** 직선 찌르기의 전체 폭(px) */
   lineWidth?: number;
   offHand?: boolean;
+  throwing?: boolean;
   range: number;
   factor: number;
   armorPierce?: number;
@@ -44,6 +45,7 @@ export interface SwordSweep {
   lineWidth?: number;
   offHand?: boolean;
   wave?: true;
+  throwing?: boolean;
   range: number;
   at: number;
   kind: SwordStrike['kind'];
@@ -355,6 +357,12 @@ export class RoanCombat {
 
     const angle = p.aim;
     const u = this.upgrade;
+    let throwing = false;
+    if (u === 'throwingaxe') {
+      this.throws++;
+      const cycle = Math.max(1, (this.awakened ? 2 : 3) - this.m('throwReturn'));
+      throwing = this.throws % cycle === 0;
+    }
     let hits = 0;
     if (this.motion === 'spin') {
       // 플레일: 타격 지점을 중심으로 360° 회전
@@ -371,7 +379,7 @@ export class RoanCombat {
         const offHand = i % 2 === 1;
         const run = () => this.strike({
           angle: twinBlades ? angle : angle + (offHand ? 0.18 : -0.18),
-          width: this.angle * Math.PI / 180, lineWidth: this.lineWidth, offHand: twinBlades ? offHand : undefined,
+          width: this.angle * Math.PI / 180, lineWidth: this.lineWidth, offHand, throwing: throwing || undefined,
           range: this.range, factor: each * bonus, kind: i ? 'extra' : 'main',
         });
         if (i === 0) hits = run();
@@ -409,14 +417,10 @@ export class RoanCombat {
     }
     if (u === 'maul') this.maulShock(end);
     if (u === 'morningstar' && hits) this.shards(center ?? end, (this.awakened ? 5 : 3) + this.m('morningSpikes'));
-    if (u === 'throwingaxe') {
-      this.throws++;
-      const cycle = Math.max(1, (this.awakened ? 2 : 3) - this.m('throwReturn'));
-      if (this.throws % cycle === 0) {
-        const factor = 0.8 + 0.15 * this.m('throwSpin');
-        this.throwAxe(angle, factor);
-        if (this.gear('twinThrow')) this.throwAxe(angle + 0.2, factor * 0.6);
-      }
+    if (throwing) {
+      const factor = 0.8 + 0.15 * this.m('throwSpin');
+      this.throwAxe(angle, factor);
+      if (this.gear('twinThrow')) this.throwAxe(angle + 0.2, factor * 0.6);
     }
     if (u === 'greatsword' && this.gear('heavyMomentum') && hits >= 4) this.cdCut = Math.max(this.cdCut, 0.25);
     if (this.has('chargeStance')) this.moveBoostUntil = this.now + 0.4;
@@ -552,8 +556,9 @@ export class RoanCombat {
       }
     }
     this.sweeps.push({
-      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, wave: s.wave, range: s.range, at: now, kind: s.kind,
-      motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.motion,
+      x, y, angle: s.angle, width: s.width, lineWidth, offHand: s.offHand, wave: s.wave, throwing: s.throwing,
+      range: s.range, at: now, kind: s.kind,
+      motion: s.thrust || lineWidth !== undefined ? 'thrust' : this.upgrade === 'halberd' ? 'slash' : this.motion,
       design: this.design, color: this.color, blocked, hits: hits.length,
     });
     return hits.length;

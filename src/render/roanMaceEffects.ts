@@ -1,8 +1,8 @@
 import type { GameObjects } from 'phaser';
 import type { SwordSweep } from '../core/roan';
+import { drawArm, drawGrip, type RoanPoint as Point } from './roanPose';
 
 type Graphics = GameObjects.Graphics;
-type Point = { x: number; y: number };
 const TAU = 2 * Math.PI;
 const CONTACT = 0.3;
 const FLAIL_SPIN = 0.2;
@@ -21,18 +21,6 @@ const mix = (from: number, to: number, t: number) => from + (to - from) * t;
 
 export function maceLean(progress: number): number {
   return progress < CONTACT ? mix(-4, 7, (progress / CONTACT) ** 2) : 7 * (1 - (progress - CONTACT) / (1 - CONTACT));
-}
-
-function drawArm(g: Graphics, shoulder: Point, wrist: Point, alpha: number): void {
-  const elbow = { x: (shoulder.x + wrist.x) / 2, y: (shoulder.y + wrist.y) / 2 + 5 };
-  g.lineStyle(11, OUTLINE, alpha).strokePoints([shoulder, elbow, wrist]);
-  g.lineStyle(7, 0x6e8599, alpha).strokePoints([shoulder, elbow, wrist]);
-  g.lineStyle(3, 0xb6c9d3, alpha).lineBetween(elbow.x, elbow.y - 1, wrist.x, wrist.y - 1);
-}
-
-function drawGrip(g: Graphics, wrist: Point, alpha: number): void {
-  g.fillStyle(OUTLINE, alpha).fillRoundedRect(wrist.x - 5, wrist.y - 4, 10, 9, 2);
-  g.fillStyle(0xc5d4da, alpha).fillRect(wrist.x - 3, wrist.y - 2, 6, 4);
 }
 
 function drawHead(g: Graphics, center: Point, angle: number, design: keyof typeof MACE_HEADS, alpha: number): void {
