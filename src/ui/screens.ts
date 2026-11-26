@@ -1,4 +1,4 @@
-import { CHARACTERS, CHARACTER_UPGRADES, LUMEN, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
+import { CHARACTERS, CHARACTER_UPGRADES, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
 import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, type RoanUpgradeId, type RoanWeaponId } from '../config/roan';
 import chainPreview from '../assets/weapon-previews/chain.webp';
 import turretPreview from '../assets/weapon-previews/turret.webp';
@@ -260,6 +260,7 @@ export class Screens {
     armory: boolean;
     specialist: boolean;
     masteryValue: (id: CharacterUpgradeId) => number;
+    lumenMasteryDamageBonus: (extraPoints: number) => number;
     fusions: Iterable<FusionId>;
     bonusChoices: number;
     notice?: string | null;
@@ -295,7 +296,7 @@ export class Screens {
             ? `이 무기 피해 보너스 +${Math.round((c.nextStack - 2) * WEAPON_DAMAGE_PER_RANK * 100)}% → +${Math.round((c.nextStack - 1) * WEAPON_DAMAGE_PER_RANK * 100)}%`
             : effect }),
           ...(mastery && CHARACTER_UPGRADES[mastery].path !== 'roan' ? [el('small', {
-            class: 'mastery-bonus', text: `시작 무기 피해 보너스 +${Math.round(gain * LUMEN.damagePerPoint * 100)}%`,
+            class: 'mastery-bonus', text: `선택 후 시작 무기 피해 보너스 +${Math.round(opts.lumenMasteryDamageBonus(gain) * 1000) / 10}%`,
           })] : []),
           ...(weapon ? [el('span', { class: 'desc', text: `이 등급의 무기 피해 보너스 +${Math.round(WEAPON_GRADE_DAMAGE[c.grade] * 100)}%` })] : []),
           ...(weapon && c.nextStack > 1 ? [el('span', { class: 'desc',

@@ -153,6 +153,7 @@ export const ENEMY_SCALING = {
   armorAt: 540,
   basicResistance: 0.30,
   damagePerMinute: 0.02,
+  openingChaserDamage: { multiplier: 0.5, rampFrom: 55, rampUntil: 120 },
   eliteDurability: 1.5,
   overtimeChargerHp: 1.5,
   overtimeChargerDamage: 2,

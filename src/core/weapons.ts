@@ -1,5 +1,6 @@
-import { LUMEN_CHAIN, chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
-import { ECHO_GROWTH, echoCloneDamage, echoGrowth, WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
+import { LUMEN_CHAIN, LUMEN_TURRET, RANGER, chainDelay, frostRadius, turretDelay, turretMountDamage } from '../config/characters';
+import { PLAYER_BASE_STATS } from '../config/player';
+import { ECHO_GROWTH, FUSION_DAMAGE_MULTIPLIER, STARTER_HIT_FACTOR, echoCloneDamage, echoGrowth, WEAPON_FUSIONS, SPECIAL_WEAPON_POWER, WEAPON_GRADE_DAMAGE, WEAPON_DAMAGE_PER_RANK, WEAPON_MAX_RANK, type FusionId, weaponRankEffect, type WeaponId } from '../config/weapons';
 import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
@@ -141,6 +142,13 @@ export class WeaponSystem {
     return this.quality.get(kind) ?? 0;
   }
 
+  get baseDamage(): number {
+    const { loadout, stats, level } = this.sim;
+    if (loadout.character !== 'ranger') return stats.damage;
+    const base = level >= RANGER.specialDamageLevel ? RANGER.specialDamage : PLAYER_BASE_STATS.damage;
+    return stats.damage * base / RANGER.basicDamage;
+  }
+
   private weaponDamage(kind: WeaponId, factor: number): number {
     const upgrades = Math.max(0, this.sim.stacks[kind] - 1);
     const specialist = this.sim.loadout.character === 'lumen' && this.sim.loadout.weapon === kind;
@@ -148,7 +156,7 @@ export class WeaponSystem {
     const focus = specialist
       ? this.sim.starterDamageMultiplier * (relics.has('lumenRune') ? 0.95 : 1) * (relics.has('lumenStaff') ? (relics.still ? 1.2 : 0.95) : 1)
       : 1;
-    return this.sim.stats.damage * factor * SPECIAL_WEAPON_POWER[kind] * focus
+    return this.baseDamage * factor * SPECIAL_WEAPON_POWER[kind] * focus
       * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
 
@@ -164,7 +172,7 @@ export class WeaponSystem {
   specialistHitDamage(): number {
     const { loadout } = this.sim;
     if (loadout.character !== 'lumen') return 0;
-    return loadout.weapon === 'chain' ? this.weaponDamage('chain', 1.85) : this.weaponDamage('turret', this.turretFactor);
+    return loadout.weapon === 'chain' ? this.weaponDamage('chain', STARTER_HIT_FACTOR.chain) : this.weaponDamage('turret', this.turretFactor);
   }
 
   /** 마나 순환 고리: 루멘 전용 무기 대기시간 즉시 초기화 */
@@ -174,7 +182,7 @@ export class WeaponSystem {
   }
 
   private get turretFactor(): number {
-    return 0.86 * turretMountDamage(this.sim.mastery('turretMount')) * (this.sim.relics.has('turretPermafrost') ? 0.9 : 1);
+    return STARTER_HIT_FACTOR.turret * turretMountDamage(this.sim.mastery('turretMount')) * (this.sim.relics.has('turretPermafrost') ? 0.9 : 1);
   }
 
   private enabled(kind: WeaponId): boolean {
@@ -217,7 +225,7 @@ export class WeaponSystem {
     const recipe = WEAPON_FUSIONS[id];
     const grade = (this.gradeBonus(recipe.pair[0]) + this.gradeBonus(recipe.pair[1])) / 2;
     const growth = id === 'volley' ? 1 + this.echoStats.damageBonus * ECHO_GROWTH.fusionShare : 1;
-    return this.sim.stats.damage * recipe.damage * (1 + grade) * this.sim.relics.fusionMultiplier(id) * growth;
+    return this.baseDamage * recipe.damage * FUSION_DAMAGE_MULTIPLIER * (1 + grade) * this.sim.relics.fusionMultiplier(id) * growth;
   }
 
   private hitFusion(id: FusionId, target: Target, damage: number): void {
@@ -670,7 +678,7 @@ export class WeaponSystem {
       points.push(at);
       const voltageFactor = link === 0 ? 1 + 0.45 * voltage : 0.85 ** voltage;
       const falloff = specialist ? Math.max(rebound ? 0.5 : 0.4, 0.76 ** link) : 0.76 ** link;
-      const factor = 1.85 * falloff * voltageFactor * scale * (link === 0 && rod ? 0.9 : 1);
+      const factor = STARTER_HIT_FACTOR.chain * falloff * voltageFactor * scale * (link === 0 && rod ? 0.9 : 1);
       if (link === 0) {
         firstFactor = factor;
         // 뇌운 병: 첫 대상 자리에 3초간 뇌운, 1초마다 첫 타격의 40%
@@ -693,7 +701,7 @@ export class WeaponSystem {
       if (!extra) break;
       branched.add(extra);
       const at = { x: extra.x, y: extra.y };
-      const repeats = hit(extra, at, 1.85 * forkFactor * scale);
+      const repeats = hit(extra, at, STARTER_HIT_FACTOR.chain * forkFactor * scale);
       this.trace('chain', [firstBranch.point, at], 0, 0.38).reboundCounts = [0, repeats];
     }
   }
@@ -799,7 +807,8 @@ export class WeaponSystem {
     // 서리 공명기: 다른 포탑이 200px 안에 있으면 사격 간격 −15%
     const resonance = relics.has('turretResonance') && this.devices.some((d) => d !== turret && d.kind === 'turret'
       && d.age < d.duration && dist(d.x, d.y, turret.x, turret.y) <= 200);
-    const interval = 0.48 * relics.periodicHitMultiplier * speed * (relics.has('turretShotgun') ? 1.1 : 1) * (resonance ? 0.85 : 1);
+    const baseInterval = this.sim.loadout.character === 'lumen' ? LUMEN_TURRET.fireInterval : 0.48;
+    const interval = baseInterval * relics.periodicHitMultiplier * speed * (relics.has('turretShotgun') ? 1.1 : 1) * (resonance ? 0.85 : 1);
     turret.next = turret.age + Math.max(0.09, interval);
     const angle = Math.atan2(target.y - turret.y, target.x - turret.x);
     turret.angle = angle;

@@ -1,5 +1,7 @@
 import { GRADES, GRADE_INDEX, type GradeId } from './grades';
-import { DAGGER_THRUST, SCIMITAR_THRUST_BONUSES } from './roan';
+import { PLAYER_BASE_STATS } from './player';
+import { DAGGER_THRUST, ROAN_WEAPONS, SCIMITAR_THRUST_BONUSES } from './roan';
+import { SPECIAL_WEAPON_POWER, STARTER_HIT_FACTOR } from './weapons';
 
 export const CHARACTERS = {
   ranger: { name: '균열 사수', color: '#75d9ff', description: '자동 사격과 여러 특수 무기를 조합합니다.' },
@@ -8,14 +10,25 @@ export const CHARACTERS = {
 } as const;
 
 export type CharacterId = keyof typeof CHARACTERS;
-/** 캐릭터별 시작 최대 체력 (균열 사수 기준 70) */
-export const CHARACTER_MAX_HP: Record<CharacterId, number> = { ranger: 70, lumen: 60, roan: 160 };
+/** 캐릭터별 시작 최대 체력 */
+export const CHARACTER_MAX_HP: Record<CharacterId, number> = {
+  ranger: PLAYER_BASE_STATS.maxHp, lumen: 85, roan: ROAN_WEAPONS.sword.maxHp,
+};
 export type LumenWeapon = 'chain' | 'turret';
 export type Loadout = { character: 'ranger' } | { character: 'lumen'; weapon: LumenWeapon } | { character: 'roan' };
 export const DEFAULT_LOADOUT: Loadout = { character: 'ranger' };
 export const LUMEN_WEAPONS = ['chain', 'turret'] as const;
-export const LUMEN = { baseDamage: 1.3, damagePerPoint: 0.03 } as const;
-export const LUMEN_CHAIN = { interval: 1.9, firstRange: 0.5, jumpRange: 2, repeatDamage: [0.30, 0.25, 0.20] } as const;
+export const RANGER = { basicDamage: 26, specialDamage: 15, specialDamageLevel: 6, pierceLevels: [6, 18] } as const;
+export const LUMEN = {
+  starterDamage: { chain: 51, turret: 18.5 }, damagePerPoint: 0.05, maxDamageBonus: 1.2,
+  resistanceLevel: 12, resistancePierce: 0.15, advancedResistanceLevel: 24, advancedResistancePierce: 0.25,
+} as const;
+export const LUMEN_CHAIN = { interval: 2.25, firstRange: 0.5, jumpRange: 2, repeatDamage: [0.30, 0.25, 0.20] } as const;
+export const LUMEN_TURRET = { fireInterval: 0.56 } as const;
+
+export function lumenStarterMultiplier(weapon: LumenWeapon): number {
+  return LUMEN.starterDamage[weapon] / (PLAYER_BASE_STATS.damage * SPECIAL_WEAPON_POWER[weapon] * STARTER_HIT_FACTOR[weapon]);
+}
 export const SWORD = {
   damage: 5.0, interval: 1.45, range: 125, maxRange: 185, angle: 130,
   damagePerMastery: 0.30, intervalPerDamageMastery: 0.03, sweepDuration: 0.27,

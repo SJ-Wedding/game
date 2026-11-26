@@ -216,6 +216,7 @@ export class App {
       armory: sim.armoryOpen,
       specialist: sim.loadout.character !== 'ranger',
       masteryValue: (id) => sim.mastery(id),
+      lumenMasteryDamageBonus: (extraPoints) => sim.lumenMasteryDamageBonus(extraPoints),
       bonusChoices: sim.bonusOpen ? sim.bonusChoicesLeft : 0,
       notice: sim.coinNotice,
       essences: sim.essences,
@@ -251,9 +252,9 @@ export class App {
     };
     const loadout = sim.loadout;
     if (loadout.character === 'lumen') {
-      layers.base.damage *= LUMEN.baseDamage;
-      layers.meta.damage *= LUMEN.baseDamage;
-      layers.final.damage *= sim.starterDamageMultiplier;
+      layers.meta.damage *= LUMEN.starterDamage[loadout.weapon] / layers.base.damage;
+      layers.base.damage = LUMEN.starterDamage[loadout.weapon];
+      layers.final.damage = sim.weapons.specialistHitDamage();
     } else if (loadout.character === 'roan') {
       for (const stats of [layers.base, layers.meta]) {
         stats.damage *= SWORD.damage;

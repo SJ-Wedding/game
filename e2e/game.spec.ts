@@ -16,7 +16,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await page.getByTestId('play').click();
     await page.getByTestId('character-ranger').click();
     await expect(page.getByTestId('hud-timer')).toHaveText(/^(15:00|14:5\d)$/);
-    await expect(page.getByTestId('hud-hp')).toContainText('체력 70 / 70');
+    await expect(page.getByTestId('hud-hp')).toContainText('체력 100 / 100');
     await expect(page.getByTestId('hud-dodge')).toContainText('회피 준비');
     await expect(page.getByTestId('hud-xp')).toContainText('Lv 1');
 

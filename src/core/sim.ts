@@ -1,5 +1,5 @@
 import {
-  DEFAULT_LOADOUT, LUMEN, characterUpgradeValue,
+  DEFAULT_LOADOUT, LUMEN, RANGER, characterUpgradeValue, lumenStarterMultiplier,
   type CharacterUpgradeId, type Loadout,
 } from '../config/characters';
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
@@ -467,7 +467,13 @@ export class GameSim {
   }
 
   get starterDamageMultiplier(): number {
-    return LUMEN.baseDamage * (1 + this.masteryPower * LUMEN.damagePerPoint * (this.relics.has('lumenCrystal') ? 1.5 : 1));
+    if (this.loadout.character !== 'lumen') return 1;
+    return lumenStarterMultiplier(this.loadout.weapon) * (1 + this.lumenMasteryDamageBonus());
+  }
+
+  lumenMasteryDamageBonus(extraPoints = 0): number {
+    const relicBonus = this.relics.has('lumenCrystal') ? 1.5 : 1;
+    return Math.min(LUMEN.maxDamageBonus, (this.masteryPower + extraPoints) * LUMEN.damagePerPoint * relicBonus);
   }
 
   // 테스트·렌더 호환 이름
@@ -489,7 +495,8 @@ export class GameSim {
     const speed = this.relics.projectileSpeed;
     const life = (s.projectileRange + this.reachBonus + this.relics.basicReachBonus) / speed;
     const mods = this.relics.volley();
-    const pierceLeft = (this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl')) + mods.pierce;
+    const levelPierce = RANGER.pierceLevels.filter((level) => this.level >= level).length;
+    const pierceLeft = Math.max(levelPierce, this.elapsed >= COMBAT_REACH.pierceAt ? 2 : 0) + Number(this.relics.has('awl')) + mods.pierce;
     const damage = this.relics.shotDamage() * mods.damage;
     const shoot = (a: number, back: number) => {
       const c = Math.cos(a);
@@ -811,8 +818,13 @@ export class GameSim {
     const finalMinutes = Math.max(0, t - finalAt) / 60;
     const resistance = t < resistanceAt ? 0 : Math.min(maxResistance,
       initialResistance + regularMinutes * resistancePerMinute + finalMinutes * finalResistancePerMinute);
-    const resistanceMultiplier = source === 'sword' ? 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce)
-      : source && Object.hasOwn(WEAPON_FUSIONS, source) ? 1 - FUSION_ARMOR_PIERCE : 1;
+    let resistanceMultiplier = 1;
+    if (source === 'sword') resistanceMultiplier = 0.85 ** this.mastery('swordPierce') * (1 - swordArmorPierce);
+    else if (source && Object.hasOwn(WEAPON_FUSIONS, source)) resistanceMultiplier = 1 - FUSION_ARMOR_PIERCE;
+    else if (this.loadout.character === 'lumen' && source === this.loadout.weapon) {
+      if (this.level >= LUMEN.advancedResistanceLevel) resistanceMultiplier -= LUMEN.advancedResistancePierce;
+      else if (this.level >= LUMEN.resistanceLevel) resistanceMultiplier -= LUMEN.resistancePierce;
+    }
     const armor = basic || source === 'sword' ? e.basicResistance * resistanceMultiplier : 0;
     const durability = e.kind === 'elite' ? eliteDurability : 1;
     const damageTaken = (1 - resistance * resistanceMultiplier) * (1 - armor) / durability;

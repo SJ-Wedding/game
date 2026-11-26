@@ -4,7 +4,7 @@ import { ENEMY_CONFIG, ENEMY_SCALING } from '../src/config/enemies';
 import { SPAWN_EVENTS, SPAWN_PHASES } from '../src/config/spawns';
 import { BALANCE_REFERENCE_META } from '../src/config/meta';
 import { Bot, playToEnd } from '../src/core/bot';
-import { updateEnemies } from '../src/core/enemies';
+import { createEnemy, updateEnemies } from '../src/core/enemies';
 import { GameSim } from '../src/core/sim';
 import { runUntil } from './helpers';
 
@@ -39,7 +39,7 @@ describe('15분 설계', () => {
 });
 
 it.each([
-  ['chaser', 150, 80], ['charger', 420, 90], ['spitter', 300, 60], ['elite', 10500, 150],
+  ['chaser', 150, 40], ['charger', 420, 90], ['spitter', 300, 60], ['elite', 10500, 150],
 ] as const)('%s의 시작 체력은 %d이고 접촉 피해는 %d다', (kind, hp, attack) => {
   const sim = new GameSim({ seed: 1 });
   const enemy = sim.spawnEnemy(kind, sim.player.x, sim.player.y);
@@ -48,6 +48,11 @@ it.each([
   sim.player.hp = 200;
   updateEnemies(sim, 0);
   expect(200 - sim.player.hp).toBe(attack);
+});
+
+it.each([[54, 40], [90, 62.83077], [120, 83.2], [480, 92.8]])('그림자 망령은 %d초에 생성되면 접촉 피해를 %d로 적용한다', (time, damage) => {
+  const enemy = createEnemy(1, 'chaser', 900, 900, time);
+  expect(ENEMY_CONFIG.chaser.contactDamage * enemy.dmgMul).toBeCloseTo(damage);
 });
 
 it('8분부터 증원이 늘고 이미 등장한 적도 추가 피해 감소를 얻는다', () => {
@@ -64,7 +69,7 @@ it('8분부터 증원이 늘고 이미 등장한 적도 추가 피해 감소를 
   sim.damageEnemy(enemy, 20, 'echo');
   expect(enemy.hp).toBeCloseTo(969.375);
   sim.damageEnemy(enemy, 20, 'volley');
-  expect(enemy.hp).toBeCloseTo(955.14423);
+  expect(enemy.hp).toBeCloseTo(954.21371);
 });
 
 it('9분에 나온 갑주 적은 기본탄 저항과 후반 피해 감소를 함께 적용한다', () => {

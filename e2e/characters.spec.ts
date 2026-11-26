@@ -39,6 +39,7 @@ for (const [weapon, name] of starters) {
     await page.getByTestId('character-lumen').click();
     await page.getByTestId(`lumen-${weapon}`).click();
     await expect.poll(async () => (await snap(page)).screen).toBe('playing');
+    await expect(page.getByTestId('hud-hp')).toContainText('체력 85 / 85');
     await page.evaluate(() => {
       const { sim } = (window as any).__rift;
       const e = sim.spawnEnemy('chaser', sim.player.x + 150, sim.player.y);
@@ -54,6 +55,7 @@ for (const [weapon, name] of starters) {
     expect((await snap(page)).shotsFired).toBe(0);
     await page.keyboard.press('Tab');
     await expect(page.getByRole('heading', { name: '마도공 루멘 · Lv 1' })).toBeVisible();
+    await expect(page.getByTestId('stat-damage')).toHaveText(weapon === 'chain' ? '51' : '18.5');
     await expect(page.getByRole('button', { name: `${name} Lv 1` })).toBeVisible();
     await expect(page.getByText('특수 무기 합체 조합식')).toHaveCount(0);
     expect(errors).toEqual([]);

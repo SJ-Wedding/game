@@ -28,6 +28,7 @@ export const ROAN_SPEED_MASTERY_EFFICIENCY: Readonly<Record<string, number>> = {
 export const ROAN_UPGRADE_DAMAGE_TAKEN: Readonly<Record<string, number>> = { onehand: 0.9 };
 
 export type RoanMotion = 'slash' | 'thrust' | 'slam' | 'spin' | 'twin';
+const WEAPON_MAX_HP = { sword: 150, dagger: 140, mace: 230, waraxe: 220 } as const;
 
 export interface RoanWeaponDef {
   name: string;
@@ -37,7 +38,7 @@ export interface RoanWeaponDef {
   interval: number;
   range: number;
   angle: number;
-  /** 시작 최대 체력 (검 160 기준) */
+  /** 이 무기를 장착한 동안의 기본 최대 체력 */
   maxHp: number;
   /** 받는 피해 배율 */
   damageTaken: number;
@@ -53,27 +54,27 @@ export interface RoanWeaponDef {
 export const ROAN_WEAPONS = {
   sword: {
     name: '검', symbol: '†', color: 0xd9e4f2, damage: 1.0, interval: 1.0, range: 125, angle: 130,
-    maxHp: 160, damageTaken: 1.0, moveSpeed: 1.0, dodgeCooldown: 3.0, motion: 'slash',
+    maxHp: WEAPON_MAX_HP.sword, damageTaken: 1.0, moveSpeed: 1.0, dodgeCooldown: 3.0, motion: 'slash',
     special: '연격: 3번째 공격마다 추가 베기(피해 50%)',
     description: '균형 잡힌 검. 거리 125px, 각도 130°.',
   },
   dagger: {
     name: '단검', symbol: '⸸', color: 0xc78cff, damage: DAGGER_THRUST.damage, interval: 0.55, range: DAGGER_THRUST.range, angle: 0,
-    maxHp: 150, damageTaken: 1.05, moveSpeed: 1.12, dodgeCooldown: 2.4, motion: 'thrust',
+    maxHp: WEAPON_MAX_HP.dagger, damageTaken: 1.05, moveSpeed: 1.12, dodgeCooldown: 2.4, motion: 'thrust',
     special: `출혈: 맞은 적에게 3초간 초당 검 피해 15%, 최대 5중첩. 출혈 중인 적이 죽으면 ${DAGGER_BLEED_CHAIN.spreadRadius}px 안의 ${DAGGER_BLEED_CHAIN.spreadTargets}마리에게 출혈 절반이 옮고, 남은 출혈 피해가 반경 ${DAGGER_BLEED_CHAIN.burstRadius}px에 터짐`,
-    description: `빠른 직선 찌르기. 피해 ${DAGGER_THRUST.damage * 100}%, 공격 간격 55%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px. 체력 150, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.`,
+    description: `빠른 직선 찌르기. 피해 ${DAGGER_THRUST.damage * 100}%, 공격 간격 55%, 거리 ${DAGGER_THRUST.range}px·폭 ${DAGGER_THRUST.width}px. 체력 ${WEAPON_MAX_HP.dagger}, 받는 피해 +5%, 이동 속도 +12%, 회피 2.4초.`,
   },
   mace: {
     name: '메이스(한손)', symbol: '⚒', color: 0xffc06e, damage: 1.2, interval: 1.08, range: 125, angle: 110,
-    maxHp: 240, damageTaken: 0.7, moveSpeed: 0.94, dodgeCooldown: 3.4, motion: 'slam',
+    maxHp: WEAPON_MAX_HP.mace, damageTaken: 0.7, moveSpeed: 0.94, dodgeCooldown: 3.4, motion: 'slam',
     special: '분쇄: 몬스터 피해 저항 30% 무시. 일반 적 35% 확률로 0.6초 기절 (균열 수호자는 절반 확률)',
-    description: '묵직한 한손 메이스. 피해 120%, 공격 간격 108%, 각도 110°. 체력 240, 받는 피해 −30%, 이동 속도 −6%, 회피 3.4초.',
+    description: `묵직한 한손 메이스. 피해 120%, 공격 간격 108%, 각도 110°. 체력 ${WEAPON_MAX_HP.mace}, 받는 피해 −30%, 이동 속도 −6%, 회피 3.4초.`,
   },
   waraxe: {
     name: '도끼', symbol: '⚔', color: 0xff8f6b, damage: 1.4, interval: 1.5, range: 130, angle: 160,
-    maxHp: 230, damageTaken: 0.68, moveSpeed: 0.92, dodgeCooldown: 3.6, motion: 'slash',
+    maxHp: WEAPON_MAX_HP.waraxe, damageTaken: 0.68, moveSpeed: 0.92, dodgeCooldown: 3.6, motion: 'slash',
     special: '깊은 상처: 적 체력이 낮을수록 피해 증가, 최대 +50%',
-    description: '넓게 휘두르는 도끼. 피해 140%, 공격 간격 150%, 각도 160°, 거리 130px. 체력 230, 받는 피해 −32%, 이동 속도 −8%, 회피 3.6초.',
+    description: `넓게 휘두르는 도끼. 피해 140%, 공격 간격 150%, 각도 160°, 거리 130px. 체력 ${WEAPON_MAX_HP.waraxe}, 받는 피해 −32%, 이동 속도 −8%, 회피 3.6초.`,
   },
 } as const satisfies Record<string, RoanWeaponDef>;
 

@@ -5,7 +5,7 @@
  */
 export const PLAYER_BASE_STATS = {
   /** 최대 체력 */
-  maxHp: 70,
+  maxHp: 100,
   /** 이동 속도(px/초) */
   moveSpeed: 190,
   /** 투사체 1발 피해량 */

@@ -259,7 +259,7 @@ describe('특수 무기 합체', () => {
     sim.weapons.onShot();
     sim.weapons.update(1 / 60);
     expect(sim.weapons.effects[0]).toMatchObject({ kind: id, variant: 'resonance', radius: recipe.radius });
-    expect(target.hp).toBeCloseTo(1000 - sim.stats.damage * recipe.damage);
+    expect(target.hp).toBeCloseTo(1000 - sim.weapons.baseDamage * recipe.damage * 1.25);
     expect(outside.hp).toBe(1000);
     const hp = target.hp;
     sim.weapons.update(1 / 60);
@@ -289,7 +289,7 @@ describe('특수 무기 합체', () => {
     for (let i = 0; i < 29; i++) sim.step(IDLE_INPUT);
     expect(flight.y).toBeGreaterThan(y);
     expect(sim.weapons.tempestFlights).toHaveLength(0);
-    expect(sim.damageByAttack.tempest).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.tempest.damage * 1.75);
+    expect(sim.damageByAttack.tempest).toBeCloseTo(sim.weapons.baseDamage * WEAPON_FUSIONS.tempest.damage * 1.25 * 1.75);
     expect(sim.damageByAttack.orbit).toBeUndefined();
     expect(sim.damageByAttack.axe).toBeUndefined();
   });
@@ -336,7 +336,7 @@ describe('특수 무기 합체', () => {
     target.hp = 1000;
     expect(sim.weapons.fuse('storm')).toBe(true);
     sim.weapons.update(1 / 60);
-    expect(sim.damageByAttack.storm).toBeCloseTo(sim.stats.damage * WEAPON_FUSIONS.storm.damage * 1.12 * 1.15 * 0.75);
+    expect(sim.damageByAttack.storm).toBeCloseTo(sim.weapons.baseDamage * WEAPON_FUSIONS.storm.damage * 1.25 * 1.12 * 1.15 * 0.75);
   });
 
   it('뇌광 연쇄가 종의 빠른 주기와 왕관의 추가 연쇄를 계승한다', () => {
@@ -508,7 +508,7 @@ it('처치 전염과 서리 포탑은 하향된 기본 피해를 기록한다', 
     const target = sim.spawnEnemy('chaser', sim.player.x + 130, sim.player.y);
     target.hp = target.maxHp = 1000;
     sim.step(IDLE_INPUT);
-    expect(sim.damageByAttack[id]).toBeCloseTo(sim.stats.damage * multiplier);
+    expect(sim.damageByAttack[id]).toBeCloseTo(sim.weapons.baseDamage * multiplier);
   }
 });
 

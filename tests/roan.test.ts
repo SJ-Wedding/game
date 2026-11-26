@@ -71,7 +71,8 @@ describe('로안 무기 선택', () => {
 
   it('무기마다 최대 체력·받는 피해·이동 속도·회피 대기시간이 다르다', () => {
     const base = make();
-    expect(base.stats.maxHp).toBe(160);
+    expect(base.stats.maxHp).toBe(150);
+    expect(base.player.hp).toBe(150);
     for (const id of ROAN_WEAPON_IDS) {
       const s = make(id);
       const w = ROAN_WEAPONS[id];
