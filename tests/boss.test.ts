@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BOSS_CONFIG } from '../src/config/boss';
-import { ENEMY_CONFIG, ENEMY_SCALING } from '../src/config/enemies';
+import { DIFFICULTY, ENEMY_CONFIG, ENEMY_SCALING } from '../src/config/enemies';
 import { createEnemy } from '../src/core/enemies';
 import { RUN_CONFIG } from '../src/config/run';
 import { IDLE_INPUT } from '../src/core/types';
@@ -18,7 +18,7 @@ describe('보스 등장', () => {
     runTicks(sim, 1);
     expect(sim.tick).toBe(BOSS_TICK);
     expect(sim.bossSpawned).toBe(true);
-    expect(sim.boss?.hp).toBe(BOSS_CONFIG.hp);
+    expect(sim.boss?.hp).toBe(BOSS_CONFIG.hp * DIFFICULTY.hard.health);
     expect(sim.spawnLog.filter((r) => r.kind === 'boss')).toHaveLength(1);
   });
 
@@ -45,11 +45,18 @@ describe('보스 등장', () => {
     const sim = makeSim({ startTime: RUN_CONFIG.bossAt });
     const boss = sim.boss!;
     expect(boss.maxHp).toBe(105000);
-    expect([BOSS_CONFIG.contactDamage, BOSS_CONFIG.ring.damage, BOSS_CONFIG.charge.damage, BOSS_CONFIG.meteor.damage])
-      .toEqual([200, 140, 260, 220]);
+    expect([BOSS_CONFIG.contactDamage, BOSS_CONFIG.ring.damage, BOSS_CONFIG.charge.damage, BOSS_CONFIG.meteor.damage]
+      .map((d) => d * sim.monster.attack)).toEqual([200, 140, 260, 220]);
     boss.state = 'idle';
     sim.damageBoss(100, 'basic');
     expect(boss.maxHp - boss.hp).toBeCloseTo(37.5);
+  });
+
+  it('보통 난이도의 잿불 군주는 체력 ×6, 공격력 ×4다', () => {
+    const sim = makeSim({ startTime: RUN_CONFIG.bossAt, difficulty: 'normal' });
+    const boss = sim.boss!;
+    expect(boss.maxHp).toBe(63000);
+    expect(BOSS_CONFIG.contactDamage * sim.monster.attack).toBe(80);
   });
 
   it('체력이 60%가 되면 2페이즈로 전환한다', () => {
@@ -130,5 +137,31 @@ describe('승리와 패배', () => {
     sim.step({ ...IDLE_INPUT, dodge: true, moveX: 1 });
     expect(sim.hurtPlayer(50, 'x')).toBe(false);
     expect(sim.player.hp).toBe(sim.stats.maxHp);
+  });
+});
+
+describe('난이도', () => {
+  it('보통은 몬스터 체력 ×6 · 공격력 ×4, 어려움은 ×10 · ×10이다', () => {
+    const normal = createEnemy(0, 'chaser', 0, 0, 0, DIFFICULTY.normal);
+    const hard = createEnemy(0, 'chaser', 0, 0, 0, DIFFICULTY.hard);
+    expect(normal.maxHp / hard.maxHp).toBeCloseTo(0.6);
+    expect(normal.dmgMul / hard.dmgMul).toBeCloseTo(0.4);
+    expect(normal.maxHp).toBe(90);
+  });
+
+  it('보통의 방어력은 ×3이라 같은 공격이 더 많이 들어간다', () => {
+    const hit = (difficulty: 'normal' | 'hard') => {
+      const sim = makeSim({ startTime: RUN_CONFIG.bossAt, difficulty });
+      const boss = sim.boss!;
+      boss.state = 'idle';
+      sim.damageBoss(100, 'basic');
+      return boss.maxHp - boss.hp;
+    };
+    expect(hit('normal')).toBeGreaterThan(hit('hard'));
+  });
+
+  it('난이도를 정하지 않은 시뮬레이션은 어려움이며 결과에 난이도를 남긴다', () => {
+    expect(makeSim().difficulty).toBe('hard');
+    expect(makeSim({ difficulty: 'normal' }).monster).toBe(DIFFICULTY.normal);
   });
 });

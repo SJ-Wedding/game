@@ -1,23 +1,23 @@
 import { ARENA_CONFIG } from '../config/arena';
-import { ENEMY_CONFIG, ENEMY_SCALING, MONSTER_STAT_MULTIPLIERS, type EnemyKind } from '../config/enemies';
+import { ENEMY_CONFIG, ENEMY_SCALING, MONSTER_STAT_MULTIPLIERS, type DifficultyDef, type EnemyKind } from '../config/enemies';
 import { RUN_CONFIG } from '../config/run';
 import { clamp, dist, lerp } from './math';
 import type { GameSim } from './sim';
 import type { Enemy } from './types';
 
 /** 적 1마리 생성. t = 현재 전투 시간(초), 시간에 비례해 체력·피해가 오른다. */
-export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t: number): Enemy {
+export function createEnemy(id: number, kind: EnemyKind, x: number, y: number, t: number, monster: DifficultyDef = MONSTER_STAT_MULTIPLIERS): Enemy {
   const c = ENEMY_CONFIG[kind];
   const minutes = t / 60;
   const boosted = kind === 'charger' && t >= RUN_CONFIG.timeLimit;
-  const hp = MONSTER_STAT_MULTIPLIERS.health * Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes)
+  const hp = monster.health * Math.round(c.hp * (1 + ENEMY_SCALING.hpPerMinute * minutes)
     * (boosted ? ENEMY_SCALING.overtimeChargerHp : 1));
-  let dmgMul = MONSTER_STAT_MULTIPLIERS.attack * (1 + ENEMY_SCALING.damagePerMinute * minutes)
+  let dmgMul = monster.attack * (1 + ENEMY_SCALING.damagePerMinute * minutes)
     * (boosted ? ENEMY_SCALING.overtimeChargerDamage : 1);
   const opening = ENEMY_SCALING.openingChaserDamage;
   if (kind === 'chaser' && t < opening.rampUntil) {
     const progress = clamp((t - opening.rampFrom) / (opening.rampUntil - opening.rampFrom), 0, 1);
-    dmgMul = lerp(MONSTER_STAT_MULTIPLIERS.attack * opening.multiplier, dmgMul, progress);
+    dmgMul = lerp(monster.attack * opening.multiplier, dmgMul, progress);
   }
   return {
     id,

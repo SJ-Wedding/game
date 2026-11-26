@@ -478,3 +478,9 @@ button:disabled { opacity: 0.45; cursor: default; }
 .account-form { display: flex; flex-direction: column; gap: 0.5em; margin: 0.8em 0; }
 .account-form input { font: inherit; padding: 0.5em 0.7em; border-radius: 6px; border: 1px solid #4a5068; background: #151824; color: inherit; }
 .account-message { min-height: 1.3em; color: #ffd27a; margin: 0.3em 0; }
+
+.difficulty-toggle { display: grid; grid-template-columns: auto 1fr 1fr; gap: 0.5em; align-items: center; }
+.difficulty-toggle > .muted:first-child { font-size: 0.95em; padding-right: 0.3em; }
+.difficulty-toggle .difficulty-btn { padding: 0.55em 1em; font-size: 1.05em; }
+.difficulty-toggle .difficulty-btn.selected { background: #2b8fb0; border-color: #6fd6f2; color: #fff; }
+.difficulty-toggle small { grid-column: 2 / -1; text-align: center; }

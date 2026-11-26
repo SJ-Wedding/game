@@ -1,3 +1,4 @@
+import { isDifficulty, type DifficultyId } from '../config/enemies';
 import { DEV_CONFIG } from '../config/dev';
 import { RUN_CONFIG } from '../config/run';
 import type { SimOptions } from '../core/sim';
@@ -16,6 +17,8 @@ export interface DevOptions {
   /** 'boss' 또는 시작 시각(초). null 이면 처음부터 */
   start: 'boss' | number | null;
   god: boolean;
+  /** ?difficulty=normal|hard 로 난이도를 고정 (없으면 저장된 설정) */
+  difficulty?: DifficultyId | null;
 }
 
 export function readDevOptions(search: string, isDevBuild: boolean): DevOptions {
@@ -28,7 +31,8 @@ export function readDevOptions(search: string, isDevBuild: boolean): DevOptions 
   let start: DevOptions['start'] = null;
   if (startStr === 'boss') start = 'boss';
   else if (startStr !== null && /^\d+(\.\d+)?$/.test(startStr)) start = Math.min(Number(startStr), RUN_CONFIG.timeLimit - 1);
-  return { enabled, seed, start, god: q.get('god') === '1' };
+  const difficulty = q.get('difficulty');
+  return { enabled, seed, start, god: q.get('god') === '1', difficulty: isDifficulty(difficulty) ? difficulty : null };
 }
 
 /** 개발 옵션 → 시뮬레이션 옵션 */

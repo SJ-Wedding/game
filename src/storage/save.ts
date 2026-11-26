@@ -1,4 +1,5 @@
 import { META_SHOP_ITEMS, buyMeta, tokenReward, type MetaPurchases, type TokenReward } from '../core/meta';
+import { DEFAULT_DIFFICULTY, isDifficulty, type DifficultyId } from '../config/enemies';
 import { validCarry, validRelicIds, type RelicId } from '../config/relics';
 import type { RunResult } from '../core/types';
 
@@ -29,8 +30,11 @@ export interface SaveMeta {
 
 export interface SaveData {
   version: typeof SAVE_VERSION;
-  settings: { volume: number };
+  settings: { volume: number; difficulty: DifficultyId };
+  /** 보통 난이도 기록 (난이도가 생기기 전 기록도 여기에 둔다) */
   records: SaveRecords;
+  /** 어려움 난이도 기록 */
+  hardRecords?: SaveRecords;
   meta: SaveMeta;
   relicCarry?: RelicId[];
   pendingRelicDraft?: RelicId[];
@@ -47,7 +51,7 @@ export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 export function defaultSave(): SaveData {
   return {
     version: SAVE_VERSION,
-    settings: { volume: 0.6 },
+    settings: { volume: 0.6, difficulty: DEFAULT_DIFFICULTY },
     records: { runs: 0, wins: 0, bestSurvival: 0, bestKills: 0, fastestWin: null },
     meta: { tokens: 0, totalEarned: 0, purchases: {} },
   };
@@ -55,6 +59,24 @@ export function defaultSave(): SaveData {
 
 const num = (v: unknown, def: number, min = 0, max = Number.MAX_SAFE_INTEGER): number =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : def;
+
+function parseRecords(rec: Record<string, unknown>): SaveRecords {
+  const fastest = rec.fastestWin === null ? null : num(rec.fastestWin, NaN, 0, 24 * 3600);
+  return {
+    runs: Math.floor(num(rec.runs, 0)),
+    wins: Math.floor(num(rec.wins, 0)),
+    bestSurvival: num(rec.bestSurvival, 0, 0, 24 * 3600),
+    bestKills: Math.floor(num(rec.bestKills, 0)),
+    fastestWin: Number.isNaN(fastest) ? null : fastest,
+  };
+}
+
+const EMPTY_RECORDS: SaveRecords = { runs: 0, wins: 0, bestSurvival: 0, bestKills: 0, fastestWin: null };
+
+/** 난이도별 최고 기록 */
+export function recordsFor(data: SaveData, difficulty: DifficultyId): SaveRecords {
+  return difficulty === 'hard' ? data.hardRecords ?? EMPTY_RECORDS : data.records;
+}
 
 /** 이전 버전 데이터를 현재 버전으로 변환. 변환할 수 없으면 null */
 function migrate(obj: Record<string, unknown>): Record<string, unknown> | null {
@@ -90,14 +112,8 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   }
   const data: SaveData = {
     version: SAVE_VERSION,
-    settings: { volume: num(settings.volume, def.settings.volume, 0, 1) },
-    records: {
-      runs: Math.floor(num(rec.runs, 0)),
-      wins: Math.floor(num(rec.wins, 0)),
-      bestSurvival: num(rec.bestSurvival, 0, 0, 24 * 3600),
-      bestKills: Math.floor(num(rec.bestKills, 0)),
-      fastestWin: rec.fastestWin === null ? null : num(rec.fastestWin, NaN, 0, 24 * 3600),
-    },
+    settings: { volume: num(settings.volume, def.settings.volume, 0, 1), difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : DEFAULT_DIFFICULTY },
+    records: parseRecords(rec),
     meta: {
       tokens: Math.floor(num(meta.tokens, 0)),
       totalEarned: Math.floor(num(meta.totalEarned, 0)),
@@ -108,7 +124,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   if (carry.length) data.relicCarry = carry;
   if (Array.isArray(migrated.pendingRelicDraft)) data.pendingRelicDraft = validRelicIds(migrated.pendingRelicDraft);
   if (Array.isArray(migrated.previousRelics)) data.previousRelics = validRelicIds(migrated.previousRelics);
-  if (Number.isNaN(data.records.fastestWin)) data.records.fastestWin = null;
+  if (migrated.hardRecords && typeof migrated.hardRecords === 'object') data.hardRecords = parseRecords(migrated.hardRecords as Record<string, unknown>);
   const cloudRev = Math.floor(num(migrated.cloudRev, 0));
   if (cloudRev > 0) data.cloudRev = cloudRev;
   return { data, status: 'ok' };
@@ -146,7 +162,8 @@ export function recordRun(
 ): { data: SaveData; newRecords: NewRecord[]; tokens: TokenReward | null } {
   if (result.assisted) return { data, newRecords: [], tokens: null };
   const tokens = tokenReward(result);
-  const r = { ...data.records };
+  const hard = (result.difficulty ?? 'hard') === 'hard';
+  const r = { ...recordsFor(data, hard ? 'hard' : 'normal') };
   const newRecords: NewRecord[] = [];
   r.runs++;
   if (result.survivalTime > r.bestSurvival) {
@@ -166,7 +183,7 @@ export function recordRun(
     }
   }
   const meta = { ...data.meta, tokens: data.meta.tokens + tokens.total, totalEarned: data.meta.totalEarned + tokens.total };
-  return { data: { ...data, records: r, meta }, newRecords, tokens };
+  return { data: { ...data, ...(hard ? { hardRecords: r } : { records: r }), meta }, newRecords, tokens };
 }
 
 /** 영구 강화 구매. 토큰이 모자라거나 최대 단계면 null */
@@ -194,22 +211,34 @@ export interface CloudRow {
  */
 export function mergeCloud(local: SaveData, remote: CloudRow | null, preferRemote = false): SaveData {
   if (!remote) return local;
-  const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta, records: remote.records })).data;
+  const remoteRecords = (remote.records && typeof remote.records === 'object' ? remote.records : {}) as Record<string, unknown>;
+  const remoteHard = remoteRecords.hard && typeof remoteRecords.hard === 'object' ? parseRecords(remoteRecords.hard as Record<string, unknown>) : null;
+  const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta, records: remoteRecords })).data;
   const localRev = local.cloudRev ?? 0;
   const remoteRev = Math.max(0, Math.floor(Number(remote.rev) || 0));
-  const a = local.records;
-  const b = parsed.records;
-  const fastest = [a.fastestWin, b.fastestWin].filter((v): v is number => v !== null);
+  const hardRecords = local.hardRecords && remoteHard ? mergeRecords(local.hardRecords, remoteHard) : local.hardRecords ?? remoteHard ?? undefined;
   return {
     ...local,
+    ...(hardRecords ? { hardRecords } : {}),
     meta: preferRemote || (parsed.meta.totalEarned !== local.meta.totalEarned ? parsed.meta.totalEarned > local.meta.totalEarned : remoteRev > localRev) ? parsed.meta : local.meta,
-    records: {
-      runs: Math.max(a.runs, b.runs),
-      wins: Math.max(a.wins, b.wins),
-      bestSurvival: Math.max(a.bestSurvival, b.bestSurvival),
-      bestKills: Math.max(a.bestKills, b.bestKills),
-      fastestWin: fastest.length ? Math.min(...fastest) : null,
-    },
+    records: mergeRecords(local.records, parsed.records),
     cloudRev: preferRemote ? remoteRev : Math.max(localRev, remoteRev),
   };
+}
+
+/** 기록은 항목마다 더 좋은 값 */
+function mergeRecords(a: SaveRecords, b: SaveRecords): SaveRecords {
+  const fastest = [a.fastestWin, b.fastestWin].filter((v): v is number => v !== null);
+  return {
+    runs: Math.max(a.runs, b.runs),
+    wins: Math.max(a.wins, b.wins),
+    bestSurvival: Math.max(a.bestSurvival, b.bestSurvival),
+    bestKills: Math.max(a.bestKills, b.bestKills),
+    fastestWin: fastest.length ? Math.min(...fastest) : null,
+  };
+}
+
+/** 계정에 올리는 기록: 보통 기록에 어려움 기록을 hard 로 함께 담는다 (서버 형식은 그대로) */
+export function cloudRecords(data: SaveData): unknown {
+  return data.hardRecords ? { ...data.records, hard: data.hardRecords } : data.records;
 }

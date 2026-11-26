@@ -1,3 +1,4 @@
+import type { DifficultyId } from '../config/enemies';
 import type { Loadout } from '../config/characters';
 import type { RoanGearChoice } from '../config/roan';
 import type { FusionId, WeaponId } from '../config/weapons';
@@ -237,6 +238,8 @@ export interface RunResult {
   hitsByAttack?: Partial<Record<AttackId, number>>;
   combatTime?: number;
   seed: number;
+  /** 난이도 (없으면 어려움으로 본다: 난이도가 생기기 전 결과) */
+  difficulty?: DifficultyId;
   bossHpRatio: number | null;
   /** 개발 모드 옵션(보스 직전 시작/무적)이 사용된 판인가 — 최고 기록에서 제외 */
   assisted: boolean;
