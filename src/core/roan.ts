@@ -110,10 +110,6 @@ export class RoanCombat {
     return this.upgrade ?? this.weapon ?? 'base';
   }
 
-  get stage(): number {
-    return Number(this.weapon !== null) + Number(this.upgrade !== null) + Number(this.awakened);
-  }
-
   equip(choice: RoanGearChoice): boolean {
     if (choice.stage === 'weapon') {
       if (this.weapon) return false;
@@ -172,7 +168,6 @@ export class RoanCombat {
     if (this.upgrade === 'greatsword') mul *= 1 + 0.12 * this.m('greatswordWeight');
     if (this.gear('giantGrip')) mul *= 1.2;
     if (this.gear('deepCut')) mul *= 0.9;
-    if (this.has('whetKit')) mul *= 1 + 0.08 * this.stage;
     // 다른 상위 무기의 유물(계승 등): 효과 대신 검 피해 +5%
     for (const id of this.sim.relics.owned) {
       const relic = RELICS[id];

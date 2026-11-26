@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SWORD, type Loadout } from '../src/config/characters';
 import { RELICS, RELIC_IDS, relicAllowed, type RelicId } from '../src/config/relics';
-import { ROAN_UPGRADES, ROAN_WEAPONS, ROAN_WEAPON_IDS, roanUpgradesOf, type RoanGearChoice, type RoanUpgradeId, type RoanWeaponId } from '../src/config/roan';
+import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, ROAN_WEAPON_IDS, roanUpgradesOf, type RoanGearChoice, type RoanUpgradeId, type RoanWeaponId } from '../src/config/roan';
 import { MASTERY_UPGRADES, UPGRADE_BY_ID } from '../src/config/upgrades';
 import { rollRelics } from '../src/core/relics';
 import { Rng } from '../src/core/rng';
@@ -54,9 +54,9 @@ function levelTo(s: GameSim, level: number, pick: (stage: string, ids: string[])
 }
 
 describe('로안 무기 선택', () => {
-  it('6레벨 무기 4종, 12레벨 고른 무기의 상위 무기, 18레벨 각성을 차례로 고른다', () => {
+  it('12레벨 무기 4종, 24레벨 고른 무기의 상위 무기, 36레벨 각성을 차례로 고른다', () => {
     const s = make();
-    const seen = levelTo(s, 19, (stage, ids) => (stage === 'weapon' ? ids.indexOf('mace') : stage === 'upgrade' ? ids.indexOf('flail') : 0));
+    const seen = levelTo(s, ROAN_GEAR_LEVELS.awaken + 1, (stage, ids) => (stage === 'weapon' ? ids.indexOf('mace') : stage === 'upgrade' ? ids.indexOf('flail') : 0));
     expect(seen).toEqual([
       ['weapon', ...ROAN_WEAPON_IDS],
       ['upgrade', ...roanUpgradesOf('mace')],
@@ -82,10 +82,10 @@ describe('로안 무기 선택', () => {
     }
   });
 
-  it('6레벨에 무기를 고르면 늘어난 최대 체력만큼 회복한다', () => {
+  it('12레벨에 무기를 고르면 늘어난 최대 체력만큼 회복한다', () => {
     const s = make();
     s.player.hp = 100;
-    levelTo(s, 6, (_stage, ids) => ids.indexOf('waraxe'));
+    levelTo(s, ROAN_GEAR_LEVELS.weapon, (_stage, ids) => ids.indexOf('waraxe'));
     expect(s.relics.maxHp).toBe(200 + s.stats.maxHp - 200);
     expect(s.player.hp).toBeGreaterThanOrEqual(140);
   });
@@ -377,9 +377,9 @@ describe('전용 강화와 유물', () => {
     expect(ids(['dagger', 'twinblades'])).toEqual([...ids(['dagger']), 'twinCross', 'twinChain']);
   });
 
-  it('기존 로안 유물은 없고, 근접 특화 8종과 상위 무기 전용 39종이 있다', () => {
+  it('기존 로안 유물은 없고, 근접 특화 7종과 상위 무기 전용 39종이 있다', () => {
     const roanRelics = RELIC_IDS.filter((id) => 'character' in RELICS[id] && (RELICS[id] as { character: string }).character === 'roan');
-    expect(roanRelics).toHaveLength(47);
+    expect(roanRelics).toHaveLength(46);
     expect(roanRelics.filter((id) => 'form' in RELICS[id])).toHaveLength(39);
     for (const id of Object.keys(ROAN_UPGRADES) as RoanUpgradeId[]) {
       expect(roanRelics.filter((r) => (RELICS[r] as { form?: string }).form === id)).toHaveLength(3);
@@ -415,11 +415,11 @@ describe('전용 강화와 유물', () => {
     expect(pool.has('meleeInstinct')).toBe(true);
   });
 
-  it('근접 특화 유물: 강인한 근육·무기 손질 도구·무기 투척술', () => {
-    const s = make('sword', undefined, { relics: ['toughMuscle', 'whetKit', 'weaponThrow'] });
+  it('근접 특화 유물: 강인한 근육·무기 투척술 (무기 손질 도구는 삭제)', () => {
+    expect(RELIC_IDS).not.toContain('whetKit');
+    const s = make('sword', undefined, { relics: ['toughMuscle', 'weaponThrow'] });
     const plain = make('sword');
     expect(s.relics.maxHp).toBeCloseTo(plain.relics.maxHp * 1.2);
-    expect(s.roan.damage).toBeCloseTo(plain.roan.damage * 1.08);
     target(s, 70);
     swing(s);
     expect(s.playerShots.some((p) => p.source === 'weaponThrow')).toBe(true);

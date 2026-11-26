@@ -339,7 +339,7 @@ export class Screens {
             el('span', { class: 'sword-form-symbol', 'aria-hidden': 'true', text: u.symbol }),
             el('strong', { class: 'name', text: gear.stage === 'upgrade' ? u.name : `${u.name} 각성` }),
             el('span', { class: 'desc', text: gear.stage === 'upgrade' ? u.effect : u.awaken }),
-            ...(gear.stage === 'upgrade' ? [el('small', { class: 'mastery-bonus', text: `18레벨 각성: ${u.awaken}` })] : []),
+            ...(gear.stage === 'upgrade' ? [el('small', { class: 'mastery-bonus', text: `${ROAN_GEAR_LEVELS.awaken}레벨 각성: ${u.awaken}` })] : []),
           );
         }
       } else if (c.kind === 'relic') {

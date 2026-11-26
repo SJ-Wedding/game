@@ -27,13 +27,12 @@ export const RELICS = {
   // ── 로안 근접 특화 (기존 로안 유물 대체) ──
   chargeStance: { source: 'level', symbol: '➹', character: 'roan', name: '돌격 자세', effect: '공격 직후 0.4초간 이동 속도 +30%.' },
   meleeInstinct: { source: 'level', symbol: '⚇', character: 'roan', name: '근접 본능', effect: '몸 주위 100px 안의 적 1마리당 피해 +2%, 최대 +20%.' },
-  whetKit: { source: 'elite', symbol: '⚒', character: 'roan', name: '무기 손질 도구', effect: '무기를 고르거나 업그레이드할 때마다(6·12·18레벨) 검 피해 +8%.' },
   bloodThirst: { source: 'elite', symbol: '♥', character: 'roan', name: '피의 갈증', effect: '근접 공격으로 10마리 처치할 때마다 체력 3 회복. 재생 효과 −50%.' },
   weaponThrow: { source: 'elite', symbol: '⤼', character: 'roan', name: '무기 투척술', effect: '12초마다 다음 공격이 무기를 던져 300px를 관통합니다(피해 150%).' },
   armorBreaker: { source: 'elite', symbol: '⛓', character: 'roan', name: '갑옷 파쇄자', effect: '같은 적을 3번 치면 5초간 그 적이 받는 피해 +12%.' },
   warriorBreath: { source: 'elite', symbol: '☄', character: 'roan', name: '전사의 숨결', effect: '체력 50% 이하일 때 공격 간격 −15%.' },
   toughMuscle: { source: 'elite', symbol: '✊', character: 'roan', name: '강인한 근육', effect: '최대 체력 +20%. 이동 속도 −5%.' },
-  // ── 로안 상위 무기 전용 (12레벨에 고른 상위 무기의 유물만 등장) ──
+  // ── 로안 상위 무기 전용 (24레벨에 고른 상위 무기의 유물만 등장) ──
   comboRhythm: { source: 'elite', symbol: '♪', character: 'roan', form: 'onehand', name: '연격의 리듬', effect: '연격이 발동하면 다음 공격 대기시간 −30%.' },
   sheathReflect: { source: 'elite', symbol: '⛨', character: 'roan', form: 'onehand', name: '칼집 반사', effect: '연격 추가 베기가 닿은 적 탄을 최대 2개 지웁니다.' },
   duelGrace: { source: 'elite', symbol: '⚜', character: 'roan', form: 'onehand', name: '결투의 품격', effect: '200px 안의 적이 1마리면 피해 +35%.' },
