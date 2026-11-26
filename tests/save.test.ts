@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RunResult } from '../src/core/types';
-import { defaultSave, loadSave, parseSave, purchaseMeta, recordRun, SAVE_KEY, SAVE_VERSION, writeSave } from '../src/storage/save';
+import { cloudRecords, defaultSave, loadSave, mergeCloud, parseSave, purchaseMeta, recordRun, recordsFor, SAVE_KEY, SAVE_VERSION, writeSave } from '../src/storage/save';
 import { MemoryStorage } from './helpers';
 
 const result = (over: Partial<RunResult> = {}): RunResult => ({
@@ -19,6 +19,7 @@ const result = (over: Partial<RunResult> = {}): RunResult => ({
   rerollsUsed: 0,
   revived: 0,
   itemsCollected: 0,
+  difficulty: 'normal',
   ...over,
 });
 
@@ -98,12 +99,12 @@ describe('로컬 저장', () => {
 
   it('판이 끝나면 토큰을 받고, 토큰으로 영구 강화를 산다', () => {
     let d = defaultSave();
-    const r = recordRun(d, result({ survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
+    const r = recordRun(d, result({ difficulty: 'hard', survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
     // 생존 10분 × 2 + 처치 140/50 = 2 + 엘리트 2 × 5 = 32
-    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, relics: 0, total: 32 });
+    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, relics: 0, difficulty: 0, total: 32 });
     d = r.data;
     expect(d.meta.tokens).toBe(32);
-    const win = recordRun(d, result({ outcome: 'victory', cause: 'boss', survivalTime: 860, killsByKind: {} }));
+    const win = recordRun(d, result({ difficulty: 'hard', outcome: 'victory', cause: 'boss', survivalTime: 860, killsByKind: {} }));
     expect(win.tokens!.victory).toBe(30);
     d = win.data;
     expect(d.meta.totalEarned).toBe(32 + 28 + 30);
@@ -112,6 +113,47 @@ describe('로컬 저장', () => {
     expect(bought.meta.purchases.hp).toBe(1);
     expect(purchaseMeta({ ...d, meta: { ...d.meta, tokens: 5 } }, 'hp')).toBeNull(); // 토큰 부족
     expect(purchaseMeta({ ...d, meta: { ...d.meta, tokens: 999, purchases: { revive: 1 } } }, 'revive')).toBeNull(); // 최대 단계
+  });
+
+  it('보통 난이도는 토큰을 0.7배로 받는다', () => {
+    const r = recordRun(defaultSave(), result({ survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
+    // 32 × 0.7 = 22.4 → 22
+    expect(r.tokens).toMatchObject({ total: 22, difficulty: -10 });
+    expect(r.data.meta.tokens).toBe(22);
+  });
+
+  it('기록은 난이도별로 따로 쌓고, 상점은 함께 쓴다', () => {
+    let d = defaultSave();
+    expect(d.settings.difficulty).toBe('normal');
+    d = recordRun(d, result({ difficulty: 'normal', survivalTime: 400, kills: 50 })).data;
+    const hard = recordRun(d, result({ difficulty: 'hard', survivalTime: 200, kills: 30 }));
+    expect(hard.newRecords).toEqual([]); // 어려움 첫 판: 보통 기록과 비교하지 않는다
+    d = hard.data;
+    expect(recordsFor(d, 'normal')).toMatchObject({ runs: 1, bestSurvival: 400, bestKills: 50 });
+    expect(recordsFor(d, 'hard')).toMatchObject({ runs: 1, bestSurvival: 200, bestKills: 30 });
+    expect(d.meta.tokens).toBeGreaterThan(0);
+  });
+
+  it('난이도 이전의 기록은 보통으로 옮기고, 난이도 설정과 어려움 기록을 읽는다', () => {
+    const old = parseSave(JSON.stringify({ version: SAVE_VERSION, records: { runs: 7, wins: 1, bestSurvival: 860, bestKills: 900, fastestWin: 860 }, settings: { volume: 0.5 } })).data;
+    expect(old.settings.difficulty).toBe('normal');
+    expect(recordsFor(old, 'normal').runs).toBe(7);
+    expect(recordsFor(old, 'hard').runs).toBe(0);
+    const saved = parseSave(JSON.stringify({ version: SAVE_VERSION, records: {}, hardRecords: { runs: 3, wins: 0, bestSurvival: 100, bestKills: 10, fastestWin: null }, settings: { volume: 0.5, difficulty: 'hard' } })).data;
+    expect(saved.settings.difficulty).toBe('hard');
+    expect(recordsFor(saved, 'hard').runs).toBe(3);
+    const bad = parseSave(JSON.stringify({ version: SAVE_VERSION, settings: { volume: 0.5, difficulty: 'nightmare' } })).data;
+    expect(bad.settings.difficulty).toBe('normal');
+  });
+
+  it('계정 저장에 어려움 기록도 함께 올리고 합친다', () => {
+    const d = recordRun(defaultSave(), result({ difficulty: 'hard', survivalTime: 300, kills: 40 })).data;
+    const rows = cloudRecords(d) as { runs: number; hard: { runs: number } };
+    expect(rows.runs).toBe(0);
+    expect(rows.hard.runs).toBe(1);
+    const merged = mergeCloud(defaultSave(), { meta: { tokens: 0, totalEarned: 0, purchases: {} }, records: rows, rev: 1 });
+    expect(recordsFor(merged, 'hard')).toMatchObject({ runs: 1, bestSurvival: 300, bestKills: 40 });
+    expect(recordsFor(merged, 'normal').runs).toBe(0);
   });
 
   it('개발 옵션을 쓴 판은 기록에 반영하지 않는다', () => {

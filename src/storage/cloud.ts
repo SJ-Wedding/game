@@ -1,4 +1,4 @@
-import type { CloudRow, SaveData, StorageLike } from './save';
+import { cloudRecords, type CloudRow, type SaveData, type StorageLike } from './save';
 
 /**
  * 계정 저장 (Supabase).
@@ -59,7 +59,7 @@ export class CloudSave {
   /** 상점 내역과 기록을 서버에 올린다. 앞선 업로드가 끝난 뒤 차례로 보낸다 */
   push(data: SaveData): Promise<void> {
     this.pushing = this.pushing
-      .then(() => this.rpc('push_save', { p_meta: data.meta, p_records: data.records, p_rev: data.cloudRev ?? 0 }))
+      .then(() => this.rpc('push_save', { p_meta: data.meta, p_records: cloudRecords(data), p_rev: data.cloudRev ?? 0 }))
       .then(() => undefined, () => undefined);
     return this.pushing;
   }
@@ -67,7 +67,7 @@ export class CloudSave {
   /** 아이디 회원가입: 지금 진행 상황으로 계정을 만들고 이 브라우저를 연결한다 */
   async register(username: string, password: string, data: SaveData): Promise<AccountResult> {
     await this.pushing;
-    const r = await this.rpc('register_account', { p_username: username, p_password: password, p_meta: data.meta, p_records: data.records, p_rev: data.cloudRev ?? 0 });
+    const r = await this.rpc('register_account', { p_username: username, p_password: password, p_meta: data.meta, p_records: cloudRecords(data), p_rev: data.cloudRev ?? 0 });
     return r.ok ? { ok: true } : { ok: false, error: r.error };
   }
 

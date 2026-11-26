@@ -8,7 +8,7 @@ import { ESSENCE_IDS, ESSENCE_MAX_STACK, OPENING_RELIC_LEVEL, validCarry, validR
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
-import { ENEMY_CONFIG, ENEMY_SCALING, MONSTER_STAT_MULTIPLIERS, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
+import { DIFFICULTY, ENEMY_CONFIG, ENEMY_SCALING, type DifficultyDef, type DifficultyId, type EnemyKind, type NormalEnemyKind } from '../config/enemies';
 import { AUTO_COMBAT, COMBAT_REACH, PLAYER_BODY, type PlayerStats } from '../config/player';
 import { PROGRESSION_CONFIG } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
@@ -36,12 +36,14 @@ function shotAttack(source: string): AttackId | undefined {
 import { applyUpgrade, luckFor, rollChoices, rollGrade, rollMasteryChoices, rollRunChoices, upgradeAvailable } from './upgrades';
 
 /** Scale defense as the ratio of prevented damage to damage taken. */
-function scaleMonsterDefense(damageTaken: number): number {
+function scaleMonsterDefense(damageTaken: number, defense: number): number {
   if (damageTaken >= 1) return damageTaken;
-  return damageTaken / (damageTaken + (1 - damageTaken) * MONSTER_STAT_MULTIPLIERS.defense);
+  return damageTaken / (damageTaken + (1 - damageTaken) * defense);
 }
 
 export interface SimOptions {
+  /** 난이도 (기본: 어려움 — 헤드리스 시뮬레이션·테스트 기준). 게임 화면은 저장된 설정을 넘긴다 */
+  difficulty?: DifficultyId;
   seed: number;
   /** 이 전투 시각(초)부터 시작 (개발용). 그 이전 스폰 이벤트는 건너뛰고, bossAt 이후면 보스가 바로 등장한다. */
   startTime?: number;
@@ -88,6 +90,9 @@ const ASSAULT_LINEUP = ['charger', 'spitter', 'charger', 'chaser', 'charger', 's
  */
 export class GameSim {
   readonly seed: number;
+  readonly difficulty: DifficultyId;
+  /** 이 판의 난이도 몬스터 배율 */
+  get monster(): DifficultyDef { return DIFFICULTY[this.difficulty]; }
   readonly rngSpawn: Rng;
   readonly rngUpgrade: Rng;
   readonly rngAi: Rng;
@@ -180,6 +185,7 @@ export class GameSim {
     this.options = options;
     this.loadout = options.loadout ?? DEFAULT_LOADOUT;
     this.seed = options.seed >>> 0;
+    this.difficulty = options.difficulty ?? 'hard';
     this.rngSpawn = new Rng(deriveSeed(this.seed, 'spawn'));
     this.rngUpgrade = new Rng(deriveSeed(this.seed, 'upgrade'));
     this.rngAi = new Rng(deriveSeed(this.seed, 'ai'));
@@ -703,7 +709,7 @@ export class GameSim {
   }
 
   spawnEnemy(kind: EnemyKind, x: number, y: number): Enemy {
-    const e = createEnemy(this.nextId++, kind, x, y, this.elapsed);
+    const e = createEnemy(this.nextId++, kind, x, y, this.elapsed, this.monster);
     this.enemies.push(e);
     return e;
   }
@@ -725,7 +731,7 @@ export class GameSim {
     const pad = ARENA_CONFIG.wallPadding + BOSS_CONFIG.radius;
     const x = clamp(p.x + dx * 420, pad, ARENA_CONFIG.width - pad);
     const y = clamp(p.y + dy * 420, pad, ARENA_CONFIG.height - pad);
-    this.boss = createBoss(x, y);
+    this.boss = createBoss(x, y, this.monster.health);
     this.spawnLog.push({ tick: this.tick, kind: 'boss', angle: 0, distance: 0 });
     this.emit('bossSpawn', x, y);
   }
@@ -853,7 +859,7 @@ export class GameSim {
     const armor = basic || source === 'sword' ? e.basicResistance * resistanceMultiplier : 0;
     const durability = e.kind === 'elite' ? eliteDurability : 1;
     const damageTaken = (1 - resistance * resistanceMultiplier) * (1 - armor) / durability;
-    let damage = amount * this.relics.damageMultiplier(e, basic) * scaleMonsterDefense(damageTaken);
+    let damage = amount * this.relics.damageMultiplier(e, basic) * scaleMonsterDefense(damageTaken, this.monster.defense);
     if ((basic && this.relics.executes(e)) || (source === 'sword' && this.roan.executes(e))) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
@@ -884,7 +890,7 @@ export class GameSim {
     const basic = source === 'basic';
     const armor = basic ? BOSS_CONFIG.basicResistance
       : source === 'sword' ? BOSS_CONFIG.basicResistance * this.swordResistanceMultiplier(swordArmorPierce) : 0;
-    const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor);
+    const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor, this.monster.defense);
     b.hp = Math.max(0, b.hp - damage);
     this.recordAttackDamage(source, damage);
     b.flash = 0.06;
@@ -1328,6 +1334,7 @@ export class GameSim {
       hitsByAttack: { ...this.hitsByAttack },
       combatTime: (this.tick - this.startingTick) / RUN_CONFIG.tickRate,
       seed: this.seed,
+      difficulty: this.difficulty,
       bossHpRatio: this.boss ? this.boss.hp / this.boss.maxHp : null,
       assisted: this.assisted,
     };

@@ -175,7 +175,7 @@ describe('영구 강화 (토큰 상점)', () => {
   it('토큰 보상 계산', () => {
     expect(tokenReward({ survivalTime: 59, killsByKind: {}, outcome: 'defeat' }).total).toBe(0);
     expect(tokenReward({ survivalTime: 900, killsByKind: { chaser: 1000, spitter: 100, charger: 100, elite: 3, boss: 1 }, outcome: 'victory' })).toEqual({
-      survival: 30, kills: 24, elites: 15, victory: 30, relics: 0, total: 99,
+      survival: 30, kills: 24, elites: 15, victory: 30, relics: 0, difficulty: 0, total: 99,
     });
   });
 

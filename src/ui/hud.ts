@@ -1,3 +1,4 @@
+import { DIFFICULTY } from '../config/enemies';
 import { ROAN_UPGRADES, ROAN_WEAPONS } from '../config/roan';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
@@ -61,7 +62,7 @@ export class Hud {
     this.dodgeBox = el('div', { class: 'bar dodge' }, [this.dodgeFill, this.dodgeText]);
     this.swordForms = el('small', { class: 'sword-forms-hud hidden', 'data-testid': 'hud-sword-forms' });
     this.timer = el('div', { class: 'timer', 'data-testid': 'hud-timer' });
-    this.timerSub = el('div', { class: 'timer-sub' });
+    this.timerSub = el('div', { class: 'timer-sub', 'data-testid': 'hud-sub' });
     this.kills = el('div', { class: 'kills', 'data-testid': 'hud-kills' });
     this.bossFill = el('div', { class: 'fill' });
     this.bossText = el('span', { class: 'label', 'data-testid': 'hud-boss' });
@@ -175,7 +176,7 @@ export class Hud {
     c.text(
       this.timerSub,
       'timerSub',
-      sim.overtime ? '연장전 · 강화 돌격수 출현' : sim.bossSpawned ? '연장전까지 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`,
+      `${DIFFICULTY[sim.difficulty].name} · ` + (sim.overtime ? '연장전 · 강화 돌격수 출현' : sim.bossSpawned ? '연장전까지 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`),
     );
     c.toggle(this.timer, 'urgent', 'urgent', sim.bossSpawned && sim.remaining < 30);
     c.text(this.kills, 'kills', `처치 ${sim.kills}`);

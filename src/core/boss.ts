@@ -4,13 +4,14 @@ import { clamp, dist } from './math';
 import type { GameSim } from './sim';
 import type { Boss } from './types';
 
-export function createBoss(x: number, y: number): Boss {
+/** health = 난이도 체력 배율 */
+export function createBoss(x: number, y: number, health = 1): Boss {
   return {
     x,
     y,
     r: BOSS_CONFIG.radius,
-    hp: BOSS_CONFIG.hp,
-    maxHp: BOSS_CONFIG.hp,
+    hp: BOSS_CONFIG.hp * health,
+    maxHp: BOSS_CONFIG.hp * health,
     phase: 1,
     state: 'enter',
     timer: BOSS_CONFIG.enterTime,
@@ -51,7 +52,8 @@ export function updateBoss(sim: GameSim, dt: number): void {
   }
   const pi = b.phase - 1;
 
-  let contactDamage = C.contactDamage;
+  const atk = sim.monster.attack;
+  let contactDamage = C.contactDamage * atk;
   let contactSource = C.attackNames.contact;
 
   switch (b.state) {
@@ -90,7 +92,7 @@ export function updateBoss(sim: GameSim, dt: number): void {
             // 첫 장판은 플레이어 위치 정확히, 나머지는 주변에 흩뿌린다 (난수는 항상 2개씩 소비)
             const ox = sim.rngAi.range(-C.meteor.spread, C.meteor.spread);
             const oy = sim.rngAi.range(-C.meteor.spread, C.meteor.spread);
-            sim.addHazard(i === 0 ? p.x : p.x + ox, i === 0 ? p.y : p.y + oy, C.meteor.radius, C.meteor.delay, C.meteor.damage, C.attackNames.meteor);
+            sim.addHazard(i === 0 ? p.x : p.x + ox, i === 0 ? p.y : p.y + oy, C.meteor.radius, C.meteor.delay, C.meteor.damage * atk, C.attackNames.meteor);
           }
           b.state = 'cast';
           b.timer = C.meteor.castTime;
@@ -124,7 +126,7 @@ export function updateBoss(sim: GameSim, dt: number): void {
         const n = C.ring.bullets[pi];
         const offset = (b.waveIndex % 2) * (Math.PI / n);
         for (let i = 0; i < n; i++) {
-          sim.spawnEnemyShot(b.x, b.y, (i / n) * Math.PI * 2 + offset, C.ring.speed, C.ring.damage, C.ring.radius, C.attackNames.ring);
+          sim.spawnEnemyShot(b.x, b.y, (i / n) * Math.PI * 2 + offset, C.ring.speed, C.ring.damage * atk, C.ring.radius, C.attackNames.ring);
         }
         sim.emit('enemyShoot', b.x, b.y);
         b.waveIndex++;
@@ -148,7 +150,7 @@ export function updateBoss(sim: GameSim, dt: number): void {
     case 'charge':
       b.x += b.dx * C.charge.speed * dt;
       b.y += b.dy * C.charge.speed * dt;
-      contactDamage = C.charge.damage;
+      contactDamage = C.charge.damage * atk;
       contactSource = C.attackNames.charge;
       b.timer -= dt;
       if (b.timer <= 0) {

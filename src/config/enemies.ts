@@ -5,7 +5,22 @@
 export type NormalEnemyKind = 'chaser' | 'charger' | 'spitter';
 export type EnemyKind = NormalEnemyKind | 'elite';
 
-export const MONSTER_STAT_MULTIPLIERS = { health: 10, attack: 10, defense: 5 } as const;
+/**
+ * 난이도별 몬스터 배율 (난이도 기획안). 일반 몬스터·균열 수호자·보스의 체력·공격에 곱하고,
+ * 방어는 몬스터 피해 저항이 막는 비율에 곱한다. tokens 는 판 종료 토큰 배율.
+ */
+export type DifficultyId = 'normal' | 'hard';
+export interface DifficultyDef { name: string; health: number; attack: number; defense: number; tokens: number }
+export const DIFFICULTY: Record<DifficultyId, DifficultyDef> = {
+  normal: { name: '보통', health: 6, attack: 4, defense: 3, tokens: 0.7 },
+  hard: { name: '어려움', health: 10, attack: 10, defense: 5, tokens: 1 },
+};
+export const DIFFICULTY_IDS = Object.keys(DIFFICULTY) as DifficultyId[];
+/** 게임 화면에서 처음 고르는 난이도 */
+export const DEFAULT_DIFFICULTY: DifficultyId = 'normal';
+export const isDifficulty = (v: unknown): v is DifficultyId => typeof v === 'string' && Object.hasOwn(DIFFICULTY, v);
+/** 어려움 배율 (헤드리스 시뮬레이션·테스트의 기본값) */
+export const MONSTER_STAT_MULTIPLIERS = DIFFICULTY.hard;
 
 export interface EnemyBaseConfig {
   /** 화면·결과에 표시되는 이름 */

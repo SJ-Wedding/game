@@ -1,3 +1,4 @@
+import { DIFFICULTY } from '../config/enemies';
 import { META_STATS, META_UNLOCKS, TOKEN_REWARDS, type MetaUnlockId } from '../config/meta';
 import { CHARACTER_SHOP_ITEMS, type CharacterShopId } from '../config/characterShop';
 import type { Loadout } from '../config/characters';
@@ -71,11 +72,13 @@ export interface TokenReward {
   victory: number;
   /** 유물로 늘어난 토큰 (탐욕의 황금 주사위, 서두른 초대장) */
   relics: number;
+  /** 난이도 보정 (보통 ×0.7 → 음수, 어려움 0) */
+  difficulty: number;
   total: number;
 }
 
 /** 한 판 결과 → 토큰 */
-export function tokenReward(result: Pick<RunResult, 'survivalTime' | 'killsByKind' | 'outcome' | 'tokenMultiplier'>): TokenReward {
+export function tokenReward(result: Pick<RunResult, 'survivalTime' | 'killsByKind' | 'outcome' | 'tokenMultiplier' | 'difficulty'>): TokenReward {
   const k = result.killsByKind;
   const normalKills = (k.chaser ?? 0) + (k.charger ?? 0) + (k.spitter ?? 0);
   const survival = Math.floor(result.survivalTime / 60) * TOKEN_REWARDS.perMinute;
@@ -84,5 +87,6 @@ export function tokenReward(result: Pick<RunResult, 'survivalTime' | 'killsByKin
   const victory = result.outcome === 'victory' ? TOKEN_REWARDS.victory : 0;
   const base = survival + kills + elites + victory;
   const relics = Math.round(base * Math.max(1, result.tokenMultiplier ?? 1)) - base;
-  return { survival, kills, elites, victory, relics, total: base + relics };
+  const total = Math.round((base + relics) * DIFFICULTY[result.difficulty ?? 'hard'].tokens);
+  return { survival, kills, elites, victory, relics, difficulty: total - base - relics, total };
 }

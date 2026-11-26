@@ -1,3 +1,4 @@
+import type { DifficultyId } from '../config/enemies';
 import { DEFAULT_LOADOUT, LUMEN, SWORD, type Loadout } from '../config/characters';
 import { OPENING_RELIC_LEVEL, carryable, relicAllowed, validCarry, type RelicId } from '../config/relics';
 import type { Sfx } from '../audio/sfx';
@@ -6,7 +7,7 @@ import { GameSim } from '../core/sim';
 import type { InputState, RunResult, SimEvent } from '../core/types';
 import type { DevOptions } from '../dev/devOptions';
 import { simOptionsFor } from '../dev/devOptions';
-import { defaultSave, mergeCloud, purchaseMeta, recordRun, writeSave, type CloudRow, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
+import { cloudRecords, defaultSave, mergeCloud, recordsFor, purchaseMeta, recordRun, writeSave, type CloudRow, type NewRecord, type SaveData, type StorageLike } from '../storage/save';
 import type { TokenReward } from '../core/meta';
 import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
@@ -118,7 +119,7 @@ export class App {
     this.screen = 'title';
     this.hud.hide();
     this.screens.showTitle(
-      this.save.records,
+      recordsFor(this.save, this.difficulty),
       this.save.meta,
       this.save.settings.volume,
       {
@@ -127,10 +128,23 @@ export class App {
         onVolume: (v) => this.setVolume(v),
         onDevChange: (s) => this.applyDevPanel(s),
         ...(this.cloud ? { onAccount: () => this.showAccount() } : {}),
+        ...(this.dev.difficulty ? {} : { onDifficulty: (d: DifficultyId) => this.setDifficulty(d) }),
       },
       this.dev.enabled ? this.devPanelState() : null,
       this.cloud ? { username: this.account } : undefined,
+      this.difficulty,
     );
+  }
+
+  /** 이번 판 난이도: 개발 옵션(?difficulty=) → 저장된 설정 */
+  get difficulty(): DifficultyId {
+    return this.dev.difficulty ?? this.save.settings.difficulty;
+  }
+
+  setDifficulty(d: DifficultyId): void {
+    this.save = { ...this.save, settings: { ...this.save.settings, difficulty: d } };
+    writeSave(this.storage, this.save);
+    this.showTitle();
   }
 
   // ───────────────────────── 아이디 계정 ─────────────────────────
@@ -240,7 +254,7 @@ export class App {
     const carryRelics = retry ? this.sim?.options.carryRelics
       : assisted ? this.assistedCarry : this.save.relicCarry;
     const previousRelics = assisted ? this.assistedPrevious : this.save.previousRelics;
-    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, previousRelics, loadout });
+    this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, previousRelics, loadout, difficulty: this.difficulty });
     if (!retry && assisted) this.assistedCarry = [];
     else if (!retry && this.save.relicCarry?.length) {
       this.save = { ...this.save, relicCarry: [] };
@@ -403,7 +417,7 @@ export class App {
     }
     if (this.screen === 'title') this.showTitle();
     // 합친 결과가 서버와 다르면(브라우저 쪽이 더 새로움) 저장 번호를 올려 다시 올린다
-    const same = remote && JSON.stringify([remote.meta, remote.records]) === JSON.stringify([this.save.meta, this.save.records]);
+    const same = remote && JSON.stringify([remote.meta, remote.records]) === JSON.stringify([this.save.meta, cloudRecords(this.save)]);
     if (!same) {
       this.save = { ...this.save, cloudRev: Math.max(this.save.cloudRev ?? 0, remote?.rev ?? 0) + 1 };
       writeSave(this.storage, this.save);

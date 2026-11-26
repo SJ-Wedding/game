@@ -252,6 +252,19 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await expect(page.getByTestId('volume')).toHaveValue('20');
   });
 
+  test('난이도: 처음엔 보통, 어려움을 고르면 기억하고 HUD·전투에 반영된다', async ({ page }) => {
+    await page.goto('/?dev=1&seed=5');
+    await expect(page.getByTestId('difficulty-normal')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('difficulty-hard').click();
+    await expect(page.getByTestId('difficulty-hard')).toHaveAttribute('aria-pressed', 'true');
+    await page.reload();
+    await expect(page.getByTestId('difficulty-hard')).toHaveAttribute('aria-pressed', 'true');
+    await page.getByTestId('play').click();
+    await page.getByTestId('character-ranger').click();
+    await expect(page.getByTestId('hud-sub')).toContainText('어려움');
+    expect(await page.evaluate(() => (window as any).__rift.sim.difficulty)).toBe('hard');
+  });
+
   test('저장 데이터가 손상돼도 기본값으로 실행된다', async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem('rift-arena/save', '{"version":1,"settings":'));
     await page.goto('/?dev=1');

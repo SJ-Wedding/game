@@ -1,3 +1,4 @@
+import { DIFFICULTY, DIFFICULTY_IDS, type DifficultyId } from '../config/enemies';
 import { CHARACTERS, CHARACTER_UPGRADES, LUMEN_WEAPONS, characterUpgradeValue, type CharacterId, type CharacterUpgradeId, type Loadout, type LumenWeapon } from '../config/characters';
 import { ROAN_GEAR_LEVELS, ROAN_UPGRADES, ROAN_WEAPONS, type RoanUpgradeId, type RoanWeaponId } from '../config/roan';
 import chainPreview from '../assets/weapon-previews/chain.webp';
@@ -38,6 +39,7 @@ export interface TitleHandlers {
   onShop: () => void;
   /** 계정 저장을 쓸 때만 있음 */
   onAccount?: () => void;
+  onDifficulty?: (d: DifficultyId) => void;
   onVolume: (v: number) => void;
   onDevChange?: (s: DevPanelState) => void;
 }
@@ -110,14 +112,14 @@ export class Screens {
     return el('label', { class: 'volume' }, ['음량', input, value]);
   }
 
-  showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null, account?: { username: string | null }): void {
+  showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null, account?: { username: string | null }, difficulty: DifficultyId = 'normal'): void {
     const play = el('button', { class: 'primary big', 'data-testid': 'play', 'data-autofocus': '' }, ['플레이 ', el('kbd', { text: 'Enter' })]);
     play.addEventListener('click', h.onPlay);
     const shop = el('button', { class: 'shop-btn', 'data-testid': 'open-shop' }, ['강화 상점 · ', el('span', { class: 'token', 'data-testid': 'title-tokens', text: `◆ ${meta.tokens}` })]);
     shop.addEventListener('click', h.onShop);
 
     const rec = el('div', { class: 'records', 'data-testid': 'records' }, [
-      el('h3', { text: '최고 기록' }),
+      el('h3', { text: `최고 기록 · ${DIFFICULTY[difficulty].name}` }),
       el('dl', {}, [
         el('dt', { text: '최장 생존' }),
         el('dd', { 'data-testid': 'best-survival', text: records.bestSurvival > 0 ? formatTime(records.bestSurvival) : '-' }),
@@ -145,6 +147,7 @@ export class Screens {
       el('h1', { class: 'logo', text: '균열 아레나' }),
       el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
       el('div', { class: 'row buttons' }, [play, shop]),
+      ...(h.onDifficulty ? [this.difficultyToggle(difficulty, h.onDifficulty)] : []),
       ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
       el('div', { class: 'row' }, [controls, rec]),
       this.volumeControl(volume, h.onVolume),
@@ -152,6 +155,18 @@ export class Screens {
 
     if (dev) children.push(this.devPanel(dev, h.onDevChange));
     this.mount('title', el('div', { class: 'panel title' }, children));
+  }
+
+  private difficultyToggle(current: DifficultyId, onChange: (d: DifficultyId) => void): HTMLElement {
+    const buttons = DIFFICULTY_IDS.map((id) => {
+      const b = el('button', { class: `difficulty-btn${id === current ? ' selected' : ''}`, 'data-testid': `difficulty-${id}`, 'aria-pressed': String(id === current), text: DIFFICULTY[id].name });
+      b.addEventListener('click', () => { if (id !== current) onChange(id); });
+      return b;
+    });
+    return el('div', { class: 'difficulty-toggle', role: 'group', 'aria-label': '난이도', 'data-testid': 'difficulty-toggle' }, [
+      el('span', { class: 'muted', text: '난이도' }), ...buttons,
+      el('small', { class: 'muted', text: current === 'normal' ? '토큰 ×0.7' : '몬스터 체력·공격 대폭 강화' }),
+    ]);
   }
 
   private accountLine(username: string | null, onAccount: () => void): HTMLElement {
@@ -645,7 +660,7 @@ export class Screens {
         el('h2', { class: 'outcome', 'data-testid': 'outcome', text: win ? '승리' : '패배' }),
         el('p', { class: 'cause', 'data-testid': 'cause', text: cause }),
         ...(result.loadout && result.loadout.character !== 'ranger' ? [el('p', {
-          class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : ''),
+          class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : '') + ` · ${DIFFICULTY[result.difficulty ?? 'hard'].name}`,
         })] : []),
         newRecords.length ? el('div', { class: 'badges' }, newRecords.map((r) => el('span', { class: 'badge', text: NEW_RECORD_LABEL[r] }))) : el('div'),
         el('dl', { class: 'stats' }, [
@@ -661,7 +676,7 @@ export class Screens {
         tokens
           ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
               el('strong', { class: 'token', text: `획득 토큰 ◆ ${tokens.total}` }),
-              el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}) — 타이틀의 강화 상점에서 사용` }),
+              el('small', { class: 'muted', text: ` (생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}${tokens.difficulty ? ` · 난이도 ${tokens.difficulty}` : ''}) — 타이틀의 강화 상점에서 사용` }),
             ])
           : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
         this.damageBreakdown(result),
