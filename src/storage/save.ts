@@ -31,10 +31,10 @@ export interface SaveMeta {
 export interface SaveData {
   version: typeof SAVE_VERSION;
   settings: { volume: number; difficulty: DifficultyId };
-  /** 보통 난이도 기록 (난이도가 생기기 전 기록도 여기에 둔다) */
+  /** 어려움 난이도 기록 (난이도가 생기기 전 기록도 어려움 수치였으므로 여기에 둔다) */
   records: SaveRecords;
-  /** 어려움 난이도 기록 */
-  hardRecords?: SaveRecords;
+  /** 보통 난이도 기록 */
+  normalRecords?: SaveRecords;
   meta: SaveMeta;
   relicCarry?: RelicId[];
   pendingRelicDraft?: RelicId[];
@@ -75,7 +75,28 @@ const EMPTY_RECORDS: SaveRecords = { runs: 0, wins: 0, bestSurvival: 0, bestKill
 
 /** 난이도별 최고 기록 */
 export function recordsFor(data: SaveData, difficulty: DifficultyId): SaveRecords {
-  return difficulty === 'hard' ? data.hardRecords ?? EMPTY_RECORDS : data.records;
+  return difficulty === 'hard' ? data.records : data.normalRecords ?? EMPTY_RECORDS;
+}
+
+const asObj = (v: unknown): Record<string, unknown> | null =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+
+/** 서로 다른 판들의 기록 합치기: 판 수·승리 수는 더하고, 최고 기록은 더 좋은 값 */
+function addRecords(a: SaveRecords, b: SaveRecords): SaveRecords {
+  return { ...mergeRecords(a, b), runs: a.runs + b.runs, wins: a.wins + b.wins };
+}
+
+/**
+ * 저장된 기록 → (어려움, 보통).
+ * 난이도 첫 배포(2026-11-26) 형식은 records 가 보통(난이도 이전 기록 포함), hardRecords 가 어려움이었다.
+ * 난이도 이전 기록은 어려움 수치였으므로, 그 형식이면 두 기록을 어려움으로 합친다.
+ */
+function splitRecords(records: unknown, hardRecords: unknown, normalRecords: unknown): { hard: SaveRecords; normal: SaveRecords | null } {
+  const top = parseRecords(asObj(records) ?? {});
+  const oldHard = asObj(hardRecords);
+  if (oldHard) return { hard: addRecords(top, parseRecords(oldHard)), normal: null };
+  const normal = asObj(normalRecords);
+  return { hard: top, normal: normal ? parseRecords(normal) : null };
 }
 
 /** 이전 버전 데이터를 현재 버전으로 변환. 변환할 수 없으면 null */
@@ -102,7 +123,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   // 필드 단위로 검증: 잘못된 값만 기본값으로 바꾼다
   const def = defaultSave();
   const settings = (migrated.settings ?? {}) as Record<string, unknown>;
-  const rec = (migrated.records ?? {}) as Record<string, unknown>;
+  const split = splitRecords(migrated.records, migrated.hardRecords, migrated.normalRecords);
   const meta = (migrated.meta ?? {}) as Record<string, unknown>;
   const rawPurchases = (meta.purchases && typeof meta.purchases === 'object' ? meta.purchases : {}) as Record<string, unknown>;
   const purchases: MetaPurchases = {};
@@ -113,7 +134,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   const data: SaveData = {
     version: SAVE_VERSION,
     settings: { volume: num(settings.volume, def.settings.volume, 0, 1), difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : DEFAULT_DIFFICULTY },
-    records: parseRecords(rec),
+    records: split.hard,
     meta: {
       tokens: Math.floor(num(meta.tokens, 0)),
       totalEarned: Math.floor(num(meta.totalEarned, 0)),
@@ -124,7 +145,7 @@ export function parseSave(raw: string | null): { data: SaveData; status: LoadSta
   if (carry.length) data.relicCarry = carry;
   if (Array.isArray(migrated.pendingRelicDraft)) data.pendingRelicDraft = validRelicIds(migrated.pendingRelicDraft);
   if (Array.isArray(migrated.previousRelics)) data.previousRelics = validRelicIds(migrated.previousRelics);
-  if (migrated.hardRecords && typeof migrated.hardRecords === 'object') data.hardRecords = parseRecords(migrated.hardRecords as Record<string, unknown>);
+  if (split.normal) data.normalRecords = split.normal;
   const cloudRev = Math.floor(num(migrated.cloudRev, 0));
   if (cloudRev > 0) data.cloudRev = cloudRev;
   return { data, status: 'ok' };
@@ -183,7 +204,7 @@ export function recordRun(
     }
   }
   const meta = { ...data.meta, tokens: data.meta.tokens + tokens.total, totalEarned: data.meta.totalEarned + tokens.total };
-  return { data: { ...data, ...(hard ? { hardRecords: r } : { records: r }), meta }, newRecords, tokens };
+  return { data: { ...data, ...(hard ? { records: r } : { normalRecords: r }), meta }, newRecords, tokens };
 }
 
 /** 영구 강화 구매. 토큰이 모자라거나 최대 단계면 null */
@@ -211,17 +232,17 @@ export interface CloudRow {
  */
 export function mergeCloud(local: SaveData, remote: CloudRow | null, preferRemote = false): SaveData {
   if (!remote) return local;
-  const remoteRecords = (remote.records && typeof remote.records === 'object' ? remote.records : {}) as Record<string, unknown>;
-  const remoteHard = remoteRecords.hard && typeof remoteRecords.hard === 'object' ? parseRecords(remoteRecords.hard as Record<string, unknown>) : null;
-  const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta, records: remoteRecords })).data;
+  const remoteRecords = asObj(remote.records) ?? {};
+  const remoteSplit = splitRecords(remoteRecords, remoteRecords.hard, remoteRecords.normal);
+  const parsed = parseSave(JSON.stringify({ ...local, meta: remote.meta })).data;
   const localRev = local.cloudRev ?? 0;
   const remoteRev = Math.max(0, Math.floor(Number(remote.rev) || 0));
-  const hardRecords = local.hardRecords && remoteHard ? mergeRecords(local.hardRecords, remoteHard) : local.hardRecords ?? remoteHard ?? undefined;
+  const normalRecords = local.normalRecords && remoteSplit.normal ? mergeRecords(local.normalRecords, remoteSplit.normal) : local.normalRecords ?? remoteSplit.normal ?? undefined;
   return {
     ...local,
-    ...(hardRecords ? { hardRecords } : {}),
+    ...(normalRecords ? { normalRecords } : {}),
     meta: preferRemote || (parsed.meta.totalEarned !== local.meta.totalEarned ? parsed.meta.totalEarned > local.meta.totalEarned : remoteRev > localRev) ? parsed.meta : local.meta,
-    records: mergeRecords(local.records, parsed.records),
+    records: mergeRecords(local.records, remoteSplit.hard),
     cloudRev: preferRemote ? remoteRev : Math.max(localRev, remoteRev),
   };
 }
@@ -238,7 +259,10 @@ function mergeRecords(a: SaveRecords, b: SaveRecords): SaveRecords {
   };
 }
 
-/** 계정에 올리는 기록: 보통 기록에 어려움 기록을 hard 로 함께 담는다 (서버 형식은 그대로) */
+/**
+ * 계정에 올리는 기록: 어려움 기록(난이도 이전 형식과 같은 자리)에 보통 기록을 normal 로 함께 담는다.
+ * 서버 SQL 은 그대로다.
+ */
 export function cloudRecords(data: SaveData): unknown {
-  return data.hardRecords ? { ...data.records, hard: data.hardRecords } : data.records;
+  return data.normalRecords ? { ...data.records, normal: data.normalRecords } : data.records;
 }
