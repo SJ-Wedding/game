@@ -156,6 +156,8 @@ export interface Gem {
   pulled: boolean;
   /** 바닥에 떨어진 뒤 지난 시간(초). 썩어 가는 보석이 사용 */
   age?: number;
+  /** 자석 아이템으로 끌려오는 중 (보석 폭풍) */
+  magnet?: boolean;
 }
 
 /** 바닥에 떨어진 아이템 */

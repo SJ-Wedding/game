@@ -20,6 +20,7 @@ import {
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
   drawMuzzleFlash,
 } from './weaponEffects';
+import { drawRelicEffects, drawRelicGround } from './relicEffects';
 import { drawResonance, drawResonanceDirection, drawTempestTrail, resonanceArt, tempestArt, type FusionArt } from './fusionEffects';
 import { CRESCENT_WAVE_DURATION, drawCrescentWave } from './roanCrescent';
 import { drawFlailTrail, drawMaceImpact, drawMaceQuake, drawMaceWeapon, maceLean } from './roanMaceEffects';
@@ -312,6 +313,8 @@ export class GameScene extends Phaser.Scene {
       ground.lineStyle(2, 0xc2efff, fade * 0.65).strokeCircle(field.x, field.y, field.r);
     }
 
+    drawRelicGround(ground, this.weaponEffects, sim);
+
     const assault = sim.assaultWarning;
     if (assault) {
       const opacity = 0.6 + 0.35 * (1 - Math.max(0, assault.at - t) / ASSAULT_CONFIG.warning);
@@ -439,6 +442,7 @@ export class GameScene extends Phaser.Scene {
 
     // 6) 플레이어 투사체
     for (const s of sim.playerShots) drawPlayerShot(g, s, t);
+    drawRelicEffects(g, sim);
 
     // 7) 적 투사체 (가장 위에 — 놓치지 않도록)
     for (const s of sim.enemyShots) {

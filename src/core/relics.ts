@@ -25,6 +25,7 @@ export function rollRelics(
   loadout: Loadout = DEFAULT_LOADOUT,
   previous: ReadonlySet<RelicId> = new Set(),
   forms: readonly string[] = [],
+  count = 3,
 ): UpgradeChoice[] {
   const offered: readonly RelicId[] = source === 'opening' ? OPENING_RELICS : RELIC_IDS.filter((id) => RELICS[id].source === source);
   // 로안 공격 타입 전용 유물은 그 타입을 고른 뒤에만 나온다. 거대 검기는 35% 확률로만 후보에 든다.
@@ -34,7 +35,9 @@ export function rollRelics(
   };
   let pool = offered.filter((id) => !owned.has(id) && relicAllowed(id, loadout) && formAllowed(id));
   if (source === 'opening' && loadout.character !== 'ranger') {
-    const extra = loadout.character === 'roan' ? ['chargeStance', 'meleeInstinct'] as const : ['swarm', 'bloodPrice'] as const;
+    const extra = loadout.character === 'roan'
+      ? ['chargeStance', 'meleeInstinct', 'shadowStep', 'vortexCharm', 'bladeWave'] as const
+      : ['swarm', 'bloodPrice', 'rallyFlag', 'overcharge', 'manaBurst'] as const;
     pool.push(...extra.filter((id) => !owned.has(id)));
   }
   if (source === 'opening' && previous.size) {
@@ -42,7 +45,7 @@ export function rollRelics(
     if (fresh.length) pool = fresh;
   }
   const choices: UpgradeChoice[] = [];
-  while (pool.length && choices.length < 3) {
+  while (pool.length && choices.length < count) {
     const id = pool.splice(rng.int(pool.length), 1)[0];
     choices.push({ kind: 'relic', id, source });
   }
@@ -143,7 +146,12 @@ export class RelicEffects {
     if (this.now < this.dodgeBoostUntil) multiplier *= 1.25;
     if (this.now < this.migrantUntil) multiplier *= 1.25;
     if (this.now < this.magnetUntil) multiplier *= 1.5;
-    return multiplier;
+    return multiplier * this.sim.extra.moveMultiplier;
+  }
+
+  /** 이번 틱에 움직였는가 */
+  get isMoving(): boolean {
+    return this.moving;
   }
 
   get maxHp(): number {
@@ -157,6 +165,7 @@ export class RelicEffects {
     if (this.has('clover')) hp -= 10;
     if (this.has('collectorPack')) hp += 10 * this.owned.size;
     if (this.lastMatchSpent) hp *= 0.8;
+    hp *= this.sim.extra.maxHpMultiplier;
     return Math.max(1, hp);
   }
 
@@ -207,7 +216,7 @@ export class RelicEffects {
       for (const e of this.sim.enemies) if (!e.dead && dist(p.x, p.y, e.x, e.y) <= 150 + e.r && ++count >= 4) break;
       if (count >= 4) multiplier *= 0.75;
     }
-    return multiplier;
+    return multiplier * this.sim.extra.damageTakenMultiplier;
   }
 
   get hurtInvulnBonus(): number {
@@ -222,7 +231,7 @@ export class RelicEffects {
     if (this.has('fifthBell')) rate *= 0.85;
     if (this.has('lightHands')) rate *= 1.15;
     if (this.now < this.magnetUntil) rate *= 1.5;
-    return rate * (1 + 0.05 * this.sim.essences.swift);
+    return rate * (1 + 0.05 * this.sim.essences.swift) * this.sim.extra.fireRateMultiplier;
   }
 
   /** 맥동 총열: 10초 주기 중 마지막 3초 */
@@ -243,11 +252,11 @@ export class RelicEffects {
   }
 
   get dodgeCooldown(): number {
-    return this.sim.stats.dodgeCooldown + (this.has('compass') ? 0.5 : 0);
+    return (this.sim.stats.dodgeCooldown + (this.has('compass') ? 0.5 : 0)) * this.sim.extra.dodgeCooldownMultiplier;
   }
 
   get cooldownMultiplier(): number {
-    return (this.heartActive ? 0.75 : 1) * this.periodicHitMultiplier * (this.has('lightHands') ? 0.9 : 1);
+    return (this.heartActive ? 0.75 : 1) * this.periodicHitMultiplier * (this.has('lightHands') ? 0.9 : 1) * this.sim.extra.cooldownMultiplier;
   }
 
   get periodicHitMultiplier(): number {
@@ -264,7 +273,9 @@ export class RelicEffects {
 
   heal(amount: number): void {
     const p = this.sim.player;
+    const before = p.hp;
     p.hp = Math.min(this.maxHp, p.hp + amount * (this.heartActive ? 0.5 : 1));
+    this.sim.extra.onHeal(p.hp - before);
   }
 
   update(dt: number): void {
@@ -297,6 +308,7 @@ export class RelicEffects {
   }
 
   onDodge(): void {
+    this.sim.extra.onDodge();
     if (this.has('windBoots')) this.dodgeBoostUntil = this.now + this.sim.stats.dodgeDuration + 1.5;
   }
 
@@ -307,6 +319,7 @@ export class RelicEffects {
 
   /** 스침의 깃: 회피 중 적 탄과 겹침 */
   onGraze(): void {
+    this.sim.extra.onGraze();
     if (!this.has('grazeFeather') || this.now < this.grazeReady) return;
     this.grazeReady = this.now + 1;
     const p = this.sim.player;
@@ -362,6 +375,7 @@ export class RelicEffects {
     if (enemy.kind === 'elite' && this.has('riftCrystal')) this.rareCards++;
     // 마나 순환 고리: 25마리 처치마다 전용 무기 대기시간 초기화
     if (this.has('lumenCycle') && ++this.cycleKills % 25 === 0) this.sim.weapons.resetCooldown();
+    this.sim.extra.onKill(enemy, source);
   }
 
   /** 멈춰 있는가 (집중의 지팡이) */
@@ -408,6 +422,7 @@ export class RelicEffects {
 
   /** 기본탄 명중 (일반 적·보스) */
   onBasicHit(target: Target): void {
+    this.sim.extra.onBasicHit(target);
     if (this.has('focusRing')) this.focusHits++;
     if (this.has('chainOrb') && this.sim.rngRelicFx.next() < 0.15) {
       const hit = new Set<Target>([target]);
@@ -447,7 +462,8 @@ export class RelicEffects {
   }
 
   /** 특수 무기 발동 직후 (불안정한 마력 코어). true 면 재사용 대기시간 즉시 초기화 */
-  onWeaponActivated(): boolean {
+  onWeaponActivated(kind: WeaponId | FusionId): boolean {
+    this.sim.extra.onWeaponActivated(kind);
     if (!this.has('unstableCore')) return false;
     const rng = this.sim.rngRelicFx;
     const reset = rng.next() < 0.25;
@@ -497,6 +513,7 @@ export class RelicEffects {
       this.lastMatchSpent = true;
       p.invuln = 2;
       p.hp = Math.max(1, p.hp);
+      this.sim.extra.onRevive();
       return p.hp - 1;
     }
     return amount;
@@ -510,6 +527,7 @@ export class RelicEffects {
   afterHurt(damage: number): void {
     if (this.has('thornMail') && damage > 0) this.blast(this.sim.player, 150, damage * 1.5, 'barrier');
     if (this.sim.loadout.character === 'roan') this.sim.roan.onHurt();
+    this.sim.extra.afterHurt(damage);
   }
 
   /** 수호천사의 깃털: 쓰러질 때 한 번 부활 */
@@ -528,6 +546,7 @@ export class RelicEffects {
       e.y = clamp(p.y + Math.sin(angle) * (200 + e.r), pad, ARENA_CONFIG.height - pad);
     }
     this.sim.weapons.trace('gravity', [p], 200, 0.6);
+    this.sim.extra.onRevive();
     return true;
   }
 
@@ -537,13 +556,16 @@ export class RelicEffects {
   }
 
   /** 유물 효과의 범위 피해 */
-  private blast(at: Point, radius: number, damage: number, fx: WeaponId): void {
+  private blast(at: Point, size: number, damage: number, fx: WeaponId): void {
     const { x, y } = at;
-    for (const e of this.sim.enemies) {
-      if (!e.dead && dist(x, y, e.x, e.y) < radius + e.r) this.sim.damageEnemy(e, damage, 'relic');
-    }
-    const boss = this.sim.boss;
-    if (boss && !boss.dead && !bossInvulnerable(boss) && dist(x, y, boss.x, boss.y) < radius + boss.r) this.sim.damageBoss(damage, 'relic');
+    const radius = size * this.sim.extra.areaMultiplier();
+    this.sim.extra.withExplosion(() => {
+      for (const e of this.sim.enemies) {
+        if (!e.dead && dist(x, y, e.x, e.y) < radius + e.r) this.sim.damageEnemy(e, damage, 'relic');
+      }
+      const boss = this.sim.boss;
+      if (boss && !boss.dead && !bossInvulnerable(boss) && dist(x, y, boss.x, boss.y) < radius + boss.r) this.sim.damageBoss(damage, 'relic');
+    });
     this.sim.weapons.trace(fx, [{ x, y }], radius, 0.45);
   }
 
@@ -552,12 +574,13 @@ export class RelicEffects {
     if (this.has('anvil')) multiplier *= 1.55;
     if (this.has('catalyst')) multiplier *= 0.75;
     if (this.has('scatterSeal')) multiplier *= 0.82;
-    return this.sim.stats.damage * multiplier;
+    return this.sim.stats.damage * multiplier * this.sim.extra.shotDamageMultiplier;
   }
 
-  damageMultiplier(target: Boss | Enemy, basic: boolean): number {
+  damageMultiplier(target: Boss | Enemy, basic: boolean, source?: AttackId): number {
     const essence = 1 + 0.04 * this.sim.essences.power;
     if (!this.owned.size) return essence;
+    const extra = this.sim.extra.damageMultiplier(target, source);
     let multiplier = essence * (this.exposed(target) ? 1.15 : 1) * (this.sim.loadout.character === 'roan' ? this.sim.roan.exposure(target) : 1);
     multiplier *= this.has('oath') ? 1 + Math.min(8, Math.floor((this.sim.kills - this.oathKills) / 25)) * 0.04 : 1;
     for (const id of this.owned) {
@@ -586,7 +609,7 @@ export class RelicEffects {
     if (this.has('collectorPack')) multiplier *= 1 + 0.04 * this.owned.size;
     if (this.now < this.alchemistUntil) multiplier *= 1.3;
     if (this.now < this.magnetUntil) multiplier *= 1.5;
-    return multiplier;
+    return multiplier * extra;
   }
 
   fusionMultiplier(id: FusionId): number {

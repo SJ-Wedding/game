@@ -149,6 +149,50 @@ export const RELICS = {
   constellation: { source: 'elite', symbol: '✧', weapon: 'spear', name: '별자리 창끝', effect: '관통 창이 적 3마리 이상을 꿰뚫으면 끝 지점에서 창 2개가 좌우로 발사됩니다(피해 50%). 조준 시간 +0.3초.' },
   secondBell: { source: 'elite', symbol: '♫', weapon: 'mark', name: '두 번째 종소리', effect: '낙뢰 표식이 기본탄 3회 대신 2회 명중으로 발동합니다. 낙뢰 범위 −25%.' },
   plagueJar: { source: 'elite', symbol: '⚘', weapon: 'infection', name: '역병 항아리', effect: '감염이 번질 때 감염되는 적 +2마리. 감염 피해 −20%.' },
+  // ── 유물 추가 기획안: 공통 25 ──
+  fuseChain: { source: 'level', symbol: '✸', name: '도화선 사슬', effect: '폭발로 처치된 적이 반경 70px 폭발(그 적 최대 체력의 12%)을 일으킵니다. 연쇄 최대 4단, 초당 20회. 폭발 수단이 없어도 15번째 처치마다 1회 폭발합니다.' },
+  slaughterDrum: { source: 'level', symbol: '☰', name: '학살의 북소리', effect: '처치마다 광란 1중첩(3초, 처치 시 갱신). 중첩당 공격 속도 +1%, 최대 30중첩. 30중첩이면 이동 속도 +15%.' },
+  bountyLedger: { source: 'elite', symbol: '✍', name: '현상금 장부', effect: '균열 수호자를 처치할 때마다 이번 판 모든 피해 +6%, 최대 +36%.' },
+  plagueMask: { source: 'level', symbol: '☤', name: '역병 의사의 가면', effect: '적에게 걸린 상태이상(둔화·빙결·기절·화상·감염·출혈) 1종류당 그 적이 받는 피해 +8%, 최대 +32%.' },
+  frostShard: { source: 'level', symbol: '❆', name: '서리 결정', effect: '둔화·빙결된 적이 죽으면 얼음 파편 4개가 튀어, 맞은 적에게 처치한 적 최대 체력의 10% 피해와 1초 둔화를 줍니다.' },
+  emberJar: { source: 'level', symbol: '♨', name: '불씨 항아리', effect: '모든 공격이 10% 확률로 화상을 겁니다(3초, 초당 1타 피해의 25%, 최대 3중첩).' },
+  sporePouch: { source: 'level', symbol: '✿', name: '역병 포자 주머니', effect: '모든 공격이 8% 확률로 감염을 겁니다(4초, 초당 1타 피해의 20%). 감염된 적이 죽으면 가까운 2마리에게 옮습니다.' },
+  chargeCell: { source: 'level', symbol: '⌬', name: '전하 축적기', effect: '번개 피해를 받은 적에게 3초간 전하. 전하 걸린 적을 다른 공격이 맞히면 20% 확률로 가까운 적 2마리에게 감전(1타 피해의 60%).' },
+  shadowStep: { source: 'level', symbol: '◒', name: '그림자 발자국', effect: '회피 경로에 2초간 그림자 길이 남습니다. 길 위의 적은 둔화되고 초당 1타 피해의 120%를 받습니다.' },
+  sprintEngine: { source: 'level', symbol: '➽', name: '질주 엔진', effect: '기본보다 빠른 이동 속도 1%당 모든 피해 +0.6%, 최대 +40%.' },
+  rallyFlag: { source: 'level', symbol: '⚑', name: '진지의 깃발', effect: '1.5초 멈추면 반경 220px 진지가 생깁니다(멈춰 있는 동안 유지). 진지 안에서 공격 속도·특수 무기 발동 속도 +20%, 받는 피해 −10%.' },
+  vengeance: { source: 'level', symbol: '☬', name: '보복의 맹세', effect: '피격 후 4초간 모든 피해 +30%(다시 맞으면 갱신).' },
+  painVault: { source: 'elite', symbol: '⊗', name: '고통의 저장고', effect: '받은 피해를 저장합니다(최대 최대 체력의 100%). 회피하면 저장량의 300%를 반경 200px에 방출하고 비웁니다.' },
+  cliffDance: { source: 'level', symbol: '⚠', name: '벼랑 끝의 춤', effect: '체력 30% 이하에서 회피 대기시간 −50%, 처치마다 체력 1 회복(초당 최대 3).' },
+  phoenixAsh: { source: 'elite', symbol: '☀', name: '불사조의 재', effect: '마지막 성냥·수호천사의 깃털·부활이 발동하면 반경 300px 화염 폭발(1타 피해의 1,000%) 후 10초간 모든 피해 +60%. 부활 수단이 없으면 판마다 한 번 체력 30%로 부활합니다.' },
+  treasureMap: { source: 'level', symbol: '⌘', name: '보물 지도', effect: '균열 수호자 유물 후보가 3장에서 4장으로 늘어납니다. 다음 판으로 가져갈 수 없습니다.', carry: false },
+  gemStorm: { source: 'level', symbol: '✶', name: '보석 폭풍', effect: '경험치 보석을 주울 때 4% 확률로 그 자리 반경 120px 폭발(1타 피해의 150%). 자석으로 끌려온 보석은 모두 폭발합니다(최대 30개).' },
+  luckyStrike: { source: 'level', symbol: '☆', name: '행운의 일격', effect: '모든 공격이 (행운 × 1.5)% 확률로 피해 3배.' },
+  riftCore: { source: 'elite', symbol: '⊚', name: '균열 핵 조각', effect: '균열 수호자가 죽은 자리에 4초간 균열 핵이 생겨 반경 260px 일반 적을 끌어당기고, 끝날 때 폭발합니다(수호자 최대 체력의 15%).' },
+  overcharge: { source: 'level', symbol: '▤', name: '과충전 배터리', effect: '특수 무기·전용 무기·합체 무기가 5번 발동할 때마다 다음 발동 피해 +150%, 범위 +30%.' },
+  echoBrand: { source: 'elite', symbol: '⟲', name: '메아리 각인', effect: '특수 무기·전용 무기로 처치하면 12% 확률로 그 무기가 0.2초 뒤 한 번 더 발동합니다(무기마다 2초에 1회).' },
+  vortexCharm: { source: 'level', symbol: '❁', name: '소용돌이 부적', effect: '8초마다 반경 320px 일반 적을 몸 주위 120px까지 끌어당깁니다.' },
+  expansionSeal: { source: 'level', symbol: '⤢', name: '확장의 인장', effect: '모든 범위(폭발·장판·충격파·특수 무기 반경·근접 거리) +20%. 공격 속도 −8%.' },
+  stoppedWatch: { source: 'elite', symbol: '⧖', name: '멈춘 회중시계', effect: '40초마다 2초간 화면의 일반 적과 적 탄이 멈춥니다. 멈춘 적이 받는 피해 +40%.' },
+  soulHarvest: { source: 'level', symbol: '☽', name: '영혼 수확', effect: '처치 시 20% 확률로 영혼 구슬이 생겨 0.5초 뒤 가장 가까운 적에게 날아가 1타 피해의 120%를 줍니다(관통 1).' },
+  // ── 유물 추가 기획안: 균열 사수 5 ──
+  armoryKey: { source: 'elite', symbol: '⚙', character: 'ranger', name: '무기고 열쇠', effect: '보유한 특수 무기 1종당 기본탄 피해 +5%, Lv3 무기는 1종당 +3% 추가. 합체 무기는 2종으로 셉니다.' },
+  fusionCatalyst: { source: 'elite', symbol: '⧉', character: 'ranger', name: '융합 촉매', effect: '합체 무기가 발동하면 1.5초간 특수 무기 발동 간격 −30%.' },
+  casingStorm: { source: 'level', symbol: '⁘', character: 'ranger', name: '탄피 폭풍', effect: '기본 사격 20회마다 사방 12방향으로 탄막을 쏩니다(각 기본탄 피해의 60%, 관통 1).' },
+  overheat: { source: 'level', symbol: '☢', character: 'ranger', name: '과열 총신', effect: '기본탄 30회 명중마다 5초간 과열. 과열 중 기본탄이 명중 지점에서 반경 50px 폭발(기본탄 피해의 40%).' },
+  marksman: { source: 'elite', symbol: '⌾', character: 'ranger', name: '사수의 표적', effect: '기본탄에 3번 맞은 적은 4초간 표적. 특수 무기가 표적을 맞히면 피해 +40%, 표적이 죽으면 기본탄 6발이 사방으로 퍼집니다.' },
+  // ── 유물 추가 기획안: 루멘 5 ──
+  manaOverload: { source: 'elite', symbol: '❋', character: 'lumen', name: '마력 과부하', effect: '전용 강화 점수 10점 이상이면 전용 무기 발동이 25% 확률로 증폭(피해 2배, 범위·연쇄 거리 +30%).' },
+  dualGrimoire: { source: 'elite', symbol: '⧈', character: 'lumen', name: '이중 시전서', effect: '고르지 않은 전용 무기(연쇄 번개 ↔ 서리 포탑)를 피해 50%로 함께 사용합니다. 전용 강화는 고른 무기만 받습니다.' },
+  thunderRod: { source: 'elite', symbol: '↟', character: 'lumen', lumenWeapon: 'chain', name: '뇌전 피뢰주', effect: '연쇄가 6회 이상 이어지면 마지막 대상 자리에 4초간 피뢰주가 서서 1초마다 주변 적 3마리에게 연쇄(첫 타격의 30%).' },
+  blizzardCore: { source: 'elite', symbol: '❉', character: 'lumen', lumenWeapon: 'turret', name: '눈보라 핵', effect: '포탑이 3대 이상이면 포탑들을 잇는 영역에 눈보라. 안의 적은 둔화되고 초당 포탑 1발 피해의 50%를 받습니다.' },
+  manaBurst: { source: 'level', symbol: '⇝', character: 'lumen', name: '마나 폭주 망토', effect: '회피하면 전용 무기가 즉시 발동합니다(재사용 6초). 포탑은 회피를 끝낸 자리에 설치됩니다.' },
+  // ── 유물 추가 기획안: 로안 5 ──
+  warCry: { source: 'elite', symbol: '⚐', character: 'roan', name: '전장의 함성', effect: '장비를 고를 때마다(12·24·36레벨) 최대 체력 +10%, 근접 피해 +8%. 36레벨 각성 때 반경 300px 적을 2초 기절시킵니다(보스 제외).' },
+  bladeWave: { source: 'level', symbol: '≫', character: 'roan', name: '검기', effect: '근접 공격 4회마다 공격 방향으로 검기를 발사합니다(거리 300px, 관통, 근접 피해의 60%).' },
+  counterMaster: { source: 'elite', symbol: '⤺', character: 'roan', name: '반격의 달인', effect: '회피 후 1초 안의 첫 공격 피해 +60%. 회피로 적 탄을 통과하면 회피 대기시간 −0.5초.' },
+  ironCharge: { source: 'elite', symbol: '⇛', character: 'roan', name: '철벽 돌진', effect: '회피가 돌진으로 바뀌어 경로의 적에게 근접 피해의 100%를 주고 밀쳐냅니다. 회피 거리 +20%.' },
+  bloodWind: { source: 'level', symbol: '❦', character: 'roan', name: '피바람', effect: '체력을 1 회복할 때마다 다음 근접 공격 피해 +2%, 최대 +60%(공격하면 소모).' },
 } as const;
 
 export type RelicId = keyof typeof RELICS;
@@ -198,7 +242,8 @@ export function relicAllowed(id: RelicId, loadout: Loadout): boolean {
   }
   if (loadout.character === 'ranger') return true;
   if ('weapon' in relic) return loadout.character === 'lumen' && loadout.weapon === relic.weapon;
-  if (loadout.character === 'roan' && (id === 'heart' || id === 'catalyst' || id === 'unstableCore' || id === 'hourglass')) return false;
+  if (loadout.character === 'roan' && (id === 'heart' || id === 'catalyst' || id === 'unstableCore' || id === 'hourglass'
+    || id === 'chargeCell' || id === 'overcharge' || id === 'echoBrand')) return false;
   return !RANGED_RELICS.has(id);
 }
 

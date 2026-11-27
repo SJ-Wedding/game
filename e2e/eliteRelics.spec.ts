@@ -12,7 +12,8 @@ test('로안: 근접 특화 유물을 모두 가지면 수호자의 정수 카�
     // 삼중 선택의 인장은 보너스 선택 화면을 열지 않도록 보유 목록에만 넣는다
     sim.relics.owned.add('tripleChoice');
     // 상위 무기를 고르기 전에는 상위 무기 전용 유물이 나오지 않으므로 근접 특화 유물만 모두 가진다
-    for (const id of ['elitePact', 'bloodThirst', 'weaponThrow', 'armorBreaker', 'warriorBreath', 'toughMuscle']) sim.relics.acquire(id);
+    for (const id of ['elitePact', 'bloodThirst', 'weaponThrow', 'armorBreaker', 'warriorBreath', 'toughMuscle',
+      'bountyLedger', 'painVault', 'phoenixAsh', 'riftCore', 'stoppedWatch', 'warCry', 'counterMaster', 'ironCharge']) sim.relics.acquire(id);
     const elite = sim.spawnEnemy('elite', sim.player.x + 400, sim.player.y);
     sim.damageEnemy(elite, 1e9);
   });

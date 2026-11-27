@@ -317,7 +317,7 @@ describe('4장: 리스크-리턴 및 유틸리티', () => {
     const sim = withRelics('unstableCore');
     sim.player.hp = 1;
     let resets = 0;
-    for (let i = 0; i < 400; i++) if (sim.relics.onWeaponActivated()) resets++;
+    for (let i = 0; i < 400; i++) if (sim.relics.onWeaponActivated('chain')) resets++;
     expect(resets).toBeGreaterThan(60);
     expect(resets).toBeLessThan(140);
     expect(sim.player.hp).toBe(1);
