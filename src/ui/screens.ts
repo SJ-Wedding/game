@@ -9,8 +9,8 @@ import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, typ
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_PREVIEWS, weaponPreview } from './weaponPreview';
 import { relicArt, shopSprite } from './art';
+import { ARENA_ART, arenaEnemyText, arenaTheme } from '../render/arena';
 import { CHARACTER_SHEETS, roanTexture, WEAPON_TEXTURES } from '../render/textures';
-import { BOSS_CONFIG } from '../config/boss';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
 import type { PlayerStats } from '../config/player';
@@ -144,7 +144,7 @@ export class Screens {
       el('div', { class: 'title-layout ui-scroll' }, [
         el('section', { class: 'title-menu' }, [
           el('h1', { class: 'logo' }, ['균열 ', el('span', { text: '아레나' })]),
-          el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 ${josa(BOSS_CONFIG.name, '을/를')} 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
+          el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 전장의 보스를 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
           el('div', { class: 'title-actions' }, [play, shop, el('span', { class: 'title-tokens token ui-frame', 'data-testid': 'title-tokens', 'aria-label': `보유 토큰 ${meta.tokens}` }, [shopSprite(19, '◆'), ` ${meta.tokens}`])]),
           ...(h.onDifficulty ? [this.difficultyToggle(difficulty, h.onDifficulty)] : []),
           ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
@@ -657,11 +657,14 @@ export class Screens {
 
   showResult(result: RunResult, newRecords: NewRecord[], tokens: TokenReward | null, onRestart: () => void, onTitle: () => void): void {
     const win = result.outcome === 'victory';
+    const difficulty = result.difficulty ?? 'hard';
+    const arena = ARENA_ART[arenaTheme(result.seed, difficulty)];
+    const boss = josa(arena.names.boss, '을/를');
     let cause: string;
-    if (result.cause === 'boss') cause = `${josa(BOSS_CONFIG.name, '을/를')} 처치했습니다!`;
-    else if (result.cause === 'death') cause = `${result.killedBy ?? '적의 공격'}에 쓰러졌습니다.`;
+    if (result.cause === 'boss') cause = `${boss} 처치했습니다!`;
+    else if (result.cause === 'death') cause = `${arenaEnemyText(result.killedBy ?? '적의 공격', arena)}에 쓰러졌습니다.`;
     else
-      cause = `${formatTime(RUN_CONFIG.timeLimit)}까지 ${josa(BOSS_CONFIG.name, '을/를')} 처치하지 못했습니다${
+      cause = `${formatTime(RUN_CONFIG.timeLimit)}까지 ${boss} 처치하지 못했습니다${
         result.bossHpRatio !== null ? ` (보스 체력 ${Math.ceil(result.bossHpRatio * 100)}% 남음)` : ''
       }.`;
 
@@ -689,7 +692,7 @@ export class Screens {
           el('div', { class: 'ui-heading' }, [el('h2', { class: 'outcome', 'data-testid': 'outcome', text: win ? '승리' : '패배' }),
             el('p', { class: 'cause ui-context', 'data-testid': 'cause', text: cause })]),
           ...(result.loadout ? [el('p', {
-            class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : '') + ` · ${DIFFICULTY[result.difficulty ?? 'hard'].name}`,
+            class: 'muted', text: CHARACTERS[result.loadout.character].name + (result.loadout.character === 'lumen' ? ` · ${WEAPONS[result.loadout.weapon].name}` : '') + ` · ${DIFFICULTY[difficulty].name} · ${arena.name}`,
           })] : []),
         ]),
         el('div', { class: 'result-scroll ui-scroll' }, [

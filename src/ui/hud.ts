@@ -3,8 +3,8 @@ import { ROAN_UPGRADES, ROAN_WEAPONS } from '../config/roan';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import { WEAPON_FUSIONS, WEAPON_MAX_RANK, isFusionIngredient } from '../config/weapons';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
+import { ARENA_ART, arenaEnemyText, arenaTheme, type ArenaArt } from '../render/arena';
 import { WEAPON_TEXTURES } from '../render/textures';
-import { BOSS_CONFIG } from '../config/boss';
 import { xpVisual } from '../config/progression';
 import { RUN_CONFIG } from '../config/run';
 import { ALL_UPGRADES } from '../config/upgrades';
@@ -34,6 +34,7 @@ export class Hud {
   private timerSub: HTMLElement;
   private kills: HTMLElement;
   private bossBox: HTMLElement;
+  private bossName: HTMLElement;
   private bossFill: HTMLElement;
   private bossText: HTMLElement;
   private banner: HTMLElement;
@@ -51,6 +52,7 @@ export class Hud {
   private bannerUntil = 0;
   private lastPhaseLabel: string | null = null;
   private lastPicks = -1;
+  private arena: ArenaArt = ARENA_ART.canyon;
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -68,9 +70,10 @@ export class Hud {
     this.timerSub = el('div', { class: 'timer-sub', 'data-testid': 'hud-sub' });
     this.kills = el('div', { class: 'kills', 'data-testid': 'hud-kills' });
     this.bossFill = el('div', { class: 'fill' });
+    this.bossName = el('div', { class: 'boss-name' });
     this.bossText = el('span', { class: 'label', 'data-testid': 'hud-boss' });
     this.bossBox = el('div', { class: 'boss-bar ui-frame hidden' }, [
-      el('div', { class: 'boss-name', text: BOSS_CONFIG.name }),
+      this.bossName,
       el('div', { class: 'bar boss' }, [this.bossFill, this.bossText]),
     ]);
     this.banner = el('div', { class: 'banner', 'data-testid': 'hud-banner' });
@@ -121,7 +124,9 @@ export class Hud {
   }
 
   /** 새 판 시작 시 캐시 초기화 */
-  reset(): void {
+  reset(sim: GameSim): void {
+    this.arena = ARENA_ART[arenaTheme(sim.seed, sim.difficulty)];
+    this.bossName.textContent = this.arena.names.boss;
     this.c.reset();
     this.bannerUntil = 0;
     this.lastPhaseLabel = null;
@@ -183,7 +188,7 @@ export class Hud {
     c.text(
       this.timerSub,
       'timerSub',
-      `${DIFFICULTY[sim.difficulty].name} · ` + (sim.overtime ? '연장전 · 강화 돌격수 출현' : sim.bossSpawned ? '연장전까지 · 보스를 처치하세요!' : `남은 시간 · 보스까지 ${formatTime(Math.ceil(toBoss))}`),
+      `${DIFFICULTY[sim.difficulty].name} · ${this.arena.name} · ` + (sim.overtime ? '연장전 · 강화 돌격수 출현' : sim.bossSpawned ? '연장전까지 · 보스 처치' : `보스까지 ${formatTime(Math.ceil(toBoss))}`),
     );
     c.toggle(this.timer, 'urgent', 'urgent', sim.bossSpawned && sim.remaining < 30);
     c.text(this.kills, 'kills', `처치 ${sim.kills}`);
@@ -226,20 +231,20 @@ export class Hud {
     const ph = sim.currentSpawnPhase();
     if (ph && ph.label !== this.lastPhaseLabel) {
       if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 공격은 자동 · Space 회피 · Tab 상태창', 5);
-      else if (ph.announce) this.flash(ph.announce, 4);
+      else if (ph.announce) this.flash(arenaEnemyText(ph.announce, this.arena), 4);
       this.lastPhaseLabel = ph.label;
     }
     for (const ev of events) {
-      if (ev.type === 'eliteSpawn') this.flash('균열 수호자 출현! 돌진과 파편에 주의하세요', 3.5);
+      if (ev.type === 'eliteSpawn') this.flash(`${this.arena.names.elite} 출현! 돌진과 파편에 주의하세요`, 3.5);
       else if (ev.type === 'assaultWarning') this.flash(`${ASSAULT_CONFIG.warning}초 후 증원 공세! ${ev.amount}마리 · 화살표 방향`, ASSAULT_CONFIG.warning + 0.2);
       else if (ev.type === 'revive') this.flash('부활! 체력 50%로 다시 일어났습니다', 3);
       else if (ev.type === 'bomb') this.flash('균열 폭탄!', 1.5);
       else if (ev.type === 'bossSpawn') {
         const message = sim.elapsed >= RUN_CONFIG.bossAt && !sim.overtime ? `증원 웨이브당 ${ph?.batch}마리`
           : `${formatTime(RUN_CONFIG.timeLimit)}부터 강화 돌격수가 몰려옵니다`;
-        this.flash(`${BOSS_CONFIG.name} 등장 · ${message}`, 4);
+        this.flash(`${this.arena.names.boss} 등장 · ${message}`, 4);
       }
-      else if (ev.type === 'bossPhase') this.flash(`${josa(BOSS_CONFIG.name, '이/가')} 격노했다!`, 3);
+      else if (ev.type === 'bossPhase') this.flash(`${josa(this.arena.names.boss, '이/가')} 격노했다!`, 3);
     }
     if (this.bannerUntil && performance.now() > this.bannerUntil) {
       this.bannerUntil = 0;
