@@ -5,7 +5,7 @@ import { ARENA_CONFIG } from '../config/arena';
 import { bossInvulnerable } from './boss';
 import { clamp, compact, dist, distToSegment } from './math';
 import type { GameSim } from './sim';
-import type { Boss, Enemy } from './types';
+import type { AttackVariant, Boss, Enemy } from './types';
 
 interface Point { x: number; y: number }
 interface EchoAim extends Point { angle: number }
@@ -177,10 +177,10 @@ export class WeaponSystem {
       * (1 + upgrades * WEAPON_DAMAGE_PER_RANK + this.gradeBonus(kind));
   }
 
-  private damage(kind: WeaponId, target: Target, factor: number): void {
+  private damage(kind: WeaponId, target: Target, factor: number, variant?: AttackVariant): void {
     const damage = this.weaponDamage(kind, factor) * this.sim.extra.weaponDamageMultiplier(kind);
-    if ('id' in target) this.sim.damageEnemy(target, damage, kind);
-    else this.sim.damageBoss(damage, kind);
+    if ('id' in target) this.sim.damageEnemy(target, damage, kind, 0, variant);
+    else this.sim.damageBoss(damage, kind, 0, variant);
     const { loadout } = this.sim;
     if (loadout.character === 'lumen' && loadout.weapon === kind) this.sim.relics.onLumenHit(target);
   }
@@ -261,10 +261,10 @@ export class WeaponSystem {
     return this.baseDamage * recipe.damage * FUSION_DAMAGE_MULTIPLIER * (1 + grade) * this.sim.relics.fusionMultiplier(id) * growth;
   }
 
-  private hitFusion(id: FusionId, target: Target, damage: number): void {
+  private hitFusion(id: FusionId, target: Target, damage: number, variant?: AttackVariant): void {
     damage *= this.sim.extra.weaponDamageMultiplier(id);
-    if ('id' in target) this.sim.damageEnemy(target, damage, id);
-    else this.sim.damageBoss(damage, id);
+    if ('id' in target) this.sim.damageEnemy(target, damage, id, 0, variant);
+    else this.sim.damageBoss(damage, id, 0, variant);
   }
 
   private updateFusions(dt: number): void {
@@ -336,7 +336,7 @@ export class WeaponSystem {
     for (const target of this.targets()) {
       if (flight.hit.has(target) || distToSegment(target.x, target.y, x, y, flight.x, flight.y) > flight.radius + target.r) continue;
       flight.hit.add(target);
-      this.hitFusion('tempest', target, damage);
+      this.hitFusion('tempest', target, damage, flight.returning ? 'returning' : 'outbound');
       if (target.dead && relics.has('cog')) this.cogKills++;
     }
     if (flight.returning) return flight.age < 2.6 && dist(flight.x, flight.y, player.x, player.y) > 9;
@@ -446,13 +446,13 @@ export class WeaponSystem {
     return effect;
   }
 
-  private area(kind: WeaponId, point: Point, size: number, factor: number): void {
+  private area(kind: WeaponId, point: Point, size: number, factor: number, variant?: AttackVariant): void {
     const radius = size * this.sim.extra.areaMultiplier(kind);
     const points = [point];
     for (const target of this.targets()) {
       if (dist(point.x, point.y, target.x, target.y) >= radius + target.r) continue;
       if (kind === 'mark' && target !== point && points.length < 7) points.push(target);
-      this.damage(kind, target, factor);
+      this.damage(kind, target, factor, variant);
     }
     const duration = kind === 'mine' ? 0.58 : kind === 'gravity' ? 0.62 : kind === 'mark' ? 0.38 : 0.24;
     this.trace(kind, points, radius, duration);
@@ -650,8 +650,8 @@ export class WeaponSystem {
       f.next += 0.5;
       for (const target of this.targets()) {
         if (dist(f.x, f.y, target.x, target.y) >= f.r + target.r) continue;
-        if (f.fusion) this.hitFusion(f.fusion, target, f.damage);
-        else this.damage('mine', target, f.damage);
+        if (f.fusion) this.hitFusion(f.fusion, target, f.damage, 'frostField');
+        else this.damage('mine', target, f.damage, 'frostField');
       }
     }
     compact(this.mineFields, (f) => now <= f.until);
@@ -666,8 +666,8 @@ export class WeaponSystem {
       if (now + 1e-6 < burn.next) continue;
       burn.next += 0.45;
       // 화상 피해 = 불길 한 번 피해(0.34)의 20%
-      if (burn.fusionDamage !== undefined) this.hitFusion('inferno', target, burn.fusionDamage);
-      else this.damage('flame', target, 0.34 * 0.2);
+      if (burn.fusionDamage !== undefined) this.hitFusion('inferno', target, burn.fusionDamage, 'burn');
+      else this.damage('flame', target, 0.34 * 0.2, 'burn');
     }
   }
 
@@ -703,14 +703,14 @@ export class WeaponSystem {
     const repeatBonus = 1 + this.sim.characterShopBonus('lumenChainRepeat');
     const repeatTable = rebound ? [0.45, 0.40, 0.35] : LUMEN_CHAIN.repeatDamage;
     let firstFactor = 0;
-    const hit = (enemy: Target, at: Point, factor: number) => {
+    const hit = (enemy: Target, at: Point, factor: number, variant: AttackVariant) => {
       const repeats = visits.get(enemy) ?? 0;
       visits.set(enemy, repeats + 1);
       const repeatDamage = repeats > 0 ? repeatTable[Math.min(repeats, repeatTable.length) - 1] * repeatBonus : 1;
       // 피뢰 표식: 4초 안에 쓰러지면 주변 적 2마리에게 첫 타격의 50%
       if (rod) this.rodMarks.set(enemy, { until: now + 4, factor: firstFactor * 0.5 });
-      this.damage('chain', enemy, factor * repeatDamage * (crown ? 0.75 : 1));
-      if (crown) this.area('chain', at, 54, 0.75 * repeatDamage * scale);
+      this.damage('chain', enemy, factor * repeatDamage * (crown ? 0.75 : 1), recast ? 'doubleDischarge' : repeats > 0 ? 'rebound' : variant);
+      if (crown) this.area('chain', at, 54, 0.75 * repeatDamage * scale, 'crownBlast');
       return repeats;
     };
     let firstBranch: { target: Target; point: Point } | undefined;
@@ -727,7 +727,7 @@ export class WeaponSystem {
         // 뇌운 병: 첫 대상 자리에 3초간 뇌운, 1초마다 첫 타격의 40%
         if (relics.has('chainCloud')) this.clouds.push({ ...at, until: now + 3 + 1e-6, next: now + 1, factor: factor * 0.4 });
       }
-      reboundCounts.push(hit(target, at, factor));
+      reboundCounts.push(hit(target, at, factor, link === 0 ? 'openingBolt' : 'chainJump'));
       links++;
       last = at;
       if (link === 2) firstBranch = { target, point: at };
@@ -735,7 +735,7 @@ export class WeaponSystem {
     }
     this.trace('chain', points, 0, specialist ? 0.38 : 0.32).reboundCounts = reboundCounts;
     // 과부하 축전지: 6회 이상 이어지면 마지막 대상 자리에서 폭발
-    if (links >= 6 && relics.has('chainOverload')) this.sim.extra.withExplosion(() => this.area('chain', last, 120, firstFactor * 1.2));
+    if (links >= 6 && relics.has('chainOverload')) this.sim.extra.withExplosion(() => this.area('chain', last, 120, firstFactor * 1.2, 'overload'));
     // 뇌전 피뢰주: 마지막 대상 자리에 4초간 피뢰주
     if (links >= 6 && specialist && relics.has('thunderRod')) this.sim.extra.addRod(last, firstFactor * 0.3);
     if (!firstBranch || !branches) return;
@@ -746,7 +746,7 @@ export class WeaponSystem {
       if (!extra) break;
       branched.add(extra);
       const at = { x: extra.x, y: extra.y };
-      const repeats = hit(extra, at, STARTER_HIT_FACTOR.chain * forkFactor * scale);
+      const repeats = hit(extra, at, STARTER_HIT_FACTOR.chain * forkFactor * scale, 'fork');
       this.trace('chain', [firstBranch.point, at], 0, 0.38).reboundCounts = [0, repeats];
     }
   }
@@ -765,7 +765,7 @@ export class WeaponSystem {
     for (const cloud of this.clouds) {
       if (now + 1e-6 < cloud.next || cloud.next > cloud.until) continue;
       cloud.next += 1;
-      this.area('chain', cloud, 100, cloud.factor);
+      this.area('chain', cloud, 100, cloud.factor, 'stormCloud');
     }
     compact(this.clouds, (cloud) => cloud.next <= cloud.until);
     const bursts = this.rodBursts.splice(0);
@@ -777,7 +777,7 @@ export class WeaponSystem {
         if (!next) break;
         skip.add(next);
         this.trace('chain', [burst, next], 0, 0.3);
-        this.damage('chain', next, burst.factor);
+        this.damage('chain', next, burst.factor, 'rodBurst');
       }
     }
     if (this.rodMarks.size > 64) for (const [target, mark] of this.rodMarks) if (mark.until <= now || target.dead) this.rodMarks.delete(target);
@@ -835,7 +835,7 @@ export class WeaponSystem {
   /** 자폭 냉각기: 포탑이 사라질 때 반경 120px 서리 폭발(포탑 1발의 300%) */
   private turretExpired(turret: Device): void {
     if (!this.sim.relics.has('turretBlast') || this.sim.loadout.character !== 'lumen') return;
-    this.sim.extra.withExplosion(() => this.area('turret', turret, 120, this.turretFactor * 3));
+    this.sim.extra.withExplosion(() => this.area('turret', turret, 120, this.turretFactor * 3, 'turretSelfDestruct'));
     this.trace('turret', [turret], 120, 0.4, 'frostBurst');
   }
 
@@ -868,14 +868,14 @@ export class WeaponSystem {
     const scope = relics.has('turretScope');
     const bonusSlow = this.sim.characterShopBonus('lumenTurretSlow');
     const slowDuration = (permafrost ? 1.5 : 0.9) + bonusSlow;
-    const strike = (t: Target, scale: number) => {
+    const strike = (t: Target, scale: number, variant: AttackVariant) => {
       if ('id' in t) {
         // 영구 동토 핵: 이미 둔화된 적이 다시 맞으면 0.4초 빙결
         if (permafrost && t.slowUntil > elapsed) t.rootedUntil = Math.max(t.rootedUntil, elapsed + 0.4);
         t.slowUntil = Math.max(t.slowUntil, elapsed + slowDuration);
       }
       const far = scope && dist(turret.x, turret.y, t.x, t.y) > 250 ? 1.2 : 1;
-      this.damage('turret', t, factor * scale * far);
+      this.damage('turret', t, factor * scale * far, variant);
     };
     const targets = [target];
     turret.shots = (turret.shots ?? 0) + 1;
@@ -895,7 +895,7 @@ export class WeaponSystem {
         if (pellet) targets.push(pellet);
       }
       this.trace('turret', [turret, target], 0, 0.26);
-      for (const t of targets) strike(t, 0.6);
+      for (const t of targets) strike(t, 0.6, 'turretSpread');
     } else {
       const pierce = this.sim.mastery('turretPierce') + this.sim.characterShopBonus('lumenTurretPierce');
       if (pierce > 0) {
@@ -909,7 +909,7 @@ export class WeaponSystem {
         targets.push(...extra.slice(0, pierce));
       }
       this.trace('turret', [turret, ...targets], 0, 0.26);
-      for (const t of targets) strike(t, 1);
+      for (const t of targets) strike(t, 1, t === target ? 'turretShot' : 'turretPierce');
     }
     const frost = this.sim.mastery('turretFrost');
     if (!frost) return;
@@ -921,7 +921,7 @@ export class WeaponSystem {
         if (splash.has(t) || dist(impact.x, impact.y, t.x, t.y) > radius + t.r) continue;
         splash.add(t);
         if ('id' in t) t.slowUntil = Math.max(t.slowUntil, elapsed + 0.8 * frost + bonusSlow);
-        this.damage('turret', t, factor * 0.35 * frost);
+        this.damage('turret', t, factor * 0.35 * frost, 'turretFrost');
       }
     }
   }
@@ -964,7 +964,7 @@ export class WeaponSystem {
       if (target) {
         this.infected.set(target, now + 5);
         this.trace('infection', [target], target.r, 0.46);
-        this.damage('infection', target, this.infectionFactor);
+        this.damage('infection', target, this.infectionFactor, 'infectionSeed');
       }
     }
     const origins = this.contagion.splice(0);
@@ -974,7 +974,7 @@ export class WeaponSystem {
       const infect = (enemy: Enemy) => {
         this.infected.set(enemy, now + 5);
         this.trace('infection', [origin, enemy], enemy.r, 0.62);
-        this.damage('infection', enemy, 1.1 * this.infectionFactor);
+        this.damage('infection', enemy, 1.1 * this.infectionFactor, 'infectionSpread');
       };
       for (const enemy of this.sim.enemies) {
         if (enemy.dead || this.infected.has(enemy) || dist(enemy.x, enemy.y, origin.x, origin.y) > radius + enemy.r) continue;
@@ -1067,7 +1067,7 @@ export class WeaponSystem {
         for (const target of this.targets()) {
           if (d.hit.has(target) || dist(d.x, d.y, target.x, target.y) >= d.r + target.r) continue;
           d.hit.add(target);
-          this.damage(d.kind, target, 1.35);
+          this.damage(d.kind, target, 1.35, returning ? 'returning' : 'outbound');
         }
         break;
       }

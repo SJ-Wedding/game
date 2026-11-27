@@ -98,6 +98,27 @@ test('철검 수호자 로안: 베기와 전용 강화 스택이 상태창에 �
   expect(errors).toEqual([]);
 });
 
+test('로안: 장검 손잡이와 넓은 베기는 서로 다른 전용 아이콘을 쓴다', async ({ page }) => {
+  await page.goto('/?dev=1&god=1&seed=1');
+  await page.getByTestId('play').click();
+  await page.getByTestId('character-roan').click();
+  await page.getByTestId('hud-hp').waitFor();
+  await page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
+  });
+
+  const choices = page.locator('.card');
+  const range = choices.filter({ hasText: '장검 손잡이' }).locator('.choice-art > .choice-sprite');
+  const arc = choices.filter({ hasText: '넓은 베기' }).locator('.choice-art > .choice-sprite');
+  await expect(range).toBeVisible();
+  await expect(arc).toBeVisible();
+  await expect(range).toHaveCSS('background-image', /choice-icons/);
+  await expect(arc).toHaveCSS('background-image', /choice-icons/);
+  const rangePosition = await range.evaluate((icon) => getComputedStyle(icon).backgroundPosition);
+  await expect(arc).not.toHaveCSS('background-position', rangePosition);
+});
+
 test('로안: 12레벨 무기, 24레벨 상위 무기를 고르면 디자인과 공격이 바뀐다', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/?dev=1&god=1&seed=553');

@@ -37,6 +37,7 @@ export class Hud {
   private bossName: HTMLElement;
   private bossFill: HTMLElement;
   private bossText: HTMLElement;
+  private readonly menu: HTMLButtonElement;
   private banner: HTMLElement;
   private chips: HTMLElement;
   private recipes: HTMLButtonElement;
@@ -54,7 +55,7 @@ export class Hud {
   private lastPicks = -1;
   private arena: ArenaArt = ARENA_ART.canyon;
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, private readonly touch = false) {
     this.root = root;
     root.replaceChildren();
     this.hpFill = el('div', { class: 'fill' });
@@ -87,13 +88,19 @@ export class Hud {
     this.relicBox = el('section', { class: 'hud-relics ui-frame hidden', 'aria-label': '보유 유물', 'data-testid': 'hud-relics' }, [
       el('span', { class: 'relic-label', text: '보유 유물' }), this.relicSlots, this.moreRelics,
     ]);
+    this.menu = el('button', { class: 'hud-menu ui-frame', type: 'button', 'data-testid': 'hud-menu', 'aria-label': '인게임 메뉴' }, [
+      el('span', { class: 'hud-menu-bars', 'aria-hidden': 'true' }), '메뉴',
+    ]);
 
     root.append(
-      el('div', { class: 'hud-left ui-frame' }, [
-        this.hpText,
-        el('div', { class: 'bar hp' }, [this.hpFill]),
-        this.dodgeBox,
-        this.swordForms,
+      el('div', { class: 'hud-top-left' }, [
+        this.menu,
+        el('div', { class: 'hud-left ui-frame' }, [
+          this.hpText,
+          el('div', { class: 'bar hp' }, [this.hpFill]),
+          this.dodgeBox,
+          this.swordForms,
+        ]),
       ]),
       el('div', { class: 'hud-center ui-frame' }, [this.timer, this.timerSub]),
       el('div', { class: 'hud-right' }, [el('div', { class: 'hud-kills ui-frame' }, [this.kills]), this.relicBox, this.recipes]),
@@ -109,6 +116,10 @@ export class Hud {
 
   onRecipes(handler: () => void): void {
     this.recipes.addEventListener('click', handler);
+  }
+
+  onMenu(handler: () => void): void {
+    this.menu.addEventListener('click', handler);
   }
 
   onRelics(handler: () => void): void {
@@ -153,7 +164,7 @@ export class Hud {
     if (this.lastRelics !== sim.relics.owned.size || this.lastRelicFusions !== sim.weapons.fusions.size) {
       this.lastRelics = sim.relics.owned.size;
       this.lastRelicFusions = sim.weapons.fusions.size;
-      const shown = [...sim.relics.owned].slice(-COMPACT_RELIC_LIMIT);
+      const shown = [...sim.relics.owned].slice(-(this.touch ? 3 : COMPACT_RELIC_LIMIT));
       this.relicSlots.replaceChildren(...relicInventory(shown, 'hud', { fusions: sim.weapons.fusions }));
       const overflow = this.lastRelics - shown.length;
       this.moreRelics.classList.toggle('hidden', overflow === 0);
@@ -230,7 +241,9 @@ export class Hud {
     // 안내 문구
     const ph = sim.currentSpawnPhase();
     if (ph && ph.label !== this.lastPhaseLabel) {
-      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash('WASD 이동 · 공격은 자동 · Space 회피 · Tab 상태창', 5);
+      if (this.lastPhaseLabel === null && sim.elapsed < 5) this.flash(this.touch
+        ? '조이스틱 이동 · 회피 버튼 · 자동 공격'
+        : 'WASD 이동 · 공격은 자동 · Space 회피 · Tab 상태창', 5);
       else if (ph.announce) this.flash(arenaEnemyText(ph.announce, this.arena), 4);
       this.lastPhaseLabel = ph.label;
     }

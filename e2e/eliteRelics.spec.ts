@@ -1,5 +1,60 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { collectErrors, snap } from './util';
+
+test('작은 화면에서 유물 아이콘이 보유 목록과 선택지의 테두리 안에 들어간다', async ({ page }) => {
+  const ids = ['chargeStance', 'migrantFeather', 'alchemistFlask', 'fortuneCard'];
+  const expectArtworkFits = async (frames: Locator, count: number) => {
+    await expect(frames).toHaveCount(count);
+    const artwork = await frames.evaluateAll((items) => items.map((frame) => {
+      const icon = frame.querySelector('.relic-art')!;
+      const bounds = frame.getBoundingClientRect();
+      const art = icon.getBoundingClientRect();
+      const style = getComputedStyle(icon);
+      return { position: style.backgroundPosition, image: style.backgroundImage,
+        fits: art.width > 0 && art.height > 0 && art.left >= bounds.left - 1 && art.top >= bounds.top - 1
+          && art.right <= bounds.right + 1 && art.bottom <= bounds.bottom + 1 };
+    }));
+    expect(artwork.every(({ fits, image }) => fits && image.includes('relic-icons'))).toBe(true);
+    expect(new Set(artwork.map(({ position }) => position)).size).toBe(count);
+  };
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?dev=1&god=1&seed=561');
+  await page.getByTestId('play').click();
+  await page.getByTestId('character-roan').click();
+  await page.getByTestId('hud-hp').waitFor();
+  await page.evaluate((relics) => {
+    const { sim } = (window as any).__rift;
+    for (const id of relics) sim.relics.acquire(id);
+  }, ids);
+  await expectArtworkFits(page.getByTestId('hud-relics').locator('.relic-icon'), 4);
+  await page.keyboard.press('Escape');
+  await expectArtworkFits(page.locator('.pause-content .relic-icon'), 4);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Tab');
+  await page.getByRole('tab', { name: '보유 유물 4개' }).click();
+  await expectArtworkFits(page.getByTestId('status-relics').locator('.relic-icon'), 4);
+  await page.getByTestId('status-relics').locator('[data-relic="fortuneCard"]').focus();
+  await expect(page.locator('#status-relic-detail')).toContainText('점술가의 카드');
+  await expectArtworkFits(page.locator('.status-relic-art'), 1);
+  await page.keyboard.press('Escape');
+
+  for (const choices of [ids.slice(0, 3), ids.slice(3)]) {
+    await page.evaluate((relics) => {
+      const { app, sim } = (window as any).__rift;
+      sim.level = 5;
+      sim.choices = relics.map((id) => ({ kind: 'relic', source: 'level', id }));
+      app.showLevelUp();
+    }, choices);
+    await expectArtworkFits(page.locator('.relic-card > .choice-art'), choices.length);
+  }
+
+  await page.evaluate((relics) => {
+    const { app } = (window as any).__rift;
+    app.screens.showCarry(relics, () => {}, () => {});
+  }, ids.slice(0, 3));
+  await expectArtworkFits(page.locator('.relic-pick > .carry-art'), 3);
+});
 
 test('로안: 근접 특화 유물을 모두 가지면 수호자의 정수 카드가 나오고, 새 유물이 전투에서 동작한다', async ({ page }) => {
   const errors = collectErrors(page);

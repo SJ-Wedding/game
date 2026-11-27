@@ -9,7 +9,7 @@ import {
 import { bossInvulnerable } from './boss';
 import { compact, dist, distToSegment } from './math';
 import type { GameSim } from './sim';
-import type { Boss, Enemy, Projectile } from './types';
+import type { AttackVariant, Boss, Enemy, Projectile } from './types';
 
 type Target = Enemy | Boss;
 interface Point { x: number; y: number }
@@ -58,7 +58,7 @@ export interface SwordSweep {
   hits: number;
 }
 
-interface Bleed { stacks: number; until: number; next: number }
+interface Bleed { stacks: number; until: number; next: number; design: RoanDesign }
 
 const BASE_DEF = { damage: 1, interval: 1, range: SWORD.range, angle: SWORD.angle, motion: 'slash' as RoanMotion };
 const THROW_SOURCES = new Set(['shard', 'thrownAxe', 'weaponThrow', 'smallAxe', 'bladeWave']);
@@ -493,6 +493,8 @@ export class RoanCombat {
       lonely = n === 1;
     }
     const armor = s.armorPierce ?? (this.family('mace') ? 0.3 + 0.1 * this.m('maceArmor') : 0);
+    const design = this.design;
+    const variant = s.wave ? 'crescent' : s.kind === 'main' && (s.thrust || lineWidth !== undefined) ? 'thrust' : s.kind;
     for (const t of hits) {
       const enemy = 'id' in t ? t : null;
       let dealt = base * instinct * (lonely ? 1.35 : 1);
@@ -510,8 +512,8 @@ export class RoanCombat {
         crit = this.sim.rngRelicFx.next() < chance;
         if (crit) dealt *= 2;
       }
-      if (enemy) sim.damageEnemy(enemy, dealt, 'sword', armor);
-      else sim.damageBoss(dealt, 'sword', armor);
+      if (enemy) sim.damageEnemy(enemy, dealt, 'sword', armor, variant, design);
+      else sim.damageBoss(dealt, 'sword', armor, variant, design);
       if (crit) {
         if (this.gear('vitalMark')) this.vital.set(t, now + 3);
         if (s.kind === 'main' && (this.awakened || this.gear('rapidThrust'))) {
@@ -519,8 +521,8 @@ export class RoanCombat {
           this.later(0.1, () => {
             if (target.dead) return;
             const extra = this.damage * 0.5;
-            if ('id' in target) sim.damageEnemy(target, extra, 'sword', armor);
-            else sim.damageBoss(extra, 'sword', armor);
+            if ('id' in target) sim.damageEnemy(target, extra, 'sword', armor, 'critFollowup', design);
+            else sim.damageBoss(extra, 'sword', armor, 'critFollowup', design);
           });
         }
       }
@@ -596,11 +598,11 @@ export class RoanCombat {
     sim.extra.withExplosion(() => {
       for (const e of sim.enemies) {
         if (e.dead || dist(at.x, at.y, e.x, e.y) >= radius + e.r) continue;
-        sim.damageEnemy(e, damage, 'sword');
+        sim.damageEnemy(e, damage, 'sword', 0, 'maceShock');
         if (stun && !e.dead) this.tryStun(e, 0);
       }
       const b = sim.boss;
-      if (b && !b.dead && !bossInvulnerable(b) && dist(at.x, at.y, b.x, b.y) < radius + b.r) sim.damageBoss(damage, 'sword');
+      if (b && !b.dead && !bossInvulnerable(b) && dist(at.x, at.y, b.x, b.y) < radius + b.r) sim.damageBoss(damage, 'sword', 0, 'maceShock');
     });
     sim.weapons.trace('mine', [at], radius, maceQuake ? 0.43 : 0.35, maceQuake ? 'maceQuake' : undefined);
   }
@@ -628,7 +630,7 @@ export class RoanCombat {
       for (const e of this.sim.enemies) {
         if (e.dead || dist(z.x, z.y, e.x, e.y) >= 70 + e.r) continue;
         if (e.kind !== 'elite') e.slowUntil = Math.max(e.slowUntil, now + 0.6);
-        this.sim.damageEnemy(e, this.damage * 0.15, 'sword');
+        this.sim.damageEnemy(e, this.damage * 0.15, 'sword', 0, 'maceScar', 'maul');
       }
     }
     compact(this.zones, (z) => z.next <= z.until + 1e-6);
@@ -639,7 +641,7 @@ export class RoanCombat {
     const speed = 560;
     this.sim.playerShots.push({
       x: p.x, y: p.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r, damage,
-      life: range / speed, source, pierceLeft: pierce, hitIds: new Set<number>(), ...extra,
+      life: range / speed, source, pierceLeft: pierce, hitIds: new Set<number>(), roanDesign: this.design, ...extra,
     });
   }
 
@@ -654,7 +656,7 @@ export class RoanCombat {
     for (let i = 0; i < count; i++) {
       const angle = Math.PI * 2 * i / count + 0.3;
       this.sim.playerShots.push({
-        x: from.x, y: from.y, vx: Math.cos(angle) * 420, vy: Math.sin(angle) * 420, r: 5, damage, life: 0.35, source: 'shard',
+        x: from.x, y: from.y, vx: Math.cos(angle) * 420, vy: Math.sin(angle) * 420, r: 5, damage, life: 0.35, source: 'shard', roanDesign: this.design,
         ...(this.gear('spinSpike') ? { pierceLeft: 1, hitIds: new Set<number>() } : {}),
       });
     }
@@ -669,7 +671,7 @@ export class RoanCombat {
     if (shot.source === 'thrownAxe' && this.gear('axeRain')) {
       for (let i = 0; i < 3; i++) {
         const angle = Math.PI * 2 * i / 3;
-        this.sim.playerShots.push({ x: target.x, y: target.y, vx: Math.cos(angle) * 360, vy: Math.sin(angle) * 360, r: 6, damage: this.damage * 0.25, life: 0.25, source: 'smallAxe' });
+        this.sim.playerShots.push({ x: target.x, y: target.y, vx: Math.cos(angle) * 360, vy: Math.sin(angle) * 360, r: 6, damage: this.damage * 0.25, life: 0.25, source: 'smallAxe', roanDesign: shot.roanDesign ?? this.design });
       }
     }
   }
@@ -682,25 +684,26 @@ export class RoanCombat {
 
   private addBleed(t: Target, stacks: number, duration = this.bleedDuration, scale = 1): void {
     const now = this.now;
-    const b = this.bleeds.get(t) ?? { stacks: 0, until: now, next: now + 0.5 };
+    const b = this.bleeds.get(t) ?? { stacks: 0, until: now, next: now + 0.5, design: this.design };
     const max = this.bleedMax;
     const before = b.stacks;
     b.stacks = Math.min(max, b.stacks + stacks * scale);
     b.until = Math.max(b.until, now + duration);
+    b.design = this.design;
     this.bleeds.set(t, b);
     if (Number.isFinite(max) && before < max && b.stacks >= max) {
       if (this.upgrade === 'stiletto' && this.awakened) {
         const burst = b.stacks * this.bleedPerStack(t) * Math.max(0, b.until - now);
         this.bleeds.delete(t);
-        this.hitBleed(t, burst);
+        this.hitBleed(t, burst, 'bleedDetonation', b.design);
       }
     }
   }
 
-  private hitBleed(t: Target, amount: number): void {
+  private hitBleed(t: Target, amount: number, variant: AttackVariant, design: RoanDesign): void {
     if (t.dead || amount <= 0) return;
-    if ('id' in t) this.sim.damageEnemy(t, amount, 'bleed');
-    else this.sim.damageBoss(amount, 'bleed');
+    if ('id' in t) this.sim.damageEnemy(t, amount, 'bleed', 0, variant, design);
+    else this.sim.damageBoss(amount, 'bleed', 0, variant, design);
   }
 
   private updateBleeds(now: number): void {
@@ -711,7 +714,7 @@ export class RoanCombat {
       }
       if (now + 1e-6 < b.next) continue;
       b.next += 0.5;
-      this.hitBleed(t, b.stacks * this.bleedPerStack(t) * 0.5);
+      this.hitBleed(t, b.stacks * this.bleedPerStack(t) * 0.5, 'bleedTick', b.design);
     }
   }
 
@@ -762,10 +765,10 @@ export class RoanCombat {
     sim.extra.withExplosion(() => {
       for (const o of sim.enemies) {
         if (o === e || o.dead || dist(e.x, e.y, o.x, o.y) >= radius + o.r) continue;
-        sim.damageEnemy(o, burst, 'bleed');
+        sim.damageEnemy(o, burst, 'bleed', 0, 'bleedBurst', bleed.design);
       }
       const b = sim.boss;
-      if (b && !b.dead && !bossInvulnerable(b) && dist(e.x, e.y, b.x, b.y) < radius + b.r) sim.damageBoss(burst, 'bleed');
+      if (b && !b.dead && !bossInvulnerable(b) && dist(e.x, e.y, b.x, b.y) < radius + b.r) sim.damageBoss(burst, 'bleed', 0, 'bleedBurst', bleed.design);
     });
     sim.weapons.trace('mine', [e], radius, 0.3, 'bleedBurst');
   }

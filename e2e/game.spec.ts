@@ -75,6 +75,7 @@ test.describe('균열 아레나 — 핵심 흐름', () => {
     await waitElapsed(page, 3);
     await page.keyboard.press('Escape');
     await expect(page.locator('#overlay[data-screen="pause"]')).toBeVisible();
+    await expect(page.getByTestId('touch-layout')).toHaveCount(0);
     const a = await snap(page);
     expect(a.paused).toBe(true);
     await page.waitForTimeout(1500);
