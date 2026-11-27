@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RunResult } from '../src/core/types';
 import { cloudRecords, defaultSave, loadSave, mergeCloud, parseSave, purchaseMeta, recordRun, recordsFor, SAVE_KEY, SAVE_VERSION, writeSave } from '../src/storage/save';
+import { tokenReward } from '../src/core/meta';
 import { MemoryStorage } from './helpers';
 
 const result = (over: Partial<RunResult> = {}): RunResult => ({
@@ -100,19 +101,27 @@ describe('로컬 저장', () => {
   it('판이 끝나면 토큰을 받고, 토큰으로 영구 강화를 산다', () => {
     let d = defaultSave();
     const r = recordRun(d, result({ difficulty: 'hard', survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
-    // 생존 10분 × 2 + 처치 140/50 = 2 + 엘리트 2 × 5 = 32
-    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, relics: 0, difficulty: 0, total: 32 });
+    // 생존 10분 × 2 + 처치 140/50 = 2 + 엘리트 2 × 5 = 32, 어려움 ×1.225 = 39
+    expect(r.tokens).toEqual({ survival: 20, kills: 2, elites: 10, victory: 0, relics: 0, difficulty: 7, total: 39 });
     d = r.data;
-    expect(d.meta.tokens).toBe(32);
+    expect(d.meta.tokens).toBe(39);
     const win = recordRun(d, result({ difficulty: 'hard', outcome: 'victory', cause: 'boss', survivalTime: 860, killsByKind: {} }));
     expect(win.tokens!.victory).toBe(30);
     d = win.data;
-    expect(d.meta.totalEarned).toBe(32 + 28 + 30);
+    expect(d.meta.totalEarned).toBe(39 + Math.round((28 + 30) * 1.225));
     const bought = purchaseMeta(d, 'hp')!;
     expect(bought.meta.tokens).toBe(d.meta.tokens - 10);
     expect(bought.meta.purchases.hp).toBe(1);
     expect(purchaseMeta({ ...d, meta: { ...d.meta, tokens: 5 } }, 'hp')).toBeNull(); // 토큰 부족
     expect(purchaseMeta({ ...d, meta: { ...d.meta, tokens: 999, purchases: { revive: 1 } } }, 'revive')).toBeNull(); // 최대 단계
+  });
+
+  it('어려움 토큰은 보통의 1.75배다', () => {
+    const run = { survivalTime: 840, killsByKind: { chaser: 1200 }, outcome: 'victory' as const };
+    const normal = tokenReward({ ...run, difficulty: 'normal' }).total;
+    const hard = tokenReward({ ...run, difficulty: 'hard' }).total;
+    expect([normal, hard]).toEqual([57, 100]); // 기본 82 → ×0.7 / ×1.225
+    expect(hard / normal).toBeCloseTo(1.75, 1);
   });
 
   it('보통 난이도는 토큰을 0.7배로 받는다', () => {

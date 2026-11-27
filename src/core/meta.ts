@@ -72,7 +72,7 @@ export interface TokenReward {
   victory: number;
   /** 유물로 늘어난 토큰 (탐욕의 황금 주사위, 서두른 초대장) */
   relics: number;
-  /** 난이도 보정 (보통 ×0.7 → 음수, 어려움 0) */
+  /** 난이도 보정 (보통 ×0.7 → 음수, 어려움 ×1.225 → 양수) */
   difficulty: number;
   total: number;
 }

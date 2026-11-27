@@ -421,7 +421,7 @@ describe('4장: 리스크-리턴 및 유틸리티', () => {
     expect(sim.relics.tokenMultiplier(true)).toBe(1.5);
     expect(sim.relics.tokenMultiplier(false)).toBe(1);
     const reward = tokenReward({ survivalTime: 600, killsByKind: {}, outcome: 'victory', tokenMultiplier: 1.4 });
-    expect(reward.relics).toBe(Math.round((reward.total - reward.relics) * 0.4));
+    expect(reward.relics).toBe(Math.round((reward.total - reward.relics - reward.difficulty) * 0.4));
   });
 });
 

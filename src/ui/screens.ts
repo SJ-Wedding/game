@@ -165,7 +165,7 @@ export class Screens {
     });
     return el('div', { class: 'difficulty-toggle', role: 'group', 'aria-label': '난이도', 'data-testid': 'difficulty-toggle' }, [
       el('span', { class: 'muted', text: '난이도' }), ...buttons,
-      el('small', { class: 'muted', text: current === 'normal' ? '토큰 ×0.7' : '몬스터 체력·공격 대폭 강화' }),
+      el('small', { class: 'muted', text: current === 'normal' ? '토큰 ×0.7' : '몬스터 체력·공격 대폭 강화 · 토큰 보통의 1.75배' }),
     ]);
   }
 
@@ -708,7 +708,7 @@ export class Screens {
               el('ul', { class: 'upgrades', 'data-testid': 'result-upgrades' }, ups),
               tokens ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
                 el('strong', { class: 'token' }, [shopSprite(19), `획득 토큰 ◆ ${tokens.total}`]),
-                el('small', { class: 'muted', text: `생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}${tokens.difficulty ? ` · 난이도 ${tokens.difficulty}` : ''}` }),
+                el('small', { class: 'muted', text: `생존 ${tokens.survival} · 처치 ${tokens.kills} · 엘리트 ${tokens.elites} · 승리 ${tokens.victory}${tokens.relics ? ` · 유물 ${tokens.relics}` : ''}${tokens.difficulty ? ` · 난이도 ${tokens.difficulty > 0 ? '+' : ''}${tokens.difficulty}` : ''}` }),
               ]) : el('small', { class: 'muted', text: '개발 옵션 사용 판은 토큰을 받지 않습니다.' }),
             ]),
           ]),
