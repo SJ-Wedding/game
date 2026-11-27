@@ -8,6 +8,7 @@ import { DEFAULT_DIFFICULTY, ENEMY_CONFIG, type DifficultyId } from '../config/e
 import { xpVisual } from '../config/progression';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import type { App } from '../app/App';
+import type { TouchControls } from '../ui/touchControls';
 import { BOSS_CHARGE_LENGTH } from '../core/boss';
 import type { GameSim } from '../core/sim';
 import type { Enemy, InputState, Player, SimEvent } from '../core/types';
@@ -72,7 +73,7 @@ export class GameScene extends Phaser.Scene {
   private dodgeQueued = false;
   private clickQueued = false;
 
-  constructor(app: App) {
+  constructor(app: App, private readonly touch?: TouchControls) {
     super('game');
     this.app = app;
   }
@@ -119,7 +120,31 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(VIEW_CONFIG.zoom).setBounds(-margin, -margin, width + 2 * margin, height + 2 * margin);
     this.cameras.main.setBackgroundColor(PALETTE.bg);
     this.cameras.main.centerOn(width / 2, height / 2);
+    if (this.touch) {
+      this.resizeTouchView(this.scale.gameSize);
+      this.scale.on(Phaser.Scale.Events.RESIZE, this.resizeTouchView, this);
+      // Phaser can cache the new parent bounds while the canvas still has its old size.
+      const resize = new ResizeObserver(([{ contentRect: { width, height } }]) => {
+        if (width === this.scale.width && height === this.scale.height) return;
+        this.scale.getParentBounds();
+        this.scale.refresh();
+      });
+      resize.observe(this.scale.parent);
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        resize.disconnect();
+        this.scale.off(Phaser.Scale.Events.RESIZE, this.resizeTouchView, this);
+      });
+    }
     this.app.attachScene(this);
+  }
+
+  private resizeTouchView({ width, height }: { width: number; height: number }): void {
+    const margin = ARENA_ART_MARGIN * 2;
+    const zoom = Math.max(0.44, Math.min(0.76, Math.min(width, height) * 0.0014),
+      width / (ARENA_CONFIG.width + margin), height / (ARENA_CONFIG.height + margin));
+    const player = this.app.sim?.player;
+    this.cameras.main.setZoom(zoom).centerOn(player?.x ?? ARENA_CONFIG.width / 2, player?.y ?? ARENA_CONFIG.height / 2);
+    this.touch?.reset();
   }
 
   update(): void {
@@ -137,6 +162,8 @@ export class GameScene extends Phaser.Scene {
     this.clickQueued = false;
     const events = this.app.frame(deltaMs / 1000, input);
     const sim = this.app.sim;
+    this.touch?.setActive(this.app.screen === 'playing');
+    if (sim) this.touch?.update(sim);
     if (sim !== this.renderedSim) {
       this.particles.length = 0;
       this.lastShot = null;
@@ -170,13 +197,15 @@ export class GameScene extends Phaser.Scene {
     const k = this.keys;
     const ptr = this.input.activePointer;
     const world = ptr.positionToCamera(this.cameras.main) as Phaser.Math.Vector2;
+    const touchDodge = this.touch?.consumeDodge() ?? false;
+    const movingWithTouch = this.touch?.moveX || this.touch?.moveY ? this.touch : undefined;
     return {
-      moveX: (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0),
-      moveY: (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0),
+      moveX: movingWithTouch?.moveX ?? Number(k.D.isDown || k.RIGHT.isDown) - Number(k.A.isDown || k.LEFT.isDown),
+      moveY: movingWithTouch?.moveY ?? Number(k.S.isDown || k.DOWN.isDown) - Number(k.W.isDown || k.UP.isDown),
       aimX: world.x,
       aimY: world.y,
       fire: ptr.leftButtonDown() || this.clickQueued,
-      dodge: this.dodgeQueued,
+      dodge: this.dodgeQueued || touchDodge,
     };
   }
 

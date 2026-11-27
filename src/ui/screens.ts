@@ -27,6 +27,7 @@ import { el } from './dom';
 import { damageBreakdown, runEndReason } from './combatReport';
 import { buildCodex, buildHistory } from './archive';
 import type { ArchiveSnapshot } from '../storage/archive';
+import type { TouchControls } from './touchControls';
 
 /**
  * 타이틀 / 일시정지 / 레벨업 / 결과 화면. 화면은 DOM 오버레이로 그린다.
@@ -77,7 +78,7 @@ export class Screens {
   private root: HTMLElement;
   current: 'none' | 'title' | 'account' | 'pause' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' | 'codex' | 'history' = 'none';
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, private readonly touch?: TouchControls) {
     this.root = root;
   }
 
@@ -120,6 +121,16 @@ export class Screens {
     return el('label', { class: 'volume' }, ['음량', input, value]);
   }
 
+  private touchLayoutControl(touch: TouchControls): HTMLElement {
+    const select = el('select', { 'data-testid': 'touch-layout' }, [
+      el('option', { value: 'left', text: '왼쪽 이동 · 오른쪽 회피' }),
+      el('option', { value: 'right', text: '왼쪽 회피 · 오른쪽 이동' }),
+    ]);
+    select.value = touch.moveSide;
+    select.addEventListener('change', () => touch.setMoveSide(select.value === 'right' ? 'right' : 'left'));
+    return el('label', { class: 'touch-layout' }, ['터치 조작 배치', select]);
+  }
+
   showTitle(records: SaveRecords, meta: SaveMeta, volume: number, h: TitleHandlers, dev: DevPanelState | null, account?: { username: string | null }, difficulty: DifficultyId = 'normal'): void {
     const play = el('button', { class: 'primary big', 'data-testid': 'play', 'data-autofocus': '' }, ['플레이 ', el('kbd', { text: 'Enter' })]);
     play.addEventListener('click', h.onPlay);
@@ -140,11 +151,16 @@ export class Screens {
 
     const controls = el('div', { class: 'controls' }, [
       el('h3', { text: '조작' }),
-      el('ul', {}, [
+      el('ul', { class: 'keyboard-controls' }, [
         el('li', {}, [el('kbd', { text: 'W A S D' }), ' 이동']),
         el('li', {}, [el('kbd', { text: 'Space' }), ' 회피 (잠깐 무적)']),
         el('li', {}, [el('kbd', { text: 'Tab' }), ' 상태창 (능력치 확인)']),
         el('li', {}, [el('kbd', { text: 'Esc' }), ' 일시정지']),
+      ]),
+      el('ul', { class: 'touch-guide' }, [
+        el('li', { text: '조이스틱으로 이동' }),
+        el('li', { text: '회피 버튼으로 회피' }),
+        el('li', { text: '왼쪽 위 메뉴로 일시정지' }),
       ]),
       el('p', { class: 'muted', text: '가까운 적을 자동으로 조준해 공격합니다.' }),
     ]);
@@ -328,6 +344,7 @@ export class Screens {
         el('header', {}, [el('h2', { text: '일시정지' }),
           el('p', { class: 'muted', text: reason === 'hidden' ? '탭이 숨겨져 자동으로 멈췄습니다. 전투 시간과 적 생성도 멈춰 있습니다.' : '전투 시간과 적 생성이 멈춰 있습니다.' })]),
         el('div', { class: 'pause-content ui-scroll' }, [resume, status, this.volumeControl(volume, h.onVolume),
+          ...(this.touch ? [this.touchLayoutControl(this.touch)] : []),
           ...(relics.length ? [
             el('h3', { text: '보유 유물' }),
             el('div', { class: 'relic-slots' }, relicInventory(relics.slice(-COMPACT_RELIC_LIMIT), 'pause', { fusions })),
@@ -467,12 +484,22 @@ export class Screens {
     const reroll = el('button', { class: 'reroll', 'data-testid': 'reroll' }, [`새로고침 (남은 ${opts.rerollsLeft}회) `, el('kbd', { text: 'R' })]);
     if (opts.rerollsLeft <= 0) reroll.setAttribute('disabled', '');
     reroll.addEventListener('click', opts.onReroll);
+    const keyHint = (keys: string) => this.touch ? '' : ` (클릭 또는 ${keys})`;
+    const gearKeys = keyHint(`1~${opts.choices.length}`);
+    const choiceHint = gearStage === 'weapon' ? `무기 하나를 고르세요${gearKeys}. 이번 판 동안 이 무기로 싸우고, 무기마다 체력·속도·회피가 다릅니다.`
+      : gearStage === 'upgrade' ? `상위 무기를 고르세요${gearKeys}. 이 상위 무기의 전용 강화와 유물이 나옵니다.`
+        : gearStage === 'awaken' ? `고른 상위 무기를 각성합니다${keyHint('1')}.`
+          : coin ? `균열 수호자 유물을 걸고 동전을 던질지 고르세요${keyHint('1·2')}`
+            : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회`
+              : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요')
+                : reward ? `유물 하나를 선택하세요${keyHint('1·2·3')}`
+                  : `강화 하나를 선택하세요${keyHint('1·2·3')}${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}`;
     this.mount(
       'levelup',
       el('div', { class: `panel levelup${reward ? ' levelup-reward' : ''}` }, [
         el('header', {}, [el('h2', { text: opts.title }),
           ...(opts.notice ? [el('p', { class: 'coin-notice', 'data-testid': 'coin-notice', text: opts.notice })] : []),
-          el('p', { class: 'muted', text: gearStage === 'weapon' ? `무기 하나를 고르세요 (클릭 또는 1~${opts.choices.length}). 이번 판 동안 이 무기로 싸우고, 무기마다 체력·속도·회피가 다릅니다.` : gearStage === 'upgrade' ? `상위 무기를 고르세요 (클릭 또는 1~${opts.choices.length}). 이 상위 무기의 전용 강화와 유물이 나옵니다.` : gearStage === 'awaken' ? '고른 상위 무기를 각성합니다 (클릭 또는 1).' : coin ? '균열 수호자 유물을 걸고 동전을 던질지 고르세요 (클릭 또는 1·2)' : opts.bonusChoices ? `보너스 강화 하나를 선택하세요 · 남은 선택 ${opts.bonusChoices}회` : opts.armory ? (opts.specialist ? '전용 강화를 하나 선택하세요' : '특수 무기 하나를 획득·강화하거나 준비된 합체를 선택하세요') : reward ? '유물 하나를 선택하세요 (클릭 또는 1·2·3)' : `강화 하나를 선택하세요 (클릭 또는 1·2·3)${opts.pending > 1 ? ` · 남은 선택 ${opts.pending}` : ''}` })]),
+          el('p', { class: 'muted', text: choiceHint })]),
         el('div', { class: 'choices-scroll ui-scroll' }, [el('div', { class: cards.length > 3 ? 'cards many' : 'cards', style: `--choice-count: ${cards.length}` }, cards)]),
         el('footer', {}, formChoice || reward || opts.armory || opts.bonusChoices ? [] : [reroll]),
       ]),

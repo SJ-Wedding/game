@@ -99,6 +99,7 @@ export class App {
     this.sfx = deps.sfx;
     this.hud = deps.hud;
     this.screens = deps.screens;
+    this.hud.onMenu(() => this.pause());
     this.hud.onRecipes(() => this.openStatus('recipes'));
     this.hud.onRelics(() => this.openStatus('relics'));
 
