@@ -61,7 +61,7 @@ export interface SwordSweep {
 interface Bleed { stacks: number; until: number; next: number; design: RoanDesign }
 
 const BASE_DEF = { damage: 1, interval: 1, range: SWORD.range, angle: SWORD.angle, motion: 'slash' as RoanMotion };
-const THROW_SOURCES = new Set(['shard', 'thrownAxe', 'weaponThrow', 'smallAxe']);
+const THROW_SOURCES = new Set(['shard', 'thrownAxe', 'weaponThrow', 'smallAxe', 'bladeWave']);
 
 /** 로안의 무기·상위 무기·각성과 근접 유물. GameSim 이 소유한다. */
 export class RoanCombat {
@@ -239,14 +239,15 @@ export class RoanCombat {
     let r = Math.min(base * SWORD.maxRange / SWORD.range, base * (1 + 0.12 * this.m('swordRange')));
     if (this.upgrade === 'greatsword') r *= 1 + 0.08 * this.m('greatswordReach');
     if (this.upgrade === 'halberd') r *= 1 + 0.1 * this.m('halberdPole');
-    return r * this.overflow * (1 + this.sim.characterShopBonus('roanReach'));
+    return r * this.overflow * (1 + this.sim.characterShopBonus('roanReach')) * this.sim.extra.areaMultiplier();
   }
 
   /** 플레일 회전 반경 */
   get flailRadius(): number {
     const max = 0.4 + 0.15 * this.m('flailSpin');
     return 70 * (1 + Math.min(max, 0.1 * this.flailStacks)) * (1 + 0.1 * this.m('flailChain'))
-      * Math.min(SWORD.maxRange / SWORD.range, 1 + 0.12 * this.m('swordRange')) * (1 + this.sim.characterShopBonus('roanReach'));
+      * Math.min(SWORD.maxRange / SWORD.range, 1 + 0.12 * this.m('swordRange')) * (1 + this.sim.characterShopBonus('roanReach'))
+      * this.sim.extra.areaMultiplier();
   }
 
   private get flailMaxed(): boolean {
@@ -350,7 +351,9 @@ export class RoanCombat {
     this.lastSwingAt = now;
     this.cdCut = 0;
 
-    let bonus = 1;
+    let bonus = this.sim.extra.swingBonus();
+    // 검기: 근접 공격 4회마다 공격 방향으로 검기
+    if (this.has('bladeWave') && this.swings % 4 === 0) this.projectile('bladeWave', p.aim, 300, this.damage * 0.6, 99, 14);
     if (this.gear('lumberjack') && this.lumber) {
       bonus *= 1 + 0.1 * this.lumber;
       this.lumber = 0;
@@ -589,15 +592,18 @@ export class RoanCombat {
     this.strike({ angle: 0, width: Math.PI * 2, range: radius, factor, center: at, kind: 'shock' });
   }
 
-  private blast(at: Point, radius: number, damage: number, stun: boolean, maceQuake = false): void {
+  private blast(at: Point, size: number, damage: number, stun: boolean, maceQuake = false): void {
     const sim = this.sim;
-    for (const e of sim.enemies) {
-      if (e.dead || dist(at.x, at.y, e.x, e.y) >= radius + e.r) continue;
-      sim.damageEnemy(e, damage, 'sword', 0, 'maceShock');
-      if (stun && !e.dead) this.tryStun(e, 0);
-    }
-    const b = sim.boss;
-    if (b && !b.dead && !bossInvulnerable(b) && dist(at.x, at.y, b.x, b.y) < radius + b.r) sim.damageBoss(damage, 'sword', 0, 'maceShock');
+    const radius = size * sim.extra.areaMultiplier();
+    sim.extra.withExplosion(() => {
+      for (const e of sim.enemies) {
+        if (e.dead || dist(at.x, at.y, e.x, e.y) >= radius + e.r) continue;
+        sim.damageEnemy(e, damage, 'sword', 0, 'maceShock');
+        if (stun && !e.dead) this.tryStun(e, 0);
+      }
+      const b = sim.boss;
+      if (b && !b.dead && !bossInvulnerable(b) && dist(at.x, at.y, b.x, b.y) < radius + b.r) sim.damageBoss(damage, 'sword', 0, 'maceShock');
+    });
     sim.weapons.trace('mine', [at], radius, maceQuake ? 0.43 : 0.35, maceQuake ? 'maceQuake' : undefined);
   }
 
@@ -754,14 +760,16 @@ export class RoanCombat {
       .slice(0, spreadTargets);
     const burst = stacks * this.bleedPerStack(e) * Math.max(burstMinSeconds, bleed.until - now);
     for (const o of near) this.addBleed(o, Math.ceil(stacks / 2));
-    const radius = this.gear('bloodBurst') ? burstRadiusRelic : burstRadius;
     const sim = this.sim;
-    for (const o of sim.enemies) {
-      if (o === e || o.dead || dist(e.x, e.y, o.x, o.y) >= radius + o.r) continue;
-      sim.damageEnemy(o, burst, 'bleed', 0, 'bleedBurst', bleed.design);
-    }
-    const b = sim.boss;
-    if (b && !b.dead && !bossInvulnerable(b) && dist(e.x, e.y, b.x, b.y) < radius + b.r) sim.damageBoss(burst, 'bleed', 0, 'bleedBurst', bleed.design);
+    const radius = (this.gear('bloodBurst') ? burstRadiusRelic : burstRadius) * sim.extra.areaMultiplier();
+    sim.extra.withExplosion(() => {
+      for (const o of sim.enemies) {
+        if (o === e || o.dead || dist(e.x, e.y, o.x, o.y) >= radius + o.r) continue;
+        sim.damageEnemy(o, burst, 'bleed', 0, 'bleedBurst', bleed.design);
+      }
+      const b = sim.boss;
+      if (b && !b.dead && !bossInvulnerable(b) && dist(e.x, e.y, b.x, b.y) < radius + b.r) sim.damageBoss(burst, 'bleed', 0, 'bleedBurst', bleed.design);
+    });
     sim.weapons.trace('mine', [e], radius, 0.3, 'bleedBurst');
   }
 

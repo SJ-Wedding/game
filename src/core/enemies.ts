@@ -68,6 +68,8 @@ export function updateEnemies(sim: GameSim, dt: number): void {
   for (const e of sim.enemies) {
     if (e.dead) continue;
     if (e.flash > 0) e.flash -= dt;
+    // 멈춘 회중시계: 일반 적은 움직이지도 공격하지도 않는다
+    if (sim.extra.frozen(e)) continue;
     const d = dist(e.x, e.y, p.x, p.y);
     let contactSource: string = ENEMY_CONFIG[e.kind].attackNames.contact;
     let contactDamage = ENEMY_CONFIG[e.kind].contactDamage;

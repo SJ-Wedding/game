@@ -3,6 +3,7 @@ import type { RoanDesign } from '../config/roan';
 import type { Projectile } from '../core/types';
 import type { WeaponEffect } from '../core/weapons';
 import { PALETTE } from './palette';
+import { drawRelicShot } from './relicEffects';
 
 type Graphics = GameObjects.Graphics;
 type Point = { x: number; y: number };
@@ -465,6 +466,7 @@ export function drawPlayerShot(g: Graphics, shot: Projectile, now: number): void
   const speed = Math.hypot(vx, vy);
   const dx = speed ? vx / speed : 1;
   const dy = speed ? vy / speed : 0;
+  if (drawRelicShot(g, shot)) return;
   if (shot.source === 'thrownAxe' || shot.source === 'smallAxe') {
     drawFlyingAxe(g, shot, dx, dy, now);
     return;

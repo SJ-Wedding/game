@@ -2,7 +2,7 @@ import shopIcons from '../assets/shop-icons.png';
 import relicIcons from '../assets/relic-icons.webp';
 import choiceIcons from '../assets/choice-icons.png';
 import type { CharacterUpgradeId } from '../config/characters';
-import type { RelicId } from '../config/relics';
+import { RELICS, type RelicId } from '../config/relics';
 import type { UpgradeDef, UpgradeId } from '../config/upgrades';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { el } from './dom';
@@ -49,7 +49,8 @@ export function upgradeChoiceArt(def: UpgradeDef): HTMLElement {
   return icon;
 }
 
-const RELIC_ART: Record<RelicId, number> = {
+/** 유물 아이콘 아틀라스(12×12) 위치. 아틀라스에 없는 유물은 기호 배지로 그린다. */
+const RELIC_ART: Partial<Record<RelicId, number>> = {
   lumenCrystal: 0, lumenSight: 1, lumenRune: 2, lumenCycle: 3, lumenCloak: 4, lumenStaff: 5,
   chainCloud: 6, chainOverload: 7, chainRebound: 8, chainDouble: 9, chainRod: 10, chainConductor: 11,
   turretPermafrost: 12, turretScope: 13, turretBlast: 14, turretShotgun: 15, turretMobile: 16, turretResonance: 17,
@@ -77,6 +78,11 @@ const RELIC_ART: Record<RelicId, number> = {
 
 export function relicArt(id: RelicId): HTMLElement {
   const index = RELIC_ART[id];
+  if (index === undefined) {
+    const relic = RELICS[id];
+    const tone = 'character' in relic ? relic.character : relic.source;
+    return el('span', { class: `relic-art relic-glyph relic-glyph-${tone}`, 'aria-hidden': 'true', 'data-glyph': relic.symbol });
+  }
   const node = el('span', { class: 'relic-art', 'aria-hidden': 'true' });
   node.style.backgroundImage = `url("${relicIcons}")`;
   node.style.backgroundPosition = `${(index % 12) * 100 / 11}% ${Math.floor(index / 12) * 100 / 11}%`;

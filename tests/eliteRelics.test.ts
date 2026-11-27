@@ -30,10 +30,11 @@ function steps(s: GameSim, n: number): void {
 describe('균열 수호자 유물 후보', () => {
   const pool = (loadout: Loadout) => RELIC_IDS.filter((id) => RELICS[id].source === 'elite' && relicAllowed(id, loadout));
 
-  it('로안은 근접 5개·상위 무기 전용 39개·전체 공용 2개, 루멘은 무기별 15개의 균열 수호자 유물을 받는다', () => {
-    expect(pool(roan)).toHaveLength(46);
-    expect(pool(chain)).toHaveLength(15);
-    expect(pool(turret)).toHaveLength(15);
+  it('로안은 근접 8개·상위 무기 전용 39개·전체 공용 7개, 루멘은 무기별 24개의 균열 수호자 유물을 받는다', () => {
+    expect(pool(roan)).toHaveLength(54);
+    expect(pool(chain)).toHaveLength(24);
+    expect(pool(turret)).toHaveLength(24);
+    expect(pool({ character: 'ranger' })).toHaveLength(24);
     expect(pool(chain).some((id) => id.startsWith('turret') || id === 'winterLantern')).toBe(false);
     expect(pool(turret).some((id) => id.startsWith('chain') || id === 'crown')).toBe(false);
     expect(pool({ character: 'ranger' }).some((id) => id.startsWith('sword') || id.startsWith('lumen'))).toBe(false);
@@ -64,7 +65,8 @@ describe('균열 수호자 유물 후보', () => {
     const fill: Parameters<GameSim['choose']>[0][] = [];
     (s as unknown as { fillEssences(c: unknown[]): void }).fillEssences(fill);
     expect(fill).toEqual([{ kind: 'essence', id: 'swift' }]);
-    expect(s.relics.damageMultiplier(enemy, false)).toBeCloseTo(1 + 0.04 * ESSENCE_MAX_STACK);
+    // 현상금 장부: 균열 수호자 1마리 처치 +6%
+    expect(s.relics.damageMultiplier(enemy, false)).toBeCloseTo((1 + 0.04 * ESSENCE_MAX_STACK) * 1.06);
   });
 
   it('루멘에게는 신속 정수가 나오지 않는다', () => {

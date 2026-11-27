@@ -382,9 +382,9 @@ describe('전용 강화와 유물', () => {
     expect(ids(['dagger', 'twinblades'])).toEqual([...ids(['dagger']), 'twinCross', 'twinChain']);
   });
 
-  it('기존 로안 유물은 없고, 근접 특화 7종과 상위 무기 전용 39종이 있다', () => {
+  it('기존 로안 유물은 없고, 근접 특화 12종과 상위 무기 전용 39종이 있다', () => {
     const roanRelics = RELIC_IDS.filter((id) => 'character' in RELICS[id] && (RELICS[id] as { character: string }).character === 'roan');
-    expect(roanRelics).toHaveLength(46);
+    expect(roanRelics).toHaveLength(51);
     expect(roanRelics.filter((id) => 'form' in RELICS[id])).toHaveLength(39);
     for (const id of Object.keys(ROAN_UPGRADES) as RoanUpgradeId[]) {
       expect(roanRelics.filter((r) => (RELICS[r] as { form?: string }).form === id)).toHaveLength(3);

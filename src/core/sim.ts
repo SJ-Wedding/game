@@ -5,6 +5,7 @@ import {
 import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, isFusionIngredient } from '../config/weapons';
 import { CHARACTER_SHOP, SHOP_TIMING, type CharacterShopId } from '../config/characterShop';
 import { ESSENCE_IDS, ESSENCE_MAX_STACK, OPENING_RELIC_LEVEL, validCarry, validRelicIds, type EssenceId, type RelicId, type RelicSource } from '../config/relics';
+import { ExtraRelics } from './relicsExtra';
 import { RelicEffects, rollRelics } from './relics';
 import { ARENA_CONFIG } from '../config/arena';
 import { BOSS_CONFIG } from '../config/boss';
@@ -31,7 +32,8 @@ import { RoanCombat, type SwordSweep } from './roan';
 import { ROAN_GEAR_LEVELS, ROAN_WEAPON_IDS, roanUpgradesOf, type RoanDesign, type RoanGearChoice } from '../config/roan';
 
 function shotAttack(source: string): AttackId | undefined {
-  return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' ? 'relic' : RoanCombat.isRoanShot(source) ? 'sword' : undefined;
+  return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' || source === 'soul' ? 'relic'
+    : RoanCombat.isRoanShot(source) ? 'sword' : undefined;
 }
 
 function projectileVariant(shot: Projectile): AttackVariant | undefined {
@@ -113,6 +115,9 @@ export class GameSim {
   readonly meta: MetaBonus;
   readonly weapons = new WeaponSystem(this);
   readonly relics = new RelicEffects(this);
+  readonly extra = new ExtraRelics(this);
+  /** 이번 틱의 이동 속도 (질주 엔진) */
+  lastMoveSpeed = 0;
   private readonly rngRelic: Rng;
   private readonly previousRelics: ReadonlySet<RelicId>;
   /** 유물 효과 판정 전용 난수 (다른 난수 흐름을 바꾸지 않는다) */
@@ -128,6 +133,8 @@ export class GameSim {
   readonly loadout: Loadout;
   private readonly masteryValues: Partial<Record<CharacterUpgradeId, number>> = {};
   private masteryPower = 0;
+  /** 루멘 전용 강화 누적 점수 (마력 과부하) */
+  get masteryPoints(): number { return this.masteryPower; }
   readonly roan = new RoanCombat(this);
   /** 수호자의 정수 중첩 */
   readonly essences: Record<EssenceId, number> = { power: 0, life: 0, swift: 0 };
@@ -335,6 +342,7 @@ export class GameSim {
     this.tick++;
 
     this.relics.update(dt);
+    this.extra.update(dt);
     this.updatePlayer(dt, input);
     this.updateSpawner(dt);
     updateEnemies(this, dt);
@@ -415,12 +423,14 @@ export class GameSim {
     const moving = len > 0.01 || p.dodgeTime > 0;
     const escape = now < this.rangerEscapeUntil ? this.characterShopBonus('rangerEscape') : 0;
     const moveSpeed = s.moveSpeed * this.relics.moveMultiplier(moving) * (1 + escape);
+    this.lastMoveSpeed = moveSpeed;
     const fromX = p.x;
     const fromY = p.y;
     if (p.dodgeTime > 0) {
       p.dodgeTime -= dt;
-      p.x += p.dodgeDx * s.dodgeSpeed * dt;
-      p.y += p.dodgeDy * s.dodgeSpeed * dt;
+      const dodgeSpeed = s.dodgeSpeed * this.extra.dodgeSpeedMultiplier;
+      p.x += p.dodgeDx * dodgeSpeed * dt;
+      p.y += p.dodgeDy * dodgeSpeed * dt;
     } else {
       p.x += mx * moveSpeed * dt;
       p.y += my * moveSpeed * dt;
@@ -556,6 +566,7 @@ export class GameSim {
     if (mods.twin) shoot(p.aim, 22);
     this.weapons.onShot();
     this.shotsFired++;
+    this.extra.onVolley(this.shotsFired);
     this.emit('shoot', p.x, p.y);
   }
 
@@ -832,10 +843,14 @@ export class GameSim {
     compact(this.playerShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
 
     const p = this.player;
+    const stopped = this.extra.timeStopped;
     for (const s of this.enemyShots) {
-      s.x += s.vx * dt;
-      s.y += s.vy * dt;
-      s.life -= dt;
+      // 멈춘 회중시계: 적 탄도 멈춘다
+      if (!stopped) {
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.life -= dt;
+      }
       const rr = p.r + s.r;
       if (s.life > 0 && dist2(s.x, s.y, p.x, p.y) < rr * rr) {
         // 무적(회피) 중이면 통과한다. 잔상 망토가 켜져 있으면 맞지 않는다.
@@ -883,10 +898,11 @@ export class GameSim {
     const armor = basic || source === 'sword' ? e.basicResistance * resistanceMultiplier : 0;
     const durability = e.kind === 'elite' ? eliteDurability : 1;
     const damageTaken = (1 - resistance * resistanceMultiplier) * (1 - armor) / durability;
-    let damage = amount * this.relics.damageMultiplier(e, basic) * scaleMonsterDefense(damageTaken, this.monster.defense);
+    let damage = amount * this.relics.damageMultiplier(e, basic, source) * scaleMonsterDefense(damageTaken, this.monster.defense);
     if ((basic && this.relics.executes(e)) || (source === 'sword' && this.roan.executes(e))) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
+    if (e.hp > 0) this.extra.onHit(e, source);
     this.recordAttackDamage(source, damage, variant, design);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
@@ -914,8 +930,9 @@ export class GameSim {
     const basic = source === 'basic';
     const armor = basic ? BOSS_CONFIG.basicResistance
       : source === 'sword' ? BOSS_CONFIG.basicResistance * this.swordResistanceMultiplier(swordArmorPierce) : 0;
-    const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor, this.monster.defense);
+    const damage = amount * this.relics.damageMultiplier(b, basic, source) * scaleMonsterDefense(1 - armor, this.monster.defense);
     b.hp = Math.max(0, b.hp - damage);
+    if (b.hp > 0) this.extra.onHit(b, source);
     this.recordAttackDamage(source, damage, variant, design);
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
@@ -964,6 +981,7 @@ export class GameSim {
       if (g.pulled || d < radius) {
         g.pulled = true;
         if (d < p.r + 8) {
+          this.extra.onGem(g);
           this.gainXp(g.value);
           g.value = 0;
           continue;
@@ -1108,8 +1126,9 @@ export class GameSim {
         // 다음에 열릴 엘리트 유물 선택이 남아 있을 때만 동전을 던질 수 있다
         if (this.pendingRewards.includes('elite')) this.choices = [{ kind: 'coin', id: 'flip' }, { kind: 'coin', id: 'pass' }];
       } else {
-        this.choices = rollRelics(source, this.rngRelic, this.relics.owned, this.loadout, this.previousRelics, this.roan.upgrade ? [this.roan.upgrade] : []);
-        if (source === 'elite') this.fillEssences(this.choices);
+        const count = source === 'elite' && this.relics.has('treasureMap') ? 4 : 3;
+        this.choices = rollRelics(source, this.rngRelic, this.relics.owned, this.loadout, this.previousRelics, this.roan.upgrade ? [this.roan.upgrade] : [], count);
+        if (source === 'elite') this.fillEssences(this.choices, count);
       }
     }
     if (!this.choices.length && this.pendingLevels) {
@@ -1125,10 +1144,10 @@ export class GameSim {
   }
 
   /** 수호자의 정수: 균열 수호자 유물 후보가 3개보다 적으면 빈칸을 채운다. 최대 5회 중복. */
-  private fillEssences(choices: UpgradeChoice[]): void {
+  private fillEssences(choices: UpgradeChoice[], count = 3): void {
     // 루멘은 베기·기본 사격을 쓰지 않으므로 신속은 나오지 않는다.
     const pool = ESSENCE_IDS.filter((id) => this.essences[id] < ESSENCE_MAX_STACK && !(id === 'swift' && this.loadout.character === 'lumen'));
-    while (pool.length && choices.length < 3) {
+    while (pool.length && choices.length < count) {
       choices.push({ kind: 'essence', id: pool.splice(this.rngRelic.int(pool.length), 1)[0] });
     }
   }
@@ -1287,7 +1306,11 @@ export class GameSim {
     if (kind === 'heal') {
       this.relics.heal(DROP_CONFIG.healAmount * this.relics.potionMultiplier);
     } else if (kind === 'magnet') {
-      for (const g of this.gems) g.pulled = true;
+      for (const g of this.gems) {
+        if (!g.pulled) g.magnet = true;
+        g.pulled = true;
+      }
+      this.extra.onMagnet();
     } else {
       for (const e of this.enemies) {
         if (!e.dead && Math.abs(e.x - p.x) < DROP_CONFIG.bombHalfWidth && Math.abs(e.y - p.y) < DROP_CONFIG.bombHalfHeight) {
@@ -1324,7 +1347,10 @@ export class GameSim {
       p.invuln = 2;
       this.enemyShots.length = 0;
       this.emit('revive', p.x, p.y);
+      this.extra.onRevive();
     }
+    // 불사조의 재: 다른 부활 수단이 없을 때 한 번
+    if (!this.boss?.dead && p.hp <= 0 && this.extra.trySelfRevive()) this.emit('revive', p.x, p.y);
     if (this.boss?.dead) this.end('victory', 'boss');
     else if (p.hp <= 0) this.end('defeat', 'death');
   }
