@@ -263,7 +263,7 @@ export class App {
     this.runsStarted++;
     this.screen = 'playing';
     this.screens.hide();
-    this.hud.reset();
+    this.hud.reset(this.sim);
     this.hud.show();
   }
 

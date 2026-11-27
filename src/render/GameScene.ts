@@ -4,7 +4,7 @@ import { BOSS_CONFIG } from '../config/boss';
 import { SWORD } from '../config/characters';
 import { DAGGER_THRUST } from '../config/roan';
 import { DROP_CONFIG } from '../config/drops';
-import { ENEMY_CONFIG } from '../config/enemies';
+import { DEFAULT_DIFFICULTY, ENEMY_CONFIG, type DifficultyId } from '../config/enemies';
 import { xpVisual } from '../config/progression';
 import { ASSAULT_CONFIG } from '../config/spawns';
 import type { App } from '../app/App';
@@ -14,7 +14,7 @@ import type { Enemy, InputState, Player, SimEvent } from '../core/types';
 import { PALETTE } from './palette';
 import { WEAPONS, weaponRankEffect } from '../config/weapons';
 import { CHARACTER_FRAME_SIZE, CHARACTER_SHEETS, characterTexture, FUSION_ART_FRAME_SIZE, fusionCombat, ROAN_WEAPON_FRAME, ROAN_WEAPON_SHEET, roanTexture, roanWeaponFrame, WEAPON_FRAMES, WEAPON_SPRITES, weaponEffects, type WeaponSprite } from './textures';
-import { ARENA_ACTOR_FRAMES, ARENA_ART, ARENA_ART_MARGIN, ARENA_SPRITE_SIZE, arenaLayout } from './arena';
+import { ARENA_ACTOR_FRAMES, ARENA_ACTOR_SIZE, ARENA_ART, ARENA_ART_MARGIN, ARENA_PROP_SIZE, arenaLayout } from './arena';
 import {
   daggerExtension, drawCastCharge, drawDaggerThrust, drawEcho, drawExplosion, drawFlame, drawFrostBarrel, drawFrostBurst, drawFrostShot, drawGravityPull, drawInfected,
   drawInfectionSmoke, drawLightning, drawPlayerShot, drawRiftBarrier, drawSpearAim, drawSpearStrike,
@@ -51,7 +51,7 @@ export class GameScene extends Phaser.Scene {
   private arenaFloor!: Phaser.GameObjects.Image;
   private arenaBorder!: Phaser.GameObjects.Graphics;
   private arenaDecorations!: Phaser.GameObjects.Container;
-  private arenaSprites = 'arena-canyon-sprites';
+  private arenaActors = 'arena-canyon-actors';
   private readonly enemyImages: Phaser.GameObjects.Image[] = [];
   private visibleEnemies = 0;
   private readonly weaponImages: Phaser.GameObjects.Image[] = [];
@@ -80,7 +80,8 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     for (const [theme, art] of Object.entries(ARENA_ART)) {
       this.load.image(`arena-${theme}-floor`, art.floor);
-      this.load.spritesheet(`arena-${theme}-sprites`, art.sprites, { frameWidth: ARENA_SPRITE_SIZE, frameHeight: ARENA_SPRITE_SIZE });
+      this.load.spritesheet(`arena-${theme}-actors`, art.actors, { frameWidth: ARENA_ACTOR_SIZE, frameHeight: ARENA_ACTOR_SIZE });
+      this.load.spritesheet(`arena-${theme}-props`, art.props, { frameWidth: ARENA_PROP_SIZE, frameHeight: ARENA_PROP_SIZE });
     }
     for (const [key, url] of Object.entries(CHARACTER_SHEETS)) {
       this.load.spritesheet(key, url, { frameWidth: CHARACTER_FRAME_SIZE, frameHeight: CHARACTER_FRAME_SIZE });
@@ -98,8 +99,8 @@ export class GameScene extends Phaser.Scene {
     this.arenaBorder = this.add.graphics().setDepth(-2);
     this.arenaDecorations = this.add.container().setDepth(-1);
     this.groundEffects = this.add.graphics().setDepth(1);
-    this.bossImage = this.add.image(0, 0, this.arenaSprites, ARENA_ACTOR_FRAMES.boss).setDepth(3).setVisible(false);
-    this.setArena(0);
+    this.bossImage = this.add.image(0, 0, this.arenaActors, ARENA_ACTOR_FRAMES.boss).setDepth(3).setVisible(false);
+    this.setArena(0, DEFAULT_DIFFICULTY);
     this.playerImage = this.add.image(0, 0, 'player', 1).setDepth(5).setScale(1.25).setVisible(false);
     this.heldBlades = [0, 1].map(() => this.add.image(0, 0, 'roan-weapons').setDepth(5.25).setVisible(false));
     this.weaponEffects = this.add.graphics().setDepth(5.5);
@@ -145,7 +146,7 @@ export class GameScene extends Phaser.Scene {
       this.motionX = sim?.player.x ?? 0;
       this.motionY = sim?.player.y ?? 0;
       this.renderedSim = sim;
-      if (sim) this.setArena(sim.seed);
+      if (sim) this.setArena(sim.seed, sim.difficulty);
     }
     if (sim) {
       this.handleEvents(events);
@@ -253,21 +254,21 @@ export class GameScene extends Phaser.Scene {
 
   // ───────────────────────── 그리기 ─────────────────────────
 
-  private setArena(seed: number): void {
-    const { theme, decorations } = arenaLayout(seed);
+  private setArena(seed: number, difficulty: DifficultyId): void {
+    const { theme, decorations } = arenaLayout(seed, difficulty);
     const { width, height, wallPadding: pad } = ARENA_CONFIG;
     const art = ARENA_ART[theme];
-    this.arenaSprites = `arena-${theme}-sprites`;
-    this.arenaFloor.setTexture(`arena-${theme}-floor`).setTint(art.tint)
+    this.arenaActors = `arena-${theme}-actors`;
+    this.arenaFloor.setTexture(`arena-${theme}-floor`)
       .setDisplaySize(width + 2 * ARENA_ART_MARGIN, height + 2 * ARENA_ART_MARGIN);
     this.arenaBorder.clear().lineStyle(4, 0x1c2530, 0.42).strokeRect(pad, pad, width - 2 * pad, height - 2 * pad)
       .lineStyle(1.5, art.edge, 0.68).strokeRect(pad, pad, width - 2 * pad, height - 2 * pad);
     this.arenaDecorations.removeAll(true);
     for (const { x, y, frame, scale, flipX } of decorations) {
       // 장식은 배경 레이어의 이미지로만 추가하므로 충돌 판정이 없다.
-      this.arenaDecorations.add(this.add.image(x, y, this.arenaSprites, frame).setScale(scale).setFlipX(flipX));
+      this.arenaDecorations.add(this.add.image(x, y, `arena-${theme}-props`, frame).setScale(scale).setFlipX(flipX));
     }
-    this.bossImage.setTexture(this.arenaSprites, ARENA_ACTOR_FRAMES.boss);
+    this.bossImage.setTexture(this.arenaActors, ARENA_ACTOR_FRAMES.boss);
   }
 
   private draw(sim: GameSim | null): void {
@@ -431,7 +432,7 @@ export class GameScene extends Phaser.Scene {
       const r = b.r;
       ground.fillStyle(0x070a11, 0.55).fillCircle(b.x, b.y + 3, r);
       ground.lineStyle(2, PALETTE.bossTrim, b.phase === 2 ? 0.9 : 0.48).strokeCircle(b.x, b.y, b.r + 3);
-      this.bossImage.setPosition(b.x, b.y).setFlipX(Math.cos(angle) < -0.15).setScale(120 / ARENA_SPRITE_SIZE);
+      this.bossImage.setPosition(b.x, b.y).setFlipX(Math.cos(angle) < -0.15).setDisplaySize(120, 120);
       if (flash) this.bossImage.setTintFill(PALETTE.hit);
       else this.bossImage.clearTint();
     }
@@ -726,13 +727,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawEnemy(e: Enemy, index: number, sim: GameSim, t: number): void {
-    const frame = ARENA_ACTOR_FRAMES[e.kind];
+    const frame = e.kind === 'charger' && e.state === 'windup' ? ARENA_ACTOR_FRAMES.chargerWindup : ARENA_ACTOR_FRAMES[e.kind];
     let image = this.enemyImages[index];
     if (!image) {
-      image = this.add.image(0, 0, this.arenaSprites, frame).setDepth(2);
+      image = this.add.image(0, 0, this.arenaActors, frame).setDepth(2);
       this.enemyImages[index] = image;
-    } else if (image.texture.key !== this.arenaSprites || Number(image.frame.name) !== frame) {
-      image.setTexture(this.arenaSprites, frame);
+    } else if (image.texture.key !== this.arenaActors) {
+      image.setTexture(this.arenaActors, frame);
+    } else if (Number(image.frame.name) !== frame) {
+      image.setFrame(frame);
     }
 
     const aim = (e.kind === 'charger' && e.state !== 'move')
@@ -741,8 +744,9 @@ export class GameScene extends Phaser.Scene {
     const bob = Math.round(Math.sin(t * 8 + e.id));
     const shake = e.state === 'windup' ? Math.sin(t * 60) * 1.7 : 0;
     this.groundEffects.fillStyle(0x070a11, 0.55).fillCircle(e.x, e.y + 2, e.r);
+    const size = e.kind === 'elite' ? 72 : 48;
     image.setVisible(true).setPosition(e.x + shake, e.y + bob)
-      .setFlipX(Math.cos(angle) < -0.15).setScale((e.kind === 'elite' ? 72 : 48) / ARENA_SPRITE_SIZE);
+      .setFlipX(Math.cos(angle) < -0.15).setDisplaySize(size, size);
     if (e.basicResistance > 0) {
       this.groundEffects.lineStyle(2, 0xe2c9a3, 0.76).strokeCircle(e.x, e.y, e.r + 5);
     }
