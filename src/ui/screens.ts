@@ -8,7 +8,7 @@ import { ECHO_GROWTH, FUSION_ARMOR_PIERCE, FUSION_IDS, WEAPON_FUSIONS, WEAPONS, 
 import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, type EssenceId, type RelicId } from '../config/relics';
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_PREVIEWS, weaponPreview } from './weaponPreview';
-import { relicArt, shopSprite } from './art';
+import { relicArt, shopSprite, upgradeChoiceArt } from './art';
 import { ARENA_ART, arenaEnemyText, arenaTheme } from '../render/arena';
 import { CHARACTER_SHEETS, roanTexture, WEAPON_TEXTURES } from '../render/textures';
 import { RUN_CONFIG } from '../config/run';
@@ -362,7 +362,6 @@ export class Screens {
         const current = mastery ? opts.masteryValue(mastery) : 0;
         const gain = mastery ? characterUpgradeValue(mastery, c.grade) : 0;
         const effect = mastery && current > 0 ? `선택 후 누적 · ${CHARACTER_UPGRADES[mastery].text(current + gain)}` : upgradeText(c.def, c.grade);
-        if (weapon) btn.append(el('img', { class: 'weapon-icon', src: WEAPON_TEXTURES[weapon], alt: '' }));
         btn.append(
           el('span', { class: 'cat', text: weapon ? `${grade!.name} · 특수 무기 ${c.nextStack === 1 ? '획득' : '강화'}` : `${grade!.name} · ${c.def.mastery ? '전용 강화' : CATEGORY_LABEL[c.def.category]}` }),
           el('strong', { class: 'name', text: c.def.name }),
@@ -444,9 +443,9 @@ export class Screens {
       } else {
         btn.append(el('span', { class: 'cat', text: '회복' }), el('strong', { class: 'name', text: c.name }), el('span', { class: 'desc', text: c.description }));
       }
-      const graphic = btn.querySelector<HTMLElement>('.weapon-icon, .gear-sprite, .relic-art, .relic-symbol')
-        ?? (c.kind === 'fusion' ? el('img', { class: 'fusion-art', src: WEAPON_PREVIEWS[c.id], alt: '' })
-          : shopSprite(c.kind === 'upgrade' ? ({ attack: 1, survival: 2, mobility: 4 }[c.def.category]) : 4));
+      const graphic = c.kind === 'upgrade' ? upgradeChoiceArt(c.def)
+        : c.kind === 'fusion' ? el('img', { class: 'fusion-art', src: WEAPON_PREVIEWS[c.id], alt: '' })
+          : btn.querySelector<HTMLElement>('.gear-sprite, .relic-art, .relic-symbol') ?? shopSprite(17);
       btn.prepend(el('span', { class: 'choice-art ui-frame', 'aria-hidden': 'true' }, [graphic]));
       btn.append(el('kbd', { class: 'key', text: String(i + 1) }));
       btn.addEventListener('click', () => opts.onChoose(i));
