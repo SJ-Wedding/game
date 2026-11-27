@@ -13,7 +13,8 @@ export type DifficultyId = 'normal' | 'hard';
 export interface DifficultyDef { name: string; health: number; attack: number; defense: number; tokens: number }
 export const DIFFICULTY: Record<DifficultyId, DifficultyDef> = {
   normal: { name: '보통', health: 6, attack: 4, defense: 3, tokens: 0.7 },
-  hard: { name: '어려움', health: 10, attack: 10, defense: 5, tokens: 1 },
+  // 어려움 토큰 = 보통의 +75% (0.7 × 1.75)
+  hard: { name: '어려움', health: 10, attack: 10, defense: 5, tokens: 1.225 },
 };
 export const DIFFICULTY_IDS = Object.keys(DIFFICULTY) as DifficultyId[];
 /** 게임 화면에서 처음 고르는 난이도 */
