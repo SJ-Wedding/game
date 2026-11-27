@@ -19,7 +19,7 @@ const result = (over: Partial<RunResult> = {}): RunResult => ({
   rerollsUsed: 0,
   revived: 0,
   itemsCollected: 0,
-  difficulty: 'normal',
+  difficulty: 'hard',
   ...over,
 });
 
@@ -116,7 +116,7 @@ describe('로컬 저장', () => {
   });
 
   it('보통 난이도는 토큰을 0.7배로 받는다', () => {
-    const r = recordRun(defaultSave(), result({ survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
+    const r = recordRun(defaultSave(), result({ difficulty: 'normal', survivalTime: 605, killsByKind: { chaser: 130, charger: 10, elite: 2 } }));
     // 32 × 0.7 = 22.4 → 22
     expect(r.tokens).toMatchObject({ total: 22, difficulty: -10 });
     expect(r.data.meta.tokens).toBe(22);
@@ -134,26 +134,58 @@ describe('로컬 저장', () => {
     expect(d.meta.tokens).toBeGreaterThan(0);
   });
 
-  it('난이도 이전의 기록은 보통으로 옮기고, 난이도 설정과 어려움 기록을 읽는다', () => {
+  it('난이도 이전의 기록은 어려움 기록이다', () => {
     const old = parseSave(JSON.stringify({ version: SAVE_VERSION, records: { runs: 7, wins: 1, bestSurvival: 860, bestKills: 900, fastestWin: 860 }, settings: { volume: 0.5 } })).data;
     expect(old.settings.difficulty).toBe('normal');
-    expect(recordsFor(old, 'normal').runs).toBe(7);
-    expect(recordsFor(old, 'hard').runs).toBe(0);
-    const saved = parseSave(JSON.stringify({ version: SAVE_VERSION, records: {}, hardRecords: { runs: 3, wins: 0, bestSurvival: 100, bestKills: 10, fastestWin: null }, settings: { volume: 0.5, difficulty: 'hard' } })).data;
-    expect(saved.settings.difficulty).toBe('hard');
-    expect(recordsFor(saved, 'hard').runs).toBe(3);
+    expect(recordsFor(old, 'hard')).toEqual({ runs: 7, wins: 1, bestSurvival: 860, bestKills: 900, fastestWin: 860 });
+    expect(recordsFor(old, 'normal').runs).toBe(0);
     const bad = parseSave(JSON.stringify({ version: SAVE_VERSION, settings: { volume: 0.5, difficulty: 'nightmare' } })).data;
     expect(bad.settings.difficulty).toBe('normal');
   });
 
-  it('계정 저장에 어려움 기록도 함께 올리고 합친다', () => {
-    const d = recordRun(defaultSave(), result({ difficulty: 'hard', survivalTime: 300, kills: 40 })).data;
-    const rows = cloudRecords(d) as { runs: number; hard: { runs: number } };
-    expect(rows.runs).toBe(0);
-    expect(rows.hard.runs).toBe(1);
+  it('난이도 첫 배포 형식(records=보통+이전 기록, hardRecords=어려움)은 둘 다 어려움으로 합친다', () => {
+    const first = parseSave(JSON.stringify({
+      version: SAVE_VERSION,
+      settings: { volume: 0.5, difficulty: 'hard' },
+      records: { runs: 7, wins: 1, bestSurvival: 860, bestKills: 900, fastestWin: 860 },
+      hardRecords: { runs: 3, wins: 1, bestSurvival: 870, bestKills: 400, fastestWin: 850 },
+    })).data;
+    expect(first.settings.difficulty).toBe('hard');
+    expect(recordsFor(first, 'hard')).toEqual({ runs: 10, wins: 2, bestSurvival: 870, bestKills: 900, fastestWin: 850 });
+    expect(recordsFor(first, 'normal').runs).toBe(0);
+    // 다시 저장·불러와도 더 합쳐지지 않는다
+    expect(parseSave(JSON.stringify(first)).data).toEqual(first);
+  });
+
+  it('보통 기록을 저장·불러온다', () => {
+    const d = recordRun(defaultSave(), result({ difficulty: 'normal', survivalTime: 300 })).data;
+    const back = parseSave(JSON.stringify(d)).data;
+    expect(recordsFor(back, 'normal')).toMatchObject({ runs: 1, bestSurvival: 300 });
+    expect(recordsFor(back, 'hard').runs).toBe(0);
+  });
+
+  it('계정 저장: 어려움 기록은 이전과 같은 자리에, 보통 기록은 normal 로 올리고 합친다', () => {
+    let d = recordRun(defaultSave(), result({ difficulty: 'hard', survivalTime: 300, kills: 40 })).data;
+    d = recordRun(d, result({ difficulty: 'normal', survivalTime: 500, kills: 70 })).data;
+    const rows = cloudRecords(d) as { runs: number; normal: { runs: number } };
+    expect(rows.runs).toBe(1);
+    expect(rows.normal.runs).toBe(1);
     const merged = mergeCloud(defaultSave(), { meta: { tokens: 0, totalEarned: 0, purchases: {} }, records: rows, rev: 1 });
     expect(recordsFor(merged, 'hard')).toMatchObject({ runs: 1, bestSurvival: 300, bestKills: 40 });
-    expect(recordsFor(merged, 'normal').runs).toBe(0);
+    expect(recordsFor(merged, 'normal')).toMatchObject({ runs: 1, bestSurvival: 500, bestKills: 70 });
+  });
+
+  it('계정 저장: 난이도 이전 기록과 난이도 첫 배포 형식(hard 키)은 어려움으로 읽는다', () => {
+    const legacy = mergeCloud(defaultSave(), { meta: { tokens: 0, totalEarned: 0, purchases: {} }, records: { runs: 5, wins: 0, bestSurvival: 600, bestKills: 300, fastestWin: null }, rev: 1 });
+    expect(recordsFor(legacy, 'hard')).toMatchObject({ runs: 5, bestSurvival: 600 });
+    expect(recordsFor(legacy, 'normal').runs).toBe(0);
+    const first = mergeCloud(defaultSave(), {
+      meta: { tokens: 0, totalEarned: 0, purchases: {} },
+      records: { runs: 5, wins: 0, bestSurvival: 600, bestKills: 300, fastestWin: null, hard: { runs: 2, wins: 1, bestSurvival: 860, bestKills: 100, fastestWin: 860 } },
+      rev: 1,
+    });
+    expect(recordsFor(first, 'hard')).toEqual({ runs: 7, wins: 1, bestSurvival: 860, bestKills: 300, fastestWin: 860 });
+    expect(recordsFor(first, 'normal').runs).toBe(0);
   });
 
   it('개발 옵션을 쓴 판은 기록에 반영하지 않는다', () => {
