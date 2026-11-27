@@ -158,6 +158,15 @@ describe('캐릭터와 중첩 강화', () => {
     expect(sim.hitsByAttack.chain).toBe(10);
     const effect = sim.weapons.effects.find((fx) => fx.kind === 'chain');
     expect(effect?.variant !== 'resonance' && effect?.reboundCounts).toEqual([0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4]);
+    sim.player.hp = 0;
+    sim.step(IDLE_INPUT);
+    const details = sim.result?.attackDetails ?? [];
+    expect(details.map(({ source, variant, hits }) => ({ source, variant, hits }))).toEqual([
+      { source: 'chain', variant: 'openingBolt', hits: 1 },
+      { source: 'chain', variant: 'chainJump', hits: 1 },
+      { source: 'chain', variant: 'rebound', hits: 8 },
+    ]);
+    expect(details.reduce((total, item) => total + item.damage, 0)).toBeCloseTo(sim.damageByAttack.chain!);
   });
 
   it('루멘 번개는 처음 맞히는 적을 우선하고, 대상 하나만 있으면 한 번 타격한다', () => {

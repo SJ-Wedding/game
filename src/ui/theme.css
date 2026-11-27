@@ -7,12 +7,12 @@
   --ui-violet: #cea8ff;
 }
 
-#overlay:is([data-screen='title'], [data-screen='characters'], [data-screen='lumen-weapon'], [data-screen='pause'], [data-screen='levelup'], [data-screen='status'], [data-screen='result'], [data-screen='carry'], [data-screen='account']) {
+#overlay:is([data-screen='title'], [data-screen='characters'], [data-screen='lumen-weapon'], [data-screen='pause'], [data-screen='levelup'], [data-screen='status'], [data-screen='result'], [data-screen='carry'], [data-screen='account'], [data-screen='codex'], [data-screen='history']) {
   inset: 50% auto auto 50%; transform: translate(-50%, -50%);
   width: 100vw; height: 100dvh; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center;
   container-type: size; overflow: clip; background: #050a14ba;
 }
-#overlay:is([data-screen='title'], [data-screen='characters'], [data-screen='lumen-weapon'], [data-screen='result'], [data-screen='carry'], [data-screen='account']) {
+#overlay:is([data-screen='title'], [data-screen='characters'], [data-screen='lumen-weapon'], [data-screen='result'], [data-screen='carry'], [data-screen='account'], [data-screen='codex'], [data-screen='history']) {
   background: linear-gradient(#070d1873, #070d184d), #111829 url('../assets/shop-backdrop.webp') center / cover no-repeat;
 }
 
@@ -362,3 +362,121 @@
 /* Account settings use the same frame as the title menu. */
 .title-menu .account-line { justify-content: flex-start; opacity: 1; color: var(--ui-muted); }
 .panel.ui-panel.account { height: auto; width: min(calc(100% - 1.15em), 32em); max-height: calc(100% - 1.15em); overflow: auto; }
+
+/* Codex and battle history */
+.panel.archive {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: min(calc(100% - 3.2em), 100em);
+  user-select: text;
+}
+.archive-toolbar, .archive-tabs, .archive-paging { display: flex; align-items: center; flex-wrap: wrap; gap: .5em; }
+.archive-toolbar { gap: .65em; }
+.archive-tabs button, .archive-paging button { padding: .55em .75em; font-weight: 750; }
+.archive-toolbar :is(input, select) {
+  max-width: 100%;
+  min-height: 2.7em;
+  padding: .45em .65em;
+  border: 1px solid #617897;
+  border-radius: 4px;
+  color: var(--ui-text);
+  background: #0e192b;
+  font: inherit;
+}
+.archive-toolbar input { flex: 1 1 12em; }
+.archive-toolbar :is(input, select):focus-visible { outline: 2px solid var(--ui-cyan); outline-offset: 2px; }
+.archive-tally { margin-inline-start: auto; color: var(--ui-cyan); font-variant-numeric: tabular-nums; font-weight: 750; }
+.archive-notice { flex-basis: 100%; margin: 0; color: var(--ui-gold); }
+.archive-layout { display: grid; min-height: 0; grid-template-columns: minmax(17em, 1fr) minmax(0, 2fr); gap: 1em; }
+.archive-list-pane { display: grid; min-height: 0; min-width: 0; grid-template-rows: minmax(0, 1fr) auto; gap: .55em; }
+.archive-list { display: grid; align-content: start; gap: .42em; padding: 2px; }
+.archive-paging { justify-content: space-between; font-variant-numeric: tabular-nums; }
+.ui-panel .archive-entry {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; min-width: 0;
+  width: 100%; gap: .65em; padding: .5em; text-align: left;
+  --ui-plate: linear-gradient(145deg, #1a2a42, #111c31 90%);
+}
+.ui-panel .history-entry { grid-template-columns: auto minmax(0, 1fr) auto; }
+.archive-entry strong, .archive-entry small { display: block; overflow-wrap: anywhere; }
+.archive-entry strong { margin-block: .14em; font-size: 1.13em; line-height: 1.25; }
+.archive-entry small { color: var(--ui-muted); font-size: .88em; }
+.history-outcome { font-size: .87em; color: #ffaeaa; font-weight: 800; white-space: nowrap; }
+.history-outcome.victory { color: #82ebbd; }
+
+.archive-icon {
+  display: grid; place-items: center; width: 3.75em; aspect-ratio: 1; flex: none; overflow: hidden;
+  --ui-plate: radial-gradient(ellipse at 55% 48%, #203652, #10192b 90%);
+}
+.archive-icon > :is(.relic-art, .choice-sprite, .shop-sprite, .weapon-icon, .archive-preview, .archive-gear) { width: 83%; aspect-ratio: 1; height: auto; }
+.archive-icon > .archive-preview { object-fit: cover; }
+.archive-icon > .archive-gear { background-size: 1200% 100%; background-position: calc(100% / 11) 0; image-rendering: pixelated; }
+.archive-inspector { display: grid; align-content: start; gap: .9em; padding: 1.2em; }
+.archive-inspector > * { min-width: 0; }
+.archive-entry-title { display: flex; align-items: center; gap: .85em; min-width: 0; }
+.archive-entry-title .archive-icon { width: 5.8em; }
+.archive-category { color: var(--ui-cyan); font-weight: 700; }
+.archive-entry-title h3 { margin: .15em 0 0; color: var(--ui-text); font-size: 2.1em; line-height: 1.14; overflow-wrap: anywhere; }
+.archive-effect { padding: .15em 0 .75em; margin: 0; color: var(--ui-muted); line-height: 1.56; border-bottom: 1px solid #526984; }
+.archive-facts { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .35em; }
+.archive-inspector > .history-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.archive-facts > div {
+  display: grid; grid-template-columns: minmax(7em, 30%) minmax(0, 1fr); gap: .65em;
+  padding: .45em .55em; border-bottom: 1px solid #3f526d66;
+}
+.archive-facts dt { color: var(--ui-muted); font-weight: 750; }
+.archive-facts dd { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
+.archive-empty { padding: .9em; margin: 0; color: var(--ui-muted); }
+.archive .ui-actions { justify-content: flex-start; }
+.archive .result-damage { padding: .72em .8em; }
+.archive .result-damage-scroll { max-height: 24em; overflow: auto; }
+.archive .stat-table th { white-space: normal; }
+.archive .damage-variant th { padding-inline-start: 1.2em; color: var(--ui-muted); font-weight: 500; }
+.history-section { padding: .72em .8em; }
+.history-section h4 { margin: 0 0 .55em; font-size: 1.48em; }
+.history-section > p { margin: 0; }
+.history-weapons, .history-build, .history-build-row ul { margin: 0; padding: 0; list-style: none; }
+.history-weapons { display: flex; gap: .4em; flex-wrap: wrap; }
+.history-weapons li, .history-essence { padding: .3em .55em; border: 1px solid #527291; color: #bde5fa; }
+.history-build { display: grid; gap: .5em; }
+.history-build-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .6em; }
+.history-build-row .archive-icon { width: 3.25em; }
+.history-build-row p, .history-build-row ul { margin: .2em 0 0; font-size: .92em; line-height: 1.45; }
+.history-build-row li { display: flex; align-items: baseline; flex-wrap: wrap; gap: .4em; }
+.history-order { margin-block-start: .7em; }
+.history-order ol { padding-inline-start: 1.7em; line-height: 1.6; }
+
+@container (width <= 720px) {
+  .panel.archive { width: calc(100% - .9em); height: calc(100% - .9em); padding: .85em; gap: .6em; }
+  .archive header h2 { font-size: 2.55em; }
+  .archive-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: .6em; }
+  .archive-layout > .archive-list, .archive-list-pane { max-height: min(26cqh, 18em); }
+  .archive-inspector { gap: .62em; padding: .72em; }
+  .archive-entry-title h3 { font-size: 1.68em; }
+  .archive-entry-title .archive-icon { width: 4.3em; }
+  .archive-tabs button { font-size: .92em; }
+  .archive-toolbar input { flex-basis: 9em; }
+  .archive-inspector > .history-summary { grid-template-columns: minmax(0, 1fr); }
+  .archive-facts > div { grid-template-columns: minmax(5em, 30%) minmax(0, 1fr); }
+  .archive .stat-table { font-size: .91em; }
+  .archive .stat-table :is(th, td) { padding-inline: .38em; }
+}
+
+.codex-motion {
+  margin: 0; padding: .75em .85em; display: grid; gap: .65em;
+  --ui-plate: linear-gradient(145deg, #15243a, #0e1728 88%);
+}
+.codex-motion-heading { display: flex; align-items: center; justify-content: space-between; gap: .6em; }
+.codex-motion-heading h4 { margin: 0 0 .2em; font-size: 1.26em; color: var(--ui-text); }
+.codex-motion-heading button { flex: none; padding: .45em .65em; font-weight: 700; }
+.codex-motion-labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6em; }
+.codex-motion-labels > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: .2em .6em; line-height: 1.35; }
+.codex-motion-labels strong { color: var(--ui-muted); white-space: nowrap; }
+.codex-motion-labels > div:last-child strong { color: var(--ui-cyan); }
+.codex-motion img {
+  display: block; width: 100%; height: auto; aspect-ratio: 568 / 166; border: 1px solid #536785;
+  border-radius: 3px; object-fit: contain; background: #101b2c; image-rendering: pixelated;
+}
+
+@container (width <= 460px) {
+  .codex-motion { padding: .62em; }
+  .codex-motion-labels > div { font-size: .89em; }
+}

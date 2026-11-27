@@ -1,6 +1,6 @@
 import type { DifficultyId } from '../config/enemies';
 import type { Loadout } from '../config/characters';
-import type { RoanGearChoice } from '../config/roan';
+import type { RoanDesign, RoanGearChoice } from '../config/roan';
 import type { FusionId, WeaponId } from '../config/weapons';
 import type { EssenceId, RelicId, RelicSource } from '../config/relics';
 import type { EnemyKind } from '../config/enemies';
@@ -136,6 +136,8 @@ export interface Projectile {
   returnLife?: number;
   returnPierce?: number;
   returnScale?: number;
+  roanDesign?: RoanDesign;
+  returning?: boolean;
 }
 
 /** 지연 폭발 장판 (보스 낙화). 그 자체가 공격 예고다. */
@@ -209,6 +211,24 @@ export type UpgradeChoice =
 
 export type AttackId = 'basic' | 'sword' | 'bleed' | 'bomb' | 'relic' | WeaponId | FusionId;
 
+export type AttackVariant =
+  | 'hit' | 'heavyRound' | 'piercingRound' | 'echoRepeat'
+  | 'main' | 'combo' | 'extra' | 'shock' | 'thrust' | 'crescent' | 'critFollowup'
+  | 'thrownAxe' | 'returnedAxe' | 'weaponThrow' | 'smallAxe' | 'shard' | 'maceShock' | 'maceScar'
+  | 'bleedTick' | 'bleedBurst' | 'bleedDetonation'
+  | 'openingBolt' | 'chainJump' | 'rebound' | 'fork' | 'doubleDischarge' | 'crownBlast'
+  | 'overload' | 'stormCloud' | 'rodBurst'
+  | 'turretShot' | 'turretPierce' | 'turretSpread' | 'turretFrost' | 'turretSelfDestruct'
+  | 'outbound' | 'returning' | 'burn' | 'frostField' | 'infectionSeed' | 'infectionSpread';
+
+export interface AttackDetail {
+  source: AttackId;
+  variant: AttackVariant;
+  design?: RoanDesign;
+  damage: number;
+  hits: number;
+}
+
 export type RunOutcome = 'victory' | 'defeat';
 export type RunEndCause = 'boss' | 'death' | 'timeout';
 
@@ -236,6 +256,9 @@ export interface RunResult {
   /** 적중 시 보정된 피해량의 합. 남은 체력을 초과한 피해도 포함한다. */
   damageByAttack?: Partial<Record<AttackId, number>>;
   hitsByAttack?: Partial<Record<AttackId, number>>;
+  attackDetails?: AttackDetail[];
+  roan?: { design: RoanDesign; awakened: boolean };
+  essences?: Partial<Record<EssenceId, number>>;
   combatTime?: number;
   seed: number;
   /** 난이도 (없으면 어려움으로 본다: 난이도가 생기기 전 결과) */

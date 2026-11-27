@@ -1,0 +1,112 @@
+import { expect, test } from '@playwright/test';
+import { collectErrors } from './util';
+
+test('선택하지 않은 후보도 도감에 남고, 새로고침 후 전투 통계에서 판을 다시 볼 수 있다', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?dev=1&seed=1');
+  await page.getByTestId('open-codex').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog', { name: '도감' })).toBeVisible();
+  await expect(page.getByTestId('codex-detail')).toContainText('아직 발견한 항목이 없습니다.');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('open-history').click();
+  await expect(page.getByTestId('history-detail')).toContainText('아직 전투 기록이 없습니다.');
+  await page.keyboard.press('Escape');
+  await page.getByTestId('play').click();
+  await page.getByTestId('character-roan').click();
+  await page.getByTestId('hud-hp').waitFor();
+
+  const advanceLevel = () => page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    sim.gainXp((sim.xpNeeded - sim.xp + 0.00001) / (sim.stats.xpGain * sim.relics.xpMultiplier));
+  });
+  await advanceLevel();
+  await expect(page.locator('.card').filter({ hasText: '넓은 베기' })).toBeVisible();
+  await page.locator('.card').filter({ hasText: '장검 손잡이' }).click();
+  await expect(page.locator('#overlay')).toBeHidden();
+
+  await advanceLevel();
+  await expect(page.getByTestId('choice-0')).toBeVisible();
+  await page.getByTestId('choice-0').click();
+  await expect(page.getByRole('heading', { name: '레벨 3 유물' })).toBeVisible();
+  const relic = await page.getByTestId('choice-0').locator('.name').innerText();
+  await page.getByTestId('choice-0').click();
+  await expect(page.locator('#overlay')).toBeHidden();
+
+  await page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    const enemy = sim.spawnEnemy('chaser', sim.player.x + 230, sim.player.y);
+    sim.damageEnemy(enemy, 400, 'sword', 0, 'combo', 'sword');
+    sim.tick = 65 * 60;
+    sim.player.invuln = 0;
+    sim.hurtPlayer(1e6, '시험용 공격');
+  });
+  await expect(page.getByTestId('outcome')).toHaveText('패배');
+  await page.getByTestId('result-title').click();
+  await page.getByTestId('play').click();
+  await page.getByTestId('character-lumen').click();
+  await page.getByTestId('lumen-chain').click();
+  await page.getByTestId('hud-hp').waitFor();
+  await page.evaluate(() => {
+    const { sim } = (window as any).__rift;
+    sim.tick = 810 * 60;
+    sim.spawnBoss();
+    sim.boss.state = 'idle';
+    sim.damageBoss(1e9, 'chain', 0, 'openingBolt');
+  });
+  await expect(page.getByTestId('outcome')).toHaveText('승리');
+  await page.getByTestId('result-title').click();
+  await page.getByTestId('open-history').click();
+  const list = page.getByTestId('history-list');
+  await expect(list.locator('[data-run-id]')).toHaveCount(2);
+  await page.reload();
+
+  await page.getByTestId('open-history').click();
+  await expect(list.locator('[data-run-id]').first()).toContainText('마도공 루멘');
+  const run = list.locator('[data-run-id]').filter({ hasText: '철검 수호자 로안' });
+  await expect(run).toContainText('철검 수호자 로안');
+  await expect(run).toContainText('1:05');
+  await expect(run).toContainText('1마리');
+  await expect(run).toContainText('미클리어');
+  await run.click();
+  const detail = page.getByTestId('history-detail');
+  await expect(detail).toContainText('사용 무기');
+  await expect(detail).toContainText('장검 손잡이');
+  await expect(detail).toContainText(relic);
+  await expect(detail).toContainText('몬스터별 처치');
+  await expect(detail.locator('[data-attack="roan:sword"] th')).toHaveText('검');
+  await expect(detail.locator('[data-attack-variant="sword"]')).toContainText('연격');
+  await list.locator('[data-run-id]').first().click();
+  await expect(detail).toContainText('마도공 루멘');
+  await expect(detail.locator('[data-attack-variant="chain"]')).toContainText('첫 번개');
+  await page.getByLabel('모든 캐릭터').selectOption('lumen');
+  await expect(list.locator('[data-run-id]')).toHaveCount(1);
+  await page.getByLabel('모든 결과').selectOption('defeat');
+  await expect(list.locator('[data-run-id]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByTestId('open-codex').click();
+  const entry = page.locator('[data-entry^="relic:"]').filter({ hasText: relic });
+  await expect(entry).toBeVisible();
+  await entry.click();
+  await expect(page.getByTestId('codex-detail')).toContainText(relic);
+  await page.locator('[data-codex-tab="upgrades"]').click();
+  await page.getByRole('searchbox', { name: '도감 검색' }).fill('넓은 베기');
+  await expect(page.locator('[data-entry="upgrade:swordArc"]')).toBeVisible();
+  await expect(page.getByTestId('codex-detail')).toContainText('베기 각도');
+  await expect(page.getByTestId('codex-detail')).toContainText('전설');
+  await expect(page.getByTestId('codex-detail').locator('.archive-facts')).toHaveCSS('grid-template-columns', /^\d+(\.\d+)?px$/);
+  const comparison = page.getByTestId('codex-motion');
+  const image = comparison.locator('img');
+  await expect(comparison).toContainText('베기 각도 130°');
+  await expect(comparison).toContainText('베기 각도 150°');
+  await expect(image).toHaveAttribute('src', /\.webp$/);
+  await comparison.getByRole('button', { name: 'GIF 재생' }).click();
+  await expect(image).toHaveAttribute('src', /\.gif$/);
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth)).toBe(568);
+  await comparison.getByRole('button', { name: '정지' }).click();
+  await expect(image).toHaveAttribute('src', /\.webp$/);
+  expect(errors).toEqual([]);
+});

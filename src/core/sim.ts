@@ -23,15 +23,27 @@ import { xpToNext } from './progression';
 import { deriveSeed, Rng } from './rng';
 import { computeStats, emptyStacks, healOnPick, picksFromCounts, type Stacks, type UpgradePick } from './stats';
 import type {
-  AttackId, Boss, Enemy, Gem, Hazard, InputState, Pickup, Player, Projectile, RunEndCause, RunOutcome, RunResult,
+  AttackDetail, AttackId, AttackVariant, Boss, Enemy, Gem, Hazard, InputState, Pickup, Player, Projectile, RunEndCause, RunOutcome, RunResult,
   SimEvent, SimEventType, UpgradeChoice,
 } from './types';
 import { WeaponSystem } from './weapons';
 import { RoanCombat, type SwordSweep } from './roan';
-import { ROAN_GEAR_LEVELS, ROAN_WEAPON_IDS, roanUpgradesOf, type RoanGearChoice } from '../config/roan';
+import { ROAN_GEAR_LEVELS, ROAN_WEAPON_IDS, roanUpgradesOf, type RoanDesign, type RoanGearChoice } from '../config/roan';
 
 function shotAttack(source: string): AttackId | undefined {
   return source === 'player' ? 'basic' : source === 'echo' ? 'echo' : source === 'relic' ? 'relic' : RoanCombat.isRoanShot(source) ? 'sword' : undefined;
+}
+
+function projectileVariant(shot: Projectile): AttackVariant | undefined {
+  switch (shot.source) {
+    case 'thrownAxe': return shot.returning ? 'returnedAxe' : 'thrownAxe';
+    case 'weaponThrow': return 'weaponThrow';
+    case 'smallAxe': return 'smallAxe';
+    case 'shard': return 'shard';
+    case 'echo': return shot.echoRepeat ? 'echoRepeat' : undefined;
+    case 'player': return shot.big ? 'heavyRound' : shot.hitIds?.size ? 'piercingRound' : undefined;
+    default: return undefined;
+  }
 }
 import { applyUpgrade, luckFor, rollChoices, rollGrade, rollMasteryChoices, rollRunChoices, upgradeAvailable } from './upgrades';
 
@@ -164,6 +176,7 @@ export class GameSim {
   damageTakenTotal = 0;
   readonly damageByAttack: Partial<Record<AttackId, number>> = {};
   readonly hitsByAttack: Partial<Record<AttackId, number>> = {};
+  private readonly attackDetails = new Map<string, AttackDetail>();
   private readonly startingTick: number;
   firstLevelUpAt: number | null = null;
   lastDamageSource: string | null = null;
@@ -780,6 +793,7 @@ export class GameSim {
         s.life = s.returnLife;
         s.pierceLeft = s.returnPierce;
         s.returnLife = undefined;
+        s.returning = true;
         s.vx = -s.vx;
         s.vy = -s.vy;
         s.damage *= s.returnScale ?? 0.5;
@@ -792,7 +806,7 @@ export class GameSim {
         if (e.dead || s.hitIds?.has(e.id)) continue;
         const rr = e.r + s.r;
         if (dist2(s.x, s.y, e.x, e.y) < rr * rr) {
-          this.damageEnemy(e, s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source);
+          this.damageEnemy(e, s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source, 0, projectileVariant(s), s.roanDesign);
           if (RoanCombat.isRoanShot(s.source)) this.roan.onShotHit(s, e);
           if (s.source === 'echo' && e.dead && !s.echoRepeat) this.weapons.onEchoKill(e, Math.atan2(s.vy, s.vx), s.echoVolley);
           if (s.pierceLeft) {
@@ -807,7 +821,7 @@ export class GameSim {
       if (s.life > 0 && boss && !boss.dead && !s.hitIds?.has(-1)) {
         const rr = boss.r + s.r;
         if (dist2(s.x, s.y, boss.x, boss.y) < rr * rr) {
-          this.damageBoss(s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source);
+          this.damageBoss(s.damage * (1 + (s.hitIds?.size ? pierceBonus : 0)), source, 0, projectileVariant(s), s.roanDesign);
           if (RoanCombat.isRoanShot(s.source)) this.roan.onShotHit(s, boss);
           // 관통 탄은 보스를 한 번만 맞히고 지나간다
           if (s.pierceLeft && s.hitIds) s.hitIds.add(-1);
@@ -832,14 +846,24 @@ export class GameSim {
     compact(this.enemyShots, (s) => s.life > 0 && this.inArena(s.x, s.y));
   }
 
-  private recordAttackDamage(source: AttackId | undefined, damage: number): void {
-    if (source && damage > 0) {
-      this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
-      this.hitsByAttack[source] = (this.hitsByAttack[source] ?? 0) + 1;
+  private recordAttackDamage(source: AttackId | undefined, damage: number, variant?: AttackVariant, weapon?: RoanDesign): void {
+    if (!source || !(damage > 0)) return;
+    this.damageByAttack[source] = (this.damageByAttack[source] ?? 0) + damage;
+    this.hitsByAttack[source] = (this.hitsByAttack[source] ?? 0) + 1;
+    const design = source === 'sword' || source === 'bleed' ? weapon ?? this.roan.design : undefined;
+    if (variant === undefined && design === undefined) return;
+    const move = variant ?? 'hit';
+    const key = `${source}:${design ?? ''}:${move}`;
+    let detail = this.attackDetails.get(key);
+    if (!detail) {
+      detail = { source, variant: move, ...(design ? { design } : {}), damage: 0, hits: 0 };
+      this.attackDetails.set(key, detail);
     }
+    detail.damage += damage;
+    detail.hits++;
   }
 
-  damageEnemy(e: Enemy, amount: number, source?: AttackId, swordArmorPierce = 0): void {
+  damageEnemy(e: Enemy, amount: number, source?: AttackId, swordArmorPierce = 0, variant?: AttackVariant, design?: RoanDesign): void {
     if (e.dead) return;
     const basic = source === 'basic';
     const t = this.elapsed;
@@ -863,7 +887,7 @@ export class GameSim {
     if ((basic && this.relics.executes(e)) || (source === 'sword' && this.roan.executes(e))) damage = Math.max(damage, e.hp);
     e.hp -= damage;
     this.relics.onDamageEnemy(e);
-    this.recordAttackDamage(source, damage);
+    this.recordAttackDamage(source, damage, variant, design);
     e.flash = 0.08;
     this.emit('hit', e.x, e.y);
     if (e.hp <= 0) {
@@ -884,7 +908,7 @@ export class GameSim {
     }
   }
 
-  damageBoss(amount: number, source?: AttackId, swordArmorPierce = 0): void {
+  damageBoss(amount: number, source?: AttackId, swordArmorPierce = 0, variant?: AttackVariant, design?: RoanDesign): void {
     const b = this.boss;
     if (!b || b.dead || bossInvulnerable(b)) return;
     const basic = source === 'basic';
@@ -892,7 +916,7 @@ export class GameSim {
       : source === 'sword' ? BOSS_CONFIG.basicResistance * this.swordResistanceMultiplier(swordArmorPierce) : 0;
     const damage = amount * this.relics.damageMultiplier(b, basic) * scaleMonsterDefense(1 - armor, this.monster.defense);
     b.hp = Math.max(0, b.hp - damage);
-    this.recordAttackDamage(source, damage);
+    this.recordAttackDamage(source, damage, variant, design);
     b.flash = 0.06;
     this.emit('hit', b.x, b.y);
     if (b.hp <= 0) {
@@ -1332,6 +1356,9 @@ export class GameSim {
       fusions: [...this.weapons.fusions],
       damageByAttack: { ...this.damageByAttack },
       hitsByAttack: { ...this.hitsByAttack },
+      attackDetails: [...this.attackDetails.values()].map((detail) => ({ ...detail })),
+      ...(this.loadout.character === 'roan' ? { roan: { design: this.roan.design, awakened: this.roan.awakened } } : {}),
+      essences: { ...this.essences },
       combatTime: (this.tick - this.startingTick) / RUN_CONFIG.tickRate,
       seed: this.seed,
       difficulty: this.difficulty,

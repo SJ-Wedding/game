@@ -3,6 +3,7 @@ import { DEFAULT_LOADOUT, LUMEN, SWORD, type Loadout } from '../config/character
 import { OPENING_RELIC_LEVEL, carryable, relicAllowed, validCarry, type RelicId } from '../config/relics';
 import type { Sfx } from '../audio/sfx';
 import { randomSeed } from '../core/rng';
+import { catalogChoice } from '../core/catalog';
 import { GameSim } from '../core/sim';
 import type { InputState, RunResult, SimEvent } from '../core/types';
 import type { DevOptions } from '../dev/devOptions';
@@ -13,8 +14,9 @@ import { statLayers } from '../core/stats';
 import type { Hud } from '../ui/hud';
 import type { DevPanelState, Screens } from '../ui/screens';
 import type { ShopTab } from '../ui/shop';
+import { ArchiveStore } from '../storage/archive';
 
-export type Screen = 'title' | 'account' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop';
+export type Screen = 'title' | 'account' | 'playing' | 'paused' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' | 'codex' | 'history';
 
 /** 렌더러(Phaser 씬)가 App 에 제공하는 기능 */
 export interface SceneLink {
@@ -82,6 +84,7 @@ export class App {
   private readonly sfx: Sfx;
   private readonly hud: Hud;
   private readonly screens: Screens;
+  private readonly archive = new ArchiveStore();
   private resultShownAt = 0;
   private assistedCarry: RelicId[] = [];
   private assistedRelicDraft?: RelicId[];
@@ -125,6 +128,8 @@ export class App {
       {
         onPlay: () => this.startRun(),
         onShop: () => this.showShop(),
+        onCodex: () => this.showArchive('codex'),
+        onHistory: () => this.showArchive('history'),
         onVolume: (v) => this.setVolume(v),
         onDevChange: (s) => this.applyDevPanel(s),
         ...(this.cloud ? { onAccount: () => this.showAccount() } : {}),
@@ -255,6 +260,10 @@ export class App {
       : assisted ? this.assistedCarry : this.save.relicCarry;
     const previousRelics = assisted ? this.assistedPrevious : this.save.previousRelics;
     this.sim = new GameSim({ ...options, meta: this.save.meta.purchases, carryRelics, previousRelics, loadout, difficulty: this.difficulty });
+    if (!assisted) {
+      this.archive.discover([...this.sim.relics.owned].map((id) => `relic:${id}` as const));
+      if (loadout.character === 'lumen') this.archive.discover([`upgrade:${loadout.weapon}`]);
+    }
     if (!retry && assisted) this.assistedCarry = [];
     else if (!retry && this.save.relicCarry?.length) {
       this.save = { ...this.save, relicCarry: [] };
@@ -301,6 +310,10 @@ export class App {
   private showLevelUp(): void {
     const sim = this.sim!;
     this.screen = 'levelup';
+    if (!sim.assisted) this.archive.discover(sim.choices.flatMap((choice) => {
+      const id = catalogChoice(choice);
+      return id ? [id] : [];
+    }));
     const reward = sim.choices[0];
     const title = reward?.kind === 'roanGear' ? `${reward.gear.stage === 'weapon' ? '로안 무기 선택' : reward.gear.stage === 'upgrade' ? '상위 무기 선택' : '무기 각성'} · Lv ${sim.pendingLevel}`
       : reward?.kind === 'coin' ? '도박꾼의 동전' : sim.bonusOpen ? '삼중 선택의 인장' : sim.armoryOpen ? (sim.loadout.character === 'ranger' ? '수호자의 무기 보상' : '수호자의 전용 강화 보상') : reward?.kind === 'essence' ? '중간 보스 유물'
@@ -433,6 +446,13 @@ export class App {
     }, (id) => this.buy(id), () => this.showTitle(), focusItem);
   }
 
+  showArchive(screen: 'codex' | 'history'): void {
+    this.screen = screen;
+    const knownRelics = [...(this.save.previousRelics ?? []), ...(this.save.relicCarry ?? []), ...(this.save.pendingRelicDraft ?? [])];
+    this.archive.discover(knownRelics.map((id) => `relic:${id}` as const));
+    this.screens.showArchive(screen, this.archive.snapshot(), () => this.showTitle());
+  }
+
   buy(id: string): void {
     const next = purchaseMeta(this.save, id);
     if (!next) return;
@@ -445,6 +465,7 @@ export class App {
     const sim = this.sim!;
     const result = sim.result!;
     const { data, newRecords, tokens } = recordRun(this.save, result);
+    this.archive.record(result, tokens?.total ?? null);
     this.save = data;
     // 이번 판에 얻은 유물은 다음 판 시작 유물 선택지에 나오지 않는다 (승패 무관)
     if (result.assisted) this.assistedPrevious = [...(result.relics ?? [])];
@@ -541,6 +562,8 @@ export class App {
         break;
       case 'shop':
       case 'account':
+      case 'codex':
+      case 'history':
         if (e.code === 'Escape' && !e.repeat) this.showTitle();
         break;
       case 'levelup': {
@@ -579,7 +602,7 @@ export class App {
         } else if (e.code === 'Space' || e.code === 'Enter') e.preventDefault();
         break;
       case 'title':
-        if (e.code === 'Enter' && !e.repeat && !typing) {
+        if (e.code === 'Enter' && !e.repeat && !typing && !(target instanceof HTMLButtonElement)) {
           e.preventDefault();
           this.startRun();
         }

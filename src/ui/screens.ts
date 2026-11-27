@@ -9,7 +9,7 @@ import { CARRY_LIMIT, ESSENCES, ESSENCE_MAX_STACK, RELICS, relicDescription, typ
 import { COMPACT_RELIC_LIMIT, relicInventory } from './relics';
 import { WEAPON_PREVIEWS, weaponPreview } from './weaponPreview';
 import { relicArt, shopSprite, upgradeChoiceArt } from './art';
-import { ARENA_ART, arenaEnemyText, arenaTheme } from '../render/arena';
+import { ARENA_ART, arenaTheme } from '../render/arena';
 import { CHARACTER_SHEETS, roanTexture, WEAPON_TEXTURES } from '../render/textures';
 import { RUN_CONFIG } from '../config/run';
 import { GRADES, GRADE_INDEX } from '../config/grades';
@@ -21,9 +21,12 @@ import type { UpgradePick } from '../core/stats';
 import { upgradeText } from '../core/upgrades';
 import { UPGRADE_BY_ID } from '../config/upgrades';
 import { formatTime } from '../core/math';
-import type { AttackId, RunResult, UpgradeChoice } from '../core/types';
+import type { RunResult, UpgradeChoice } from '../core/types';
 import type { NewRecord, SaveMeta, SaveRecords } from '../storage/save';
-import { el, josa } from './dom';
+import { el } from './dom';
+import { damageBreakdown, runEndReason } from './combatReport';
+import { buildCodex, buildHistory } from './archive';
+import type { ArchiveSnapshot } from '../storage/archive';
 
 /**
  * 타이틀 / 일시정지 / 레벨업 / 결과 화면. 화면은 DOM 오버레이로 그린다.
@@ -39,6 +42,8 @@ export interface DevPanelState {
 export interface TitleHandlers {
   onPlay: () => void;
   onShop: () => void;
+  onCodex: () => void;
+  onHistory: () => void;
   /** 계정 저장을 쓸 때만 있음 */
   onAccount?: () => void;
   onDifficulty?: (d: DifficultyId) => void;
@@ -70,7 +75,7 @@ const NEW_RECORD_LABEL: Record<NewRecord, string> = {
 
 export class Screens {
   private root: HTMLElement;
-  current: 'none' | 'title' | 'account' | 'pause' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' = 'none';
+  current: 'none' | 'title' | 'account' | 'pause' | 'levelup' | 'result' | 'carry' | 'characters' | 'lumen-weapon' | 'status' | 'shop' | 'codex' | 'history' = 'none';
 
   constructor(root: HTMLElement) {
     this.root = root;
@@ -120,6 +125,10 @@ export class Screens {
     play.addEventListener('click', h.onPlay);
     const shop = el('button', { class: 'shop-btn', 'data-testid': 'open-shop', text: '강화 상점' });
     shop.addEventListener('click', h.onShop);
+    const codex = el('button', { 'data-testid': 'open-codex', text: '도감' });
+    codex.addEventListener('click', h.onCodex);
+    const history = el('button', { 'data-testid': 'open-history', text: '전투 통계' });
+    history.addEventListener('click', h.onHistory);
 
     const rec = el('dl', { class: 'records ui-metrics', 'data-testid': 'records', 'aria-label': `최고 기록 · ${DIFFICULTY[difficulty].name}` }, [
       metric('기록 난이도', DIFFICULTY[difficulty].name, 'records-difficulty'),
@@ -145,7 +154,7 @@ export class Screens {
         el('section', { class: 'title-menu' }, [
           el('h1', { class: 'logo' }, ['균열 ', el('span', { text: '아레나' })]),
           el('p', { class: 'tagline', text: `몰려드는 괴물을 쓰러뜨리고 전장의 보스를 처치하세요. ${formatTime(RUN_CONFIG.timeLimit)}부터는 강화 돌격수가 몰려옵니다.` }),
-          el('div', { class: 'title-actions' }, [play, shop, el('span', { class: 'title-tokens token ui-frame', 'data-testid': 'title-tokens', 'aria-label': `보유 토큰 ${meta.tokens}` }, [shopSprite(19, '◆'), ` ${meta.tokens}`])]),
+          el('div', { class: 'title-actions' }, [play, shop, el('span', { class: 'title-tokens token ui-frame', 'data-testid': 'title-tokens', 'aria-label': `보유 토큰 ${meta.tokens}` }, [shopSprite(19, '◆'), ` ${meta.tokens}`]), codex, history]),
           ...(h.onDifficulty ? [this.difficultyToggle(difficulty, h.onDifficulty)] : []),
           ...(account && h.onAccount ? [this.accountLine(account.username, h.onAccount)] : []),
           controls,
@@ -155,6 +164,10 @@ export class Screens {
         el('div', { class: 'title-showcase' }, [el('img', { class: 'title-art', src: titleArt, alt: '' }), rec]),
       ]),
     ]));
+  }
+
+  showArchive(screen: 'codex' | 'history', snapshot: Promise<ArchiveSnapshot>, onBack: () => void): void {
+    this.mount(screen, screen === 'codex' ? buildCodex(snapshot, onBack) : buildHistory(snapshot, onBack));
   }
 
   private difficultyToggle(current: DifficultyId, onChange: (d: DifficultyId) => void): HTMLElement {
@@ -658,14 +671,7 @@ export class Screens {
     const win = result.outcome === 'victory';
     const difficulty = result.difficulty ?? 'hard';
     const arena = ARENA_ART[arenaTheme(result.seed, difficulty)];
-    const boss = josa(arena.names.boss, '을/를');
-    let cause: string;
-    if (result.cause === 'boss') cause = `${boss} 처치했습니다!`;
-    else if (result.cause === 'death') cause = `${arenaEnemyText(result.killedBy ?? '적의 공격', arena)}에 쓰러졌습니다.`;
-    else
-      cause = `${formatTime(RUN_CONFIG.timeLimit)}까지 ${boss} 처치하지 못했습니다${
-        result.bossHpRatio !== null ? ` (보스 체력 ${Math.ceil(result.bossHpRatio * 100)}% 남음)` : ''
-      }.`;
+    const cause = runEndReason(result, arena);
 
     const restart = el('button', { class: 'primary big', 'data-testid': 'restart', 'data-autofocus': '' }, [win ? '다음 판 ' : '다시 시작 ', el('kbd', { text: 'Enter' })]);
     restart.addEventListener('click', onRestart);
@@ -702,7 +708,7 @@ export class Screens {
             ...(tokens ? [metric('획득 토큰', String(tokens.total), undefined, true)] : []),
           ]),
           ...(newRecords.length ? [el('div', { class: 'badges' }, newRecords.map((r) => el('span', { class: 'badge', text: NEW_RECORD_LABEL[r] })))] : []),
-          el('div', { class: 'result-report' }, [this.damageBreakdown(result),
+          el('div', { class: 'result-report' }, [damageBreakdown(result),
             el('section', { class: 'result-build ui-frame' }, [el('h3', { text: '이번 판 강화' }),
               el('ul', { class: 'upgrades', 'data-testid': 'result-upgrades' }, ups),
               tokens ? el('div', { class: 'tokens', 'data-testid': 'result-tokens' }, [
@@ -716,39 +722,6 @@ export class Screens {
           el('small', { class: 'muted', text: `시드 ${result.seed}${result.assisted ? ' · 개발 옵션 사용 (기록 미반영)' : ''}` }), restart]),
       ]),
     );
-  }
-
-  private damageBreakdown(result: RunResult): HTMLElement {
-    const totals = result.damageByAttack ?? {};
-    const primary = result.loadout?.character === 'roan' ? 'sword' : result.loadout?.character === 'lumen' ? result.loadout.weapon : 'basic';
-    const sources = new Set<AttackId>([primary, ...(Object.keys(totals) as AttackId[]), ...(result.fusions ?? [])]);
-    for (const { id } of result.upgrades) {
-      const weapon = UPGRADE_BY_ID[id]?.weapon;
-      if (weapon && !isFusionIngredient(result.fusions ?? [], weapon)) sources.add(weapon);
-    }
-    const duration = result.combatTime ?? result.survivalTime;
-    const rows = [...sources].sort((a, b) => (totals[b] ?? 0) - (totals[a] ?? 0)).map((source) => {
-      const name = attackName(source);
-      const damage = totals[source] ?? 0;
-      const dps = duration > 0 ? damage / duration : 0;
-      const hits = result.hitsByAttack?.[source] ?? 0;
-      return el('tr', { 'data-attack': source }, [
-        el('th', { scope: 'row', text: name }),
-        el('td', { text: n1(damage) }),
-        el('td', { text: result.hitsByAttack ? String(hits) : '–' }),
-        el('td', { text: dps > 0 && dps < 0.1 ? '<0.1' : n1(dps) }),
-      ]);
-    });
-    return el('details', { class: 'result-damage ui-frame', open: '', 'data-testid': 'damage-breakdown' }, [
-      el('summary', { text: '공격별 피해량 · DPS' }),
-      el('small', { class: 'muted', text: '초과 피해를 포함한 총 피해량 ÷ 전체 전투 시간.' }),
-      el('div', { class: 'result-damage-scroll' }, [
-        el('table', { class: 'stat-table' }, [
-          el('thead', {}, [el('tr', {}, [el('th', { text: '공격' }), el('th', { text: '총 피해량' }), el('th', { text: '적중 횟수' }), el('th', { text: '평균 DPS' })])]),
-          el('tbody', {}, rows),
-        ]),
-      ]),
-    ]);
   }
 
   cancelCarry(): void {
@@ -818,12 +791,3 @@ const STATUS_ROWS: [keyof PlayerStats, string, Fmt][] = [
   ['luck', '행운', n1],
   ['projectileRange', '기본탄 사거리', n1],
 ];
-
-/** 결과 화면의 공격 이름. 이름이 없는 공격이 생겨도 결과 화면이 멈추지 않게 id 를 그대로 보여 준다. */
-function attackName(source: AttackId): string {
-  const fixed: Partial<Record<AttackId, string>> = { basic: '기본 사격', sword: '검 베기', bleed: '출혈', bomb: '균열 폭탄', relic: '유물 효과' };
-  if (fixed[source]) return fixed[source];
-  if (Object.hasOwn(WEAPON_FUSIONS, source)) return WEAPON_FUSIONS[source as FusionId].name;
-  if (Object.hasOwn(WEAPONS, source)) return WEAPONS[source as keyof typeof WEAPONS].name;
-  return String(source);
-}
