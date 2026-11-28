@@ -2,7 +2,7 @@ import shopIcons from '../assets/shop-icons.png';
 import relicIcons from '../assets/relic-icons.webp';
 import choiceIcons from '../assets/choice-icons.png';
 import type { CharacterUpgradeId } from '../config/characters';
-import { RELICS, type RelicId } from '../config/relics';
+import type { RelicId } from '../config/relics';
 import type { UpgradeDef, UpgradeId } from '../config/upgrades';
 import { WEAPON_TEXTURES } from '../render/textures';
 import { el } from './dom';
@@ -49,8 +49,9 @@ export function upgradeChoiceArt(def: UpgradeDef): HTMLElement {
   return icon;
 }
 
-/** 유물 아이콘 아틀라스(12×12) 위치. 아틀라스에 없는 유물은 기호 배지로 그린다. */
-const RELIC_ART: Partial<Record<RelicId, number>> = {
+const RELIC_ATLAS_COLUMNS = 12;
+const RELIC_ATLAS_ROWS = 15;
+const RELIC_ART: Record<RelicId, number> = {
   lumenCrystal: 0, lumenSight: 1, lumenRune: 2, lumenCycle: 3, lumenCloak: 4, lumenStaff: 5,
   chainCloud: 6, chainOverload: 7, chainRebound: 8, chainDouble: 9, chainRod: 10, chainConductor: 11,
   turretPermafrost: 12, turretScope: 13, turretBlast: 14, turretShotgun: 15, turretMobile: 16, turretResonance: 17,
@@ -74,17 +75,23 @@ const RELIC_ART: Partial<Record<RelicId, number>> = {
   magnetCore: 120, fortuneCard: 121, clover: 122, rottingGem: 123, namelessContract: 124, hastyInvite: 125,
   alchemistFlask: 126, powderBox: 127, migrantFeather: 128, riftCrystal: 129, returnRing: 130, winterLantern: 131,
   constellation: 132, secondBell: 133, plagueJar: 134,
+  fuseChain: 135, slaughterDrum: 136, bountyLedger: 137, plagueMask: 138, frostShard: 139,
+  emberJar: 140, sporePouch: 141, chargeCell: 142, shadowStep: 143, sprintEngine: 144,
+  rallyFlag: 145, vengeance: 146, painVault: 147, cliffDance: 148, phoenixAsh: 149,
+  treasureMap: 150, gemStorm: 151, luckyStrike: 152, riftCore: 153, overcharge: 154,
+  echoBrand: 155, vortexCharm: 156, expansionSeal: 157, stoppedWatch: 158, soulHarvest: 159,
+  armoryKey: 160, fusionCatalyst: 161, casingStorm: 162, overheat: 163, marksman: 164,
+  manaOverload: 165, dualGrimoire: 166, thunderRod: 167, blizzardCore: 168, manaBurst: 169,
+  warCry: 170, bladeWave: 171, counterMaster: 172, ironCharge: 173, bloodWind: 174,
 };
 
 export function relicArt(id: RelicId): HTMLElement {
   const index = RELIC_ART[id];
-  if (index === undefined) {
-    const relic = RELICS[id];
-    const tone = 'character' in relic ? relic.character : relic.source;
-    return el('span', { class: `relic-art relic-glyph relic-glyph-${tone}`, 'aria-hidden': 'true', 'data-glyph': relic.symbol });
-  }
+  const column = index % RELIC_ATLAS_COLUMNS;
+  const row = Math.floor(index / RELIC_ATLAS_COLUMNS);
   const node = el('span', { class: 'relic-art', 'aria-hidden': 'true' });
   node.style.backgroundImage = `url("${relicIcons}")`;
-  node.style.backgroundPosition = `${(index % 12) * 100 / 11}% ${Math.floor(index / 12) * 100 / 11}%`;
+  node.style.backgroundSize = `${RELIC_ATLAS_COLUMNS * 100}% ${RELIC_ATLAS_ROWS * 100}%`;
+  node.style.backgroundPosition = `${column * 100 / (RELIC_ATLAS_COLUMNS - 1)}% ${row * 100 / (RELIC_ATLAS_ROWS - 1)}%`;
   return node;
 }
